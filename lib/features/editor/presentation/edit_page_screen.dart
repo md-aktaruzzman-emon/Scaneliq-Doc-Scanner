@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 
@@ -6,11 +7,7 @@ class EditPageScreen extends StatefulWidget {
   final DocumentPage page;
   final Function(EditRecipe) onApply;
 
-  const EditPageScreen({
-    super.key,
-    required this.page,
-    required this.onApply,
-  });
+  const EditPageScreen({super.key, required this.page, required this.onApply});
 
   @override
   State<EditPageScreen> createState() => _EditPageScreenState();
@@ -85,28 +82,57 @@ class _EditPageScreenState extends State<EditPageScreen> {
                       child: ColorFiltered(
                         colorFilter: _filter == PageFilter.grayscale
                             ? const ColorFilter.matrix([
-                                0.2126, 0.7152, 0.0722, 0, 0,
-                                0.2126, 0.7152, 0.0722, 0, 0,
-                                0.2126, 0.7152, 0.0722, 0, 0,
-                                0,      0,      0,      1, 0,
+                                0.2126,
+                                0.7152,
+                                0.0722,
+                                0,
+                                0,
+                                0.2126,
+                                0.7152,
+                                0.0722,
+                                0,
+                                0,
+                                0.2126,
+                                0.7152,
+                                0.0722,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                1,
+                                0,
                               ])
                             : _filter == PageFilter.blackAndWhite
-                                ? const ColorFilter.matrix([
-                                    1.5, 0, 0, 0, -50,
-                                    0, 1.5, 0, 0, -50,
-                                    0, 0, 1.5, 0, -50,
-                                    0, 0, 0, 1, 0,
-                                  ])
-                                : const ColorFilter.mode(
-                                    Colors.transparent,
-                                    BlendMode.multiply,
-                                  ),
+                            ? const ColorFilter.matrix([
+                                1.5,
+                                0,
+                                0,
+                                0,
+                                -50,
+                                0,
+                                1.5,
+                                0,
+                                0,
+                                -50,
+                                0,
+                                0,
+                                1.5,
+                                0,
+                                -50,
+                                0,
+                                0,
+                                0,
+                                1,
+                                0,
+                              ])
+                            : const ColorFilter.mode(
+                                Colors.transparent,
+                                BlendMode.multiply,
+                              ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            file,
-                            fit: BoxFit.contain,
-                          ),
+                          child: Image.file(file, fit: BoxFit.contain),
                         ),
                       ),
                     )
@@ -117,7 +143,9 @@ class _EditPageScreenState extends State<EditPageScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Theme.of(context).cardColor,
-              border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+              border: Border(
+                top: BorderSide(color: Theme.of(context).dividerColor),
+              ),
             ),
             child: Column(
               children: [

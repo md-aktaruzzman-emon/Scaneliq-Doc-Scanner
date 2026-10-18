@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:scaneliq/core/models/document_models.dart';
@@ -19,26 +20,40 @@ class AppStorageService {
     await tempDir.create(recursive: true);
   }
 
-  Directory get originalsDir => Directory(p.join(_baseDir?.path ?? Directory.systemTemp.path, 'originals'));
-  Directory get processedDir => Directory(p.join(_baseDir?.path ?? Directory.systemTemp.path, 'processed'));
-  Directory get exportsDir => Directory(p.join(_baseDir?.path ?? Directory.systemTemp.path, 'exports'));
-  Directory get tempDir => Directory(p.join(_baseDir?.path ?? Directory.systemTemp.path, 'temp'));
+  Directory get originalsDir => Directory(
+    p.join(_baseDir?.path ?? Directory.systemTemp.path, 'originals'),
+  );
+  Directory get processedDir => Directory(
+    p.join(_baseDir?.path ?? Directory.systemTemp.path, 'processed'),
+  );
+  Directory get exportsDir =>
+      Directory(p.join(_baseDir?.path ?? Directory.systemTemp.path, 'exports'));
+  Directory get tempDir =>
+      Directory(p.join(_baseDir?.path ?? Directory.systemTemp.path, 'temp'));
 
   /// Safely writes an original page image into the app-private originals directory
-  Future<File> saveOriginalPage(String pageId, List<int> bytes, {String extension = 'jpg'}) async {
+  Future<File> saveOriginalPage(
+    String pageId,
+    List<int> bytes, {
+    String extension = 'jpg',
+  }) async {
     final targetPath = p.join(originalsDir.path, '$pageId.$extension');
     final tempPath = p.join(tempDir.path, '${pageId}_tmp.$extension');
-    
+
     // Write to temporary location first (atomic safety)
     final tempFile = File(tempPath);
     await tempFile.writeAsBytes(bytes, flush: true);
-    
+
     // Commit to persistent path
     return await tempFile.rename(targetPath);
   }
 
   /// Copies an external file safely to originals
-  Future<File> copyToOriginals(String pageId, File sourceFile, {String extension = 'jpg'}) async {
+  Future<File> copyToOriginals(
+    String pageId,
+    File sourceFile, {
+    String extension = 'jpg',
+  }) async {
     final targetPath = p.join(originalsDir.path, '$pageId.$extension');
     return await sourceFile.copy(targetPath);
   }

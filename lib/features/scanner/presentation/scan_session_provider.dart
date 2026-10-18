@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:uuid/uuid.dart';
@@ -45,14 +46,16 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
     final now = DateTime.now();
     return ScanSessionState(
       documentId: const Uuid().v4(),
-      title: 'Scan_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}',
+      title:
+          'Scan_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}',
     );
   }
 
   /// Initializes a new draft session
   void resetSession([String? newTitle]) {
     final now = DateTime.now();
-    final defaultTitle = newTitle ??
+    final defaultTitle =
+        newTitle ??
         'Scan_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
     state = ScanSessionState(
       documentId: const Uuid().v4(),
@@ -89,10 +92,16 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
       final sourceFile = File(images.first);
       if (!await sourceFile.exists()) return false;
 
-      final savedOriginal = await AppStorageService.instance.copyToOriginals(pageId, sourceFile);
+      final savedOriginal = await AppStorageService.instance.copyToOriginals(
+        pageId,
+        sourceFile,
+      );
       final updated = state.pages.map((p) {
         if (p.id == pageId) {
-          return p.copyWith(originalPath: savedOriginal.path, processedPath: null);
+          return p.copyWith(
+            originalPath: savedOriginal.path,
+            processedPath: null,
+          );
         }
         return p;
       }).toList();
@@ -133,7 +142,8 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
         final sourceFile = File(imagePath);
         if (await sourceFile.exists()) {
           final pageId = const Uuid().v4();
-          final savedOriginal = await AppStorageService.instance.copyToOriginals(pageId, sourceFile);
+          final savedOriginal = await AppStorageService.instance
+              .copyToOriginals(pageId, sourceFile);
 
           final newPage = DocumentPage(
             id: pageId,
@@ -145,10 +155,7 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
         }
       }
 
-      state = state.copyWith(
-        pages: updatedPages,
-        isProcessing: false,
-      );
+      state = state.copyWith(pages: updatedPages, isProcessing: false);
 
       // Persist draft immediately
       await _persistDraft();
@@ -176,7 +183,11 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
       if (!['jpg', 'jpeg', 'png', 'webp'].contains(ext)) continue;
 
       final pageId = const Uuid().v4();
-      final savedOriginal = await AppStorageService.instance.copyToOriginals(pageId, file, extension: ext);
+      final savedOriginal = await AppStorageService.instance.copyToOriginals(
+        pageId,
+        file,
+        extension: ext,
+      );
       validImages.add(
         DocumentPage(
           id: pageId,
@@ -188,9 +199,7 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
     }
 
     if (validImages.isNotEmpty) {
-      state = state.copyWith(
-        pages: [...state.pages, ...validImages],
-      );
+      state = state.copyWith(pages: [...state.pages, ...validImages]);
       await _persistDraft();
     }
 
@@ -208,7 +217,7 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
 
     // Update order indices
     final reindexed = [
-      for (int i = 0; i < items.length; i++) items[i].copyWith(pageOrder: i)
+      for (int i = 0; i < items.length; i++) items[i].copyWith(pageOrder: i),
     ];
 
     state = state.copyWith(pages: reindexed);
@@ -232,7 +241,8 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
   Future<void> removePage(String pageId) async {
     final remaining = state.pages.where((p) => p.id != pageId).toList();
     final reindexed = [
-      for (int i = 0; i < remaining.length; i++) remaining[i].copyWith(pageOrder: i)
+      for (int i = 0; i < remaining.length; i++)
+        remaining[i].copyWith(pageOrder: i),
     ];
     state = state.copyWith(pages: reindexed);
     await _persistDraft();
@@ -257,12 +267,15 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
   }
 }
 
-final scanSessionProvider = NotifierProvider<ScanSessionNotifier, ScanSessionState>(() {
-  return ScanSessionNotifier();
-});
+final scanSessionProvider =
+    NotifierProvider<ScanSessionNotifier, ScanSessionState>(() {
+      return ScanSessionNotifier();
+    });
 
 /// Provider for loading all saved documents from SQLite
-final documentsListProvider = FutureProvider<List<ScannedDocument>>((ref) async {
+final documentsListProvider = FutureProvider<List<ScannedDocument>>((
+  ref,
+) async {
   return await AppDatabaseService.instance.getAllDocuments();
 });
 
@@ -270,4 +283,3 @@ final documentsListProvider = FutureProvider<List<ScannedDocument>>((ref) async 
 final latestDraftProvider = FutureProvider<ScannedDocument?>((ref) async {
   return await AppDatabaseService.instance.getLatestDraft();
 });
-

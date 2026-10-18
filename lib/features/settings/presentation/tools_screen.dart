@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,7 +35,9 @@ class _ToolsScreenState extends State<ToolsScreen> {
 
         setState(() {
           _isProcessingOcr = false;
-          _extractedText = text.trim().isEmpty ? 'No text detected in this image.' : text;
+          _extractedText = text.trim().isEmpty
+              ? 'No text detected in this image.'
+              : text;
         });
 
         if (mounted) {
@@ -47,7 +50,10 @@ class _ToolsScreenState extends State<ToolsScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('OCR Failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('OCR Failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -61,9 +67,7 @@ class _ToolsScreenState extends State<ToolsScreen> {
         content: SizedBox(
           width: double.maxFinite,
           height: 300,
-          child: SingleChildScrollView(
-            child: SelectableText(text),
-          ),
+          child: SingleChildScrollView(child: SelectableText(text)),
         ),
         actions: [
           TextButton.icon(
@@ -90,14 +94,21 @@ class _ToolsScreenState extends State<ToolsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Document Tools', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Document Tools',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
             'Productivity & OCR Tools',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textSecondaryLight,
+            ),
           ),
           const SizedBox(height: 12),
           Card(
@@ -109,12 +120,24 @@ class _ToolsScreenState extends State<ToolsScreen> {
                   color: AppColors.brandLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.document_scanner, color: AppColors.brandPrimary),
+                child: const Icon(
+                  Icons.document_scanner,
+                  color: AppColors.brandPrimary,
+                ),
               ),
-              title: const Text('Instant Image OCR', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('Extract selectable text from any image file on your phone'),
+              title: const Text(
+                'Instant Image OCR',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text(
+                'Extract selectable text from any image file on your phone',
+              ),
               trailing: _isProcessingOcr
-                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.arrow_forward_ios, size: 16),
               onTap: _isProcessingOcr ? null : _runDirectOcrOnPickedFile,
             ),
@@ -131,12 +154,24 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 ),
                 child: const Icon(Icons.share, color: Colors.green),
               ),
-              title: const Text('Share & Export', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('Send scanned documents via email, messaging, or system drive'),
-              trailing: const Icon(Icons.check_circle_outline, color: Colors.green),
+              title: const Text(
+                'Share & Export',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text(
+                'Send scanned documents via email, messaging, or system drive',
+              ),
+              trailing: const Icon(
+                Icons.check_circle_outline,
+                color: Colors.green,
+              ),
               onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Share is integrated directly inside every document view.')),
+                  const SnackBar(
+                    content: Text(
+                      'Share is integrated directly inside every document view.',
+                    ),
+                  ),
                 );
               },
             ),
@@ -144,7 +179,11 @@ class _ToolsScreenState extends State<ToolsScreen> {
           const SizedBox(height: 16),
           const Text(
             'Roadmap Features',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textSecondaryLight,
+            ),
           ),
           const SizedBox(height: 12),
           Card(
@@ -152,8 +191,14 @@ class _ToolsScreenState extends State<ToolsScreen> {
             child: const ListTile(
               contentPadding: EdgeInsets.all(16),
               leading: Icon(Icons.lock_outline, color: Colors.grey),
-              title: Text('PDF Encryption & Password', style: TextStyle(color: Colors.grey)),
-              subtitle: Text('Phase 7 — Secure password-protected PDF exports', style: TextStyle(color: Colors.grey)),
+              title: Text(
+                'PDF Encryption & Password',
+                style: TextStyle(color: Colors.grey),
+              ),
+              subtitle: Text(
+                'Phase 7 — Secure password-protected PDF exports',
+                style: TextStyle(color: Colors.grey),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -162,8 +207,14 @@ class _ToolsScreenState extends State<ToolsScreen> {
             child: const ListTile(
               contentPadding: EdgeInsets.all(16),
               leading: Icon(Icons.cloud_sync_outlined, color: Colors.grey),
-              title: Text('Cloud Backup & Multi-device Sync', style: TextStyle(color: Colors.grey)),
-              subtitle: Text('Phase 8 — Privacy-preserving optional cloud sync', style: TextStyle(color: Colors.grey)),
+              title: Text(
+                'Cloud Backup & Multi-device Sync',
+                style: TextStyle(color: Colors.grey),
+              ),
+              subtitle: Text(
+                'Phase 8 — Privacy-preserving optional cloud sync',
+                style: TextStyle(color: Colors.grey),
+              ),
             ),
           ),
         ],

@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:scaneliq/core/models/document_models.dart';
@@ -7,10 +8,24 @@ import 'package:scaneliq/core/storage/app_storage_service.dart';
 /// Database service using SQLite with schema versioning and transactional operations
 class AppDatabaseService {
   static AppDatabaseService? _instance;
-  static AppDatabaseService get instance => _instance ??= AppDatabaseService._();
+  static AppDatabaseService get instance =>
+      _instance ??= AppDatabaseService._();
   AppDatabaseService._();
 
   Database? _db;
+
+  /// Sets an explicit database instance for testing
+  void setDatabaseForTesting(Database? db) {
+    _db = db;
+  }
+
+  /// Closes database connection
+  Future<void> close() async {
+    if (_db != null) {
+      await _db!.close();
+      _db = null;
+    }
+  }
 
   Future<Database> get database async {
     if (_db != null) return _db!;
@@ -25,6 +40,9 @@ class AppDatabaseService {
     return await openDatabase(
       path,
       version: 2,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON;');
+      },
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE documents (
@@ -53,19 +71,28 @@ class AppDatabaseService {
           )
         ''');
 
-        await db.execute('CREATE INDEX idx_pages_doc_order ON pages (document_id, page_order)');
-        await db.execute('CREATE INDEX idx_docs_modified ON documents (modified_at DESC)');
+        await db.execute(
+          'CREATE INDEX idx_pages_doc_order ON pages (document_id, page_order)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_docs_modified ON documents (modified_at DESC)',
+        );
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
-          await db.execute('ALTER TABLE documents ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0');
+          await db.execute(
+            'ALTER TABLE documents ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0',
+          );
         }
       },
     );
   }
 
   /// Inserts or updates a document and its pages atomically in a transaction
-  Future<void> saveDocumentWithPages(ScannedDocument doc, List<DocumentPage> pages) async {
+  Future<void> saveDocumentWithPages(
+    ScannedDocument doc,
+    List<DocumentPage> pages,
+  ) async {
     final db = await database;
     await db.transaction((txn) async {
       await txn.insert(
@@ -147,7 +174,11 @@ class AppDatabaseService {
   /// Retrieves a single document with all its ordered pages
   Future<ScannedDocument?> getDocument(String id) async {
     final db = await database;
-    final docRows = await db.query('documents', where: 'id = ?', whereArgs: [id]);
+    final docRows = await db.query(
+      'documents',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     if (docRows.isEmpty) return null;
 
     final pageRows = await db.query(
@@ -167,7 +198,10 @@ class AppDatabaseService {
       await AppStorageService.instance.deleteDocumentFiles(doc);
     }
     final db = await database;
-    await db.delete('documents', where: 'id = ?', whereArgs: [id]);
+    await db.transaction((txn) async {
+      await txn.delete('pages', where: 'document_id = ?', whereArgs: [id]);
+      await txn.delete('documents', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   /// Toggles favorite status

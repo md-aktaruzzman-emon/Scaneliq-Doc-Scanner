@@ -61,12 +61,17 @@ class ScannedDocument {
     };
   }
 
-  factory ScannedDocument.fromMap(Map<String, dynamic> map, {List<DocumentPage> pages = const []}) {
+  factory ScannedDocument.fromMap(
+    Map<String, dynamic> map, {
+    List<DocumentPage> pages = const [],
+  }) {
     return ScannedDocument(
       id: map['id'] as String,
       title: map['title'] as String,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
-      modifiedAt: DateTime.fromMillisecondsSinceEpoch(map['modified_at'] as int),
+      modifiedAt: DateTime.fromMillisecondsSinceEpoch(
+        map['modified_at'] as int,
+      ),
       pageCount: map['page_count'] as int? ?? 0,
       isFavorite: (map['is_favorite'] as int? ?? 0) == 1,
       isDraft: (map['is_draft'] as int? ?? 0) == 1,
@@ -137,7 +142,9 @@ class DocumentPage {
     EditRecipe recipe = const EditRecipe();
     if (map['edit_recipe_json'] != null) {
       try {
-        final decoded = jsonDecode(map['edit_recipe_json'] as String) as Map<String, dynamic>;
+        final decoded = jsonDecode(
+          map['edit_recipe_json'] as String,
+        ) as Map<String, dynamic>;
         recipe = EditRecipe.fromMap(decoded);
       } catch (_) {}
     }

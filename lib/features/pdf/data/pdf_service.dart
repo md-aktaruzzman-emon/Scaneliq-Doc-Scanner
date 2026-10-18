@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:image/image.dart' as img;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -43,7 +44,9 @@ class PdfService {
       // Apply non-destructive rotation, filter, brightness, contrast
       img.Image workingImage = applyEditRecipe(decodedImage, page.editRecipe);
 
-      final encodedJpg = Uint8List.fromList(img.encodeJpg(workingImage, quality: 85));
+      final encodedJpg = Uint8List.fromList(
+        img.encodeJpg(workingImage, quality: 85),
+      );
       final pdfImage = pw.MemoryImage(encodedJpg);
 
       // Add full A4 or source aspect page
@@ -52,12 +55,7 @@ class PdfService {
           pageFormat: PdfPageFormat.a4,
           margin: pw.EdgeInsets.zero,
           build: (pw.Context context) {
-            return pw.Center(
-              child: pw.Image(
-                pdfImage,
-                fit: pw.BoxFit.contain,
-              ),
-            );
+            return pw.Center(child: pw.Image(pdfImage, fit: pw.BoxFit.contain));
           },
         ),
       );
@@ -65,13 +63,17 @@ class PdfService {
 
     // Write to temporary file first (atomic safety principle)
     final exportTitle = (customTitle ?? document.title).trim();
-    final exportFileName = exportTitle.isEmpty ? 'Scaneliq_Doc_${document.id}' : exportTitle;
-    final finalPath = AppStorageService.instance.getExportPdfPath(exportFileName);
+    final exportFileName = exportTitle.isEmpty
+        ? 'Scaneliq_Doc_${document.id}'
+        : exportTitle;
+    final finalPath = AppStorageService.instance.getExportPdfPath(
+      exportFileName,
+    );
     final tempPath = '$finalPath.tmp';
 
     final tempFile = File(tempPath);
     final pdfBytes = await pdf.save();
-    
+
     // Verify non-empty before committing
     if (pdfBytes.isEmpty) {
       throw Exception('PDF generation resulted in empty output.');
@@ -105,11 +107,15 @@ class PdfService {
     img.Image workingImage = applyEditRecipe(decodedImage, page.editRecipe);
 
     final sanitized = baseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final targetPath = '${AppStorageService.instance.exportsDir.path}/${sanitized}_p${page.pageOrder + 1}.jpg';
+    final targetPath =
+        '${AppStorageService.instance.exportsDir.path}/${sanitized}_p${page.pageOrder + 1}.jpg';
     final tempPath = '$targetPath.tmp';
 
     final tempFile = File(tempPath);
-    await tempFile.writeAsBytes(img.encodeJpg(workingImage, quality: 90), flush: true);
+    await tempFile.writeAsBytes(
+      img.encodeJpg(workingImage, quality: 90),
+      flush: true,
+    );
 
     return await tempFile.rename(targetPath);
   }
@@ -118,7 +124,10 @@ class PdfService {
   static img.Image applyEditRecipe(img.Image image, EditRecipe recipe) {
     img.Image workingImage = image;
     if (recipe.rotationDegrees != 0) {
-      workingImage = img.copyRotate(workingImage, angle: recipe.rotationDegrees);
+      workingImage = img.copyRotate(
+        workingImage,
+        angle: recipe.rotationDegrees,
+      );
     }
     if (recipe.filter == PageFilter.grayscale) {
       workingImage = img.grayscale(workingImage);
@@ -136,4 +145,3 @@ class PdfService {
     return workingImage;
   }
 }
-

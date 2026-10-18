@@ -11,14 +11,21 @@ class SettingsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Settings',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
             'Branding & About',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textSecondaryLight,
+            ),
           ),
           const SizedBox(height: 8),
           Card(
@@ -42,17 +49,26 @@ class SettingsScreen extends StatelessWidget {
                       children: [
                         Text(
                           'Scaneliq',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         SizedBox(height: 4),
                         Text(
                           'Scan documents. Keep everything organized.',
-                          style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondaryLight,
+                          ),
                         ),
                         SizedBox(height: 4),
                         Text(
                           'Version 1.0.0 (Production Architecture)',
-                          style: TextStyle(fontSize: 12, color: AppColors.brandPrimary),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.brandPrimary,
+                          ),
                         ),
                       ],
                     ),
@@ -64,7 +80,11 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 20),
           const Text(
             'Privacy & Storage Policy',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textSecondaryLight,
+            ),
           ),
           const SizedBox(height: 8),
           Card(
@@ -73,11 +93,16 @@ class SettingsScreen extends StatelessWidget {
                 const ListTile(
                   leading: Icon(Icons.security, color: AppColors.success),
                   title: Text('Local-First Document Safety'),
-                  subtitle: Text('Scans stay in app-private storage. No automatic uploads or tracking.'),
+                  subtitle: Text(
+                    'Scans stay in app-private storage. No automatic uploads or tracking.',
+                  ),
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.folder_special, color: AppColors.brandPrimary),
+                  leading: const Icon(
+                    Icons.folder_special,
+                    color: AppColors.brandPrimary,
+                  ),
                   title: const Text('App Storage Paths'),
                   subtitle: Text(
                     'Exports: ${storage.exportsDir.path}\nOriginals: ${storage.originalsDir.path}',
@@ -90,14 +115,20 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 20),
           const Text(
             'Supported OCR Languages',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textSecondaryLight,
+            ),
           ),
           const SizedBox(height: 8),
           const Card(
             child: ListTile(
               leading: Icon(Icons.translate, color: AppColors.brandDeep),
               title: Text('English & Latin Scripts (Active)'),
-              subtitle: Text('Bangla OCR support architecture ready via benchmark interface.'),
+              subtitle: Text(
+                'Bangla OCR support architecture ready via benchmark interface.',
+              ),
             ),
           ),
         ],

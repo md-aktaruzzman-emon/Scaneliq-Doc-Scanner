@@ -7,13 +7,11 @@ import 'package:scaneliq/features/settings/presentation/tools_screen.dart';
 
 void main() {
   group('Navigation & Screen UI Tests', () {
-    testWidgets('MainNavigationShell renders 4 tabs and allows switching', (WidgetTester tester) async {
+    testWidgets('MainNavigationShell renders 4 tabs and allows switching', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: MainNavigationShell(),
-          ),
-        ),
+        const ProviderScope(child: MaterialApp(home: MainNavigationShell())),
       );
 
       // Verify bottom navigation items
@@ -35,31 +33,32 @@ void main() {
       expect(find.text('Scaneliq'), findsAtLeastNWidgets(1));
     });
 
-    testWidgets('SettingsScreen displays brand name, version and local-first privacy', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: SettingsScreen(),
-        ),
-      );
+    testWidgets(
+      'SettingsScreen displays brand name, version and local-first privacy',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
 
-      expect(find.text('Scaneliq'), findsOneWidget);
-      expect(find.text('Scan documents. Keep everything organized.'), findsOneWidget);
-      expect(find.text('Local-First Document Safety'), findsOneWidget);
-      expect(find.text('English & Latin Scripts (Active)'), findsOneWidget);
-    });
+        expect(find.text('Scaneliq'), findsOneWidget);
+        expect(
+          find.text('Scan documents. Keep everything organized.'),
+          findsOneWidget,
+        );
+        expect(find.text('Local-First Document Safety'), findsOneWidget);
+        expect(find.text('English & Latin Scripts (Active)'), findsOneWidget);
+      },
+    );
 
-    testWidgets('ToolsScreen renders Instant Image OCR action and roadmap cards', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: ToolsScreen(),
-        ),
-      );
+    testWidgets(
+      'ToolsScreen renders Instant Image OCR action and roadmap cards',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(const MaterialApp(home: ToolsScreen()));
 
-      expect(find.text('Productivity & OCR Tools'), findsOneWidget);
-      expect(find.text('Instant Image OCR'), findsOneWidget);
-      expect(find.text('Share & Export'), findsOneWidget);
-      expect(find.text('Roadmap Features'), findsOneWidget);
-      expect(find.text('PDF Encryption & Password'), findsOneWidget);
-    });
+        expect(find.text('Productivity & OCR Tools'), findsOneWidget);
+        expect(find.text('Instant Image OCR'), findsOneWidget);
+        expect(find.text('Share & Export'), findsOneWidget);
+        expect(find.text('Roadmap Features'), findsOneWidget);
+        expect(find.text('PDF Encryption & Password'), findsOneWidget);
+      },
+    );
   });
 }

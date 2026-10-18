@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 
@@ -21,7 +22,10 @@ void main() {
       expect(restored.brightness, closeTo(0.2, 0.001));
       expect(restored.contrast, closeTo(1.4, 0.001));
 
-      final modified = restored.copyWith(rotationDegrees: 270, filter: PageFilter.grayscale);
+      final modified = restored.copyWith(
+        rotationDegrees: 270,
+        filter: PageFilter.grayscale,
+      );
       expect(modified.rotationDegrees, equals(270));
       expect(modified.filter, equals(PageFilter.grayscale));
       expect(modified.brightness, closeTo(0.2, 0.001));
@@ -55,8 +59,14 @@ void main() {
       expect(restored.id, equals('page_uuid_001'));
       expect(restored.documentId, equals('doc_uuid_999'));
       expect(restored.pageOrder, equals(2));
-      expect(restored.originalPath, equals('/data/user/0/com.scaneliq/originals/page_uuid_001.jpg'));
-      expect(restored.processedPath, equals('/data/user/0/com.scaneliq/processed/page_uuid_001.jpg'));
+      expect(
+        restored.originalPath,
+        equals('/data/user/0/com.scaneliq/originals/page_uuid_001.jpg'),
+      );
+      expect(
+        restored.processedPath,
+        equals('/data/user/0/com.scaneliq/processed/page_uuid_001.jpg'),
+      );
       expect(restored.editRecipe.rotationDegrees, equals(90));
       expect(restored.editRecipe.filter, equals(PageFilter.grayscale));
     });

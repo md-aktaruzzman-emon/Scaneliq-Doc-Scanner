@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -10,10 +11,7 @@ import 'package:scaneliq/features/ocr/data/ocr_service.dart';
 class DocumentViewerScreen extends StatefulWidget {
   final ScannedDocument document;
 
-  const DocumentViewerScreen({
-    super.key,
-    required this.document,
-  });
+  const DocumentViewerScreen({super.key, required this.document});
 
   @override
   State<DocumentViewerScreen> createState() => _DocumentViewerScreenState();
@@ -24,7 +22,8 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   String? _extractedText;
 
   void _shareDocument() {
-    if (widget.document.exportPath != null && File(widget.document.exportPath!).existsSync()) {
+    if (widget.document.exportPath != null &&
+        File(widget.document.exportPath!).existsSync()) {
       SharePlus.instance.share(
         ShareParams(
           text: widget.document.title,
@@ -69,7 +68,9 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       final fullText = buffer.toString().trim();
       setState(() {
         _isExtractingText = false;
-        _extractedText = fullText.isEmpty ? 'No readable text was detected on these pages.' : fullText;
+        _extractedText = fullText.isEmpty
+            ? 'No readable text was detected on these pages.'
+            : fullText;
       });
 
       if (mounted) {
@@ -120,7 +121,9 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: text));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Text copied to clipboard!')),
+                        const SnackBar(
+                          content: Text('Text copied to clipboard!'),
+                        ),
                       );
                     },
                   ),
@@ -178,17 +181,21 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       body: fileExists
           ? PdfViewer.file(
               file.path,
-              params: const PdfViewerParams(
-                panAxis: PanAxis.free,
-              ),
+              params: const PdfViewerParams(panAxis: PanAxis.free),
             )
           : Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.picture_as_pdf_outlined, size: 64, color: AppColors.textSecondaryLight),
+                  const Icon(
+                    Icons.picture_as_pdf_outlined,
+                    size: 64,
+                    color: AppColors.textSecondaryLight,
+                  ),
                   const SizedBox(height: 16),
-                  const Text('PDF file is missing or has not been exported yet.'),
+                  const Text(
+                    'PDF file is missing or has not been exported yet.',
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     'Original ${widget.document.pageCount} pages are still safely preserved.',

@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -50,7 +51,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
     try {
       final doc = ScannedDocument(
         id: session.documentId,
-        title: _titleController.text.trim().isEmpty ? session.title : _titleController.text.trim(),
+        title: _titleController.text.trim().isEmpty
+            ? session.title
+            : _titleController.text.trim(),
         createdAt: DateTime.now(),
         modifiedAt: DateTime.now(),
         pageCount: session.pages.length,
@@ -67,7 +70,10 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         exportPath: pdfFile.path,
         isDraft: false,
       );
-      await AppDatabaseService.instance.saveDocumentWithPages(finalizedDoc, session.pages);
+      await AppDatabaseService.instance.saveDocumentWithPages(
+        finalizedDoc,
+        session.pages,
+      );
 
       // Invalidate library and draft providers
       ref.invalidate(documentsListProvider);
@@ -99,7 +105,8 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => DocumentViewerScreen(document: finalizedDoc),
+                      builder: (_) =>
+                          DocumentViewerScreen(document: finalizedDoc),
                     ),
                   );
                 },
@@ -109,10 +116,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                 onPressed: () {
                   Navigator.pop(ctx);
                   SharePlus.instance.share(
-                    ShareParams(
-                      text: doc.title,
-                      files: [XFile(pdfFile.path)],
-                    ),
+                    ShareParams(text: doc.title, files: [XFile(pdfFile.path)]),
                   );
                 },
                 child: const Text('Share PDF'),
@@ -155,7 +159,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
             icon: const Icon(Icons.add_a_photo_outlined),
             tooltip: 'Add More Pages',
             onPressed: () async {
-              await ref.read(scanSessionProvider.notifier).startScannerCapture();
+              await ref
+                  .read(scanSessionProvider.notifier)
+                  .startScannerCapture();
             },
           ),
         ],
@@ -165,14 +171,20 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.document_scanner, size: 64, color: AppColors.textSecondaryLight),
+                  const Icon(
+                    Icons.document_scanner,
+                    size: 64,
+                    color: AppColors.textSecondaryLight,
+                  ),
                   const SizedBox(height: 16),
                   const Text('No pages captured yet.'),
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
                     icon: const Icon(Icons.camera_alt),
                     label: const Text('Capture Pages'),
-                    onPressed: () => ref.read(scanSessionProvider.notifier).startScannerCapture(),
+                    onPressed: () => ref
+                        .read(scanSessionProvider.notifier)
+                        .startScannerCapture(),
                   ),
                 ],
               ),
@@ -180,12 +192,17 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: TextField(
                     controller: _titleController,
                     decoration: InputDecoration(
                       labelText: 'Document Name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       prefixIcon: const Icon(Icons.edit_note),
                     ),
                     onChanged: (val) {
@@ -194,32 +211,47 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         '${session.pages.length} Pages (Drag to reorder)',
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textSecondaryLight),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondaryLight,
+                        ),
                       ),
                       TextButton.icon(
                         icon: const Icon(Icons.add),
                         label: const Text('Add page'),
-                        onPressed: () => ref.read(scanSessionProvider.notifier).startScannerCapture(),
+                        onPressed: () => ref
+                            .read(scanSessionProvider.notifier)
+                            .startScannerCapture(),
                       ),
                     ],
                   ),
                 ),
                 Expanded(
                   child: ReorderableListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     itemCount: session.pages.length,
                     onReorderItem: (oldIndex, newIndex) {
-                      ref.read(scanSessionProvider.notifier).reorderPages(oldIndex, newIndex);
+                      ref
+                          .read(scanSessionProvider.notifier)
+                          .reorderPages(oldIndex, newIndex);
                     },
                     itemBuilder: (context, index) {
                       final page = session.pages[index];
-                      final file = File(page.processedPath ?? page.originalPath);
+                      final file = File(
+                        page.processedPath ?? page.originalPath,
+                      );
 
                       return Card(
                         key: ValueKey(page.id),
@@ -252,12 +284,18 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                                   children: [
                                     Text(
                                       'Page ${index + 1}',
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       'Filter: ${page.editRecipe.filter.name.toUpperCase()} · ${page.editRecipe.rotationDegrees}°',
-                                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondaryLight,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -272,7 +310,14 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                                       builder: (_) => EditPageScreen(
                                         page: page,
                                         onApply: (recipe) {
-                                          ref.read(scanSessionProvider.notifier).updatePageRecipe(page.id, recipe);
+                                          ref
+                                              .read(
+                                                scanSessionProvider.notifier,
+                                              )
+                                              .updatePageRecipe(
+                                                page.id,
+                                                recipe,
+                                              );
                                         },
                                       ),
                                     ),
@@ -283,19 +328,30 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                                 icon: const Icon(Icons.cameraswitch_outlined),
                                 tooltip: 'Retake Page',
                                 onPressed: () async {
-                                  final success = await ref.read(scanSessionProvider.notifier).retakePage(page.id);
+                                  final success = await ref
+                                      .read(scanSessionProvider.notifier)
+                                      .retakePage(page.id);
                                   if (!success && context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Retake cancelled or failed.')),
+                                      const SnackBar(
+                                        content: Text(
+                                          'Retake cancelled or failed.',
+                                        ),
+                                      ),
                                     );
                                   }
                                 },
                               ),
                               IconButton(
-                                icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: AppColors.error,
+                                ),
                                 tooltip: 'Delete Page',
                                 onPressed: () {
-                                  ref.read(scanSessionProvider.notifier).removePage(page.id);
+                                  ref
+                                      .read(scanSessionProvider.notifier)
+                                      .removePage(page.id);
                                 },
                               ),
                               PopupMenuButton<String>(
@@ -304,21 +360,34 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                                 onSelected: (val) async {
                                   if (val == 'export_jpeg') {
                                     try {
-                                      final jpegFile = await PdfService.exportPageAsJpeg(
-                                        page: page,
-                                        baseName: _titleController.text.trim().isEmpty ? 'Page_${index + 1}' : _titleController.text.trim(),
-                                      );
+                                      final jpegFile =
+                                          await PdfService.exportPageAsJpeg(
+                                            page: page,
+                                            baseName:
+                                                _titleController.text
+                                                    .trim()
+                                                    .isEmpty
+                                                ? 'Page_${index + 1}'
+                                                : _titleController.text.trim(),
+                                          );
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
-                                            content: Text('JPEG saved: ${jpegFile.path.split(Platform.pathSeparator).last}'),
+                                            content: Text(
+                                              'JPEG saved: ${jpegFile.path.split(Platform.pathSeparator).last}',
+                                            ),
                                             action: SnackBarAction(
                                               label: 'Share',
                                               onPressed: () {
                                                 SharePlus.instance.share(
                                                   ShareParams(
-                                                    text: 'Scaneliq Page ${index + 1}',
-                                                    files: [XFile(jpegFile.path)],
+                                                    text:
+                                                        'Scaneliq Page ${index + 1}',
+                                                    files: [
+                                                      XFile(jpegFile.path),
+                                                    ],
                                                   ),
                                                 );
                                               },
@@ -328,8 +397,15 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                                       }
                                     } catch (e) {
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('JPEG export failed: $e'), backgroundColor: AppColors.error),
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'JPEG export failed: $e',
+                                            ),
+                                            backgroundColor: AppColors.error,
+                                          ),
                                         );
                                       }
                                     }
@@ -360,7 +436,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Theme.of(context).cardColor,
-                    border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+                    border: Border(
+                      top: BorderSide(color: Theme.of(context).dividerColor),
+                    ),
                   ),
                   child: SafeArea(
                     child: ElevatedButton.icon(
@@ -369,10 +447,17 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
                             )
                           : const Icon(Icons.picture_as_pdf),
-                      label: Text(_isExporting ? 'Generating PDF...' : 'Save PDF to Scaneliq'),
+                      label: Text(
+                        _isExporting
+                            ? 'Generating PDF...'
+                            : 'Save PDF to Scaneliq',
+                      ),
                     ),
                   ),
                 ),
