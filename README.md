@@ -19,6 +19,16 @@
 
 ---
 
+## 📱 Download for Android (Beta Pre-Release)
+
+Direct download links from GitHub Releases:
+- 🚀 **[app-arm64-v8a-release.apk (40.9 MB)](https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner/releases/download/v1.0.0-beta.1/app-arm64-v8a-release.apk)** — **Recommended for modern 64-bit Android smartphones**
+- 📦 **[app-release.apk (110.3 MB)](https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner/releases/download/v1.0.0-beta.1/app-release.apk)** — Universal compatibility APK
+- 📋 **[বাংলা ইনস্টলেশন নির্দেশিকা (Bangla Installation Guide)](docs/ANDROID_INSTALLATION_BN.md)**
+- 🏷️ **GitHub Release Page:** [Scaneliq 1.0.0 Beta 1 — Android](https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner/releases/tag/v1.0.0-beta.1)
+
+---
+
 ## Overview
 
 **Scaneliq** is an Android-first document scanning and PDF productivity application that takes paper documents through a complete, verified workflow:

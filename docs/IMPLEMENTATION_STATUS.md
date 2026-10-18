@@ -71,5 +71,18 @@ All 25 automated tests across 7 test suites pass with 100% success rate, and `fl
 - [x] **Release Builds:** Universal APK (110.3 MB), Split-per-ABI APKs (32.7–43.1 MB), and AAB (84.4 MB) generated.
 - [x] **ProGuard / R8 Rules:** Configured in `android/app/proguard-rules.pro` with `-dontwarn` for optional ML Kit scripts and keep rules for JNI.
 - [x] **Privacy & Local-First:** Zero telemetry, no cloud sync, minimal permissions.
-- [x] **Production Keystore Template:** Documented in `android/key.properties.example` with `.gitignore` protection.
-- [x] **Documentation:** Comprehensive `README.md` and `IMPLEMENTATION_STATUS.md`.
+- [x] **Documentation:** Comprehensive `README.md`, `IMPLEMENTATION_STATUS.md`, and `docs/ANDROID_INSTALLATION_BN.md`.
+- [x] **GitHub Pre-Release:** Published at [`v1.0.0-beta.1`](https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner/releases/tag/v1.0.0-beta.1) with assets and `SHA256SUMS.txt`.
+
+---
+
+## 6. Official GitHub Release Assets & Checksums
+
+**Release Page:** [Scaneliq 1.0.0 Beta 1 — Android (v1.0.0-beta.1)](https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner/releases/tag/v1.0.0-beta.1)
+
+| Asset File | Size | Direct Download URL | SHA-256 Checksum |
+|---|:---:|---|---|
+| **`app-arm64-v8a-release.apk`** | 40.9 MB | [Download](https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner/releases/download/v1.0.0-beta.1/app-arm64-v8a-release.apk) | `5B18A772843561A0E581398232694F400E6B53AAEB4F192F3430CE4B7D034A81` |
+| **`app-release.apk`** | 110.3 MB | [Download](https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner/releases/download/v1.0.0-beta.1/app-release.apk) | `986BCD68078A7B93788739A3808C4D2113982FAEA203BC483E619B536EA3EA5C` |
+| **`SHA256SUMS.txt`** | 583 B | [Download](https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner/releases/download/v1.0.0-beta.1/SHA256SUMS.txt) | `B3E99C25F55DF84419315891762DC59E06DF5381F9760122566C1677614D3ABE` |
+
