@@ -248,6 +248,23 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
     await _persistDraft();
   }
 
+  /// Replaces all session pages with a single stitched page (e.g., 2-in-1 ID card)
+  Future<void> replaceWithSinglePage(File imageFile) async {
+    final pageId = const Uuid().v4();
+    final savedOriginal = await AppStorageService.instance.copyToOriginals(
+      pageId,
+      imageFile,
+    );
+    final newPage = DocumentPage(
+      id: pageId,
+      documentId: state.documentId,
+      pageOrder: 0,
+      originalPath: savedOriginal.path,
+    );
+    state = state.copyWith(pages: [newPage]);
+    await _persistDraft();
+  }
+
   void updateTitle(String newTitle) {
     state = state.copyWith(title: newTitle);
   }
@@ -278,6 +295,14 @@ final documentsListProvider = FutureProvider<List<ScannedDocument>>((
 ) async {
   return await AppDatabaseService.instance.getAllDocuments();
 });
+
+/// Provider for loading saved documents supporting optional full-text search query
+final searchedDocumentsProvider =
+    FutureProvider.family<List<ScannedDocument>, String>((ref, query) async {
+      return await AppDatabaseService.instance.getAllDocuments(
+        searchQuery: query.trim().isEmpty ? null : query.trim(),
+      );
+    });
 
 /// Provider to check for an active unfinished draft
 final latestDraftProvider = FutureProvider<ScannedDocument?>((ref) async {

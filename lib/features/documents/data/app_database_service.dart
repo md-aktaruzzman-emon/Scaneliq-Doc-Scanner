@@ -39,7 +39,7 @@ class AppDatabaseService {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON;');
       },
@@ -71,11 +71,22 @@ class AppDatabaseService {
           )
         ''');
 
+        await db.execute('''
+          CREATE TABLE document_ocr (
+            document_id TEXT PRIMARY KEY,
+            full_text TEXT NOT NULL,
+            FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
+          )
+        ''');
+
         await db.execute(
           'CREATE INDEX idx_pages_doc_order ON pages (document_id, page_order)',
         );
         await db.execute(
           'CREATE INDEX idx_docs_modified ON documents (modified_at DESC)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_ocr_doc ON document_ocr (document_id)',
         );
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -84,8 +95,45 @@ class AppDatabaseService {
             'ALTER TABLE documents ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0',
           );
         }
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS document_ocr (
+              document_id TEXT PRIMARY KEY,
+              full_text TEXT NOT NULL,
+              FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
+            )
+          ''');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_ocr_doc ON document_ocr (document_id)',
+          );
+        }
       },
     );
+  }
+
+  /// Saves or updates the OCR text for a document
+  Future<void> saveDocumentOcr(String documentId, String fullText) async {
+    if (fullText.trim().isEmpty) return;
+    final db = await database;
+    await db.insert(
+      'document_ocr',
+      {'document_id': documentId, 'full_text': fullText.trim()},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Retrieves the OCR text for a document if available
+  Future<String?> getDocumentOcr(String documentId) async {
+    final db = await database;
+    final rows = await db.query(
+      'document_ocr',
+      columns: ['full_text'],
+      where: 'document_id = ?',
+      whereArgs: [documentId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['full_text'] as String?;
   }
 
   /// Inserts or updates a document and its pages atomically in a transaction
@@ -114,23 +162,22 @@ class AppDatabaseService {
     });
   }
 
-  /// Retrieves all documents sorted by modified_at descending
+  /// Retrieves all documents sorted by modified_at descending, supporting full-text search
   Future<List<ScannedDocument>> getAllDocuments({String? searchQuery}) async {
     final db = await database;
-    String? whereClause;
-    List<dynamic>? whereArgs;
+    List<Map<String, dynamic>> docRows;
 
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      whereClause = 'title LIKE ?';
-      whereArgs = ['%${searchQuery.trim()}%'];
+      final term = '%${searchQuery.trim()}%';
+      docRows = await db.rawQuery('''
+        SELECT DISTINCT d.* FROM documents d
+        LEFT JOIN document_ocr o ON d.id = o.document_id
+        WHERE d.title LIKE ? OR o.full_text LIKE ?
+        ORDER BY d.modified_at DESC
+      ''', [term, term]);
+    } else {
+      docRows = await db.query('documents', orderBy: 'modified_at DESC');
     }
-
-    final docRows = await db.query(
-      'documents',
-      where: whereClause,
-      whereArgs: whereArgs,
-      orderBy: 'modified_at DESC',
-    );
 
     final List<ScannedDocument> results = [];
     for (final row in docRows) {
@@ -200,6 +247,7 @@ class AppDatabaseService {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('pages', where: 'document_id = ?', whereArgs: [id]);
+      await txn.delete('document_ocr', where: 'document_id = ?', whereArgs: [id]);
       await txn.delete('documents', where: 'id = ?', whereArgs: [id]);
     });
   }

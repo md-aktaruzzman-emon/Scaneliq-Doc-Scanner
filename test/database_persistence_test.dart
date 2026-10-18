@@ -21,7 +21,7 @@ void main() {
       db = await databaseFactoryFfi.openDatabase(
         inMemoryDatabasePath,
         options: OpenDatabaseOptions(
-          version: 2,
+          version: 3,
           onConfigure: (db) async {
             await db.execute('PRAGMA foreign_keys = ON;');
           },
@@ -53,11 +53,22 @@ void main() {
               )
             ''');
 
+            await db.execute('''
+              CREATE TABLE document_ocr (
+                document_id TEXT PRIMARY KEY,
+                full_text TEXT NOT NULL,
+                FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
+              )
+            ''');
+
             await db.execute(
               'CREATE INDEX idx_pages_doc_order ON pages (document_id, page_order)',
             );
             await db.execute(
               'CREATE INDEX idx_docs_modified ON documents (modified_at DESC)',
+            );
+            await db.execute(
+              'CREATE INDEX idx_ocr_doc ON document_ocr (document_id)',
             );
           },
         ),
@@ -304,6 +315,61 @@ void main() {
         whereArgs: ['del_cascade_doc'],
       );
       expect(remainingPages.isEmpty, isTrue);
+    });
+
+    test('Saves and searches OCR full text across documents', () async {
+      final doc1 = ScannedDocument(
+        id: 'doc_ocr_1',
+        title: 'Document Alpha',
+        createdAt: DateTime.now(),
+        modifiedAt: DateTime.now(),
+        pageCount: 1,
+      );
+      final doc2 = ScannedDocument(
+        id: 'doc_ocr_2',
+        title: 'Document Beta',
+        createdAt: DateTime.now(),
+        modifiedAt: DateTime.now(),
+        pageCount: 1,
+      );
+
+      await AppDatabaseService.instance.saveDocumentWithPages(doc1, []);
+      await AppDatabaseService.instance.saveDocumentWithPages(doc2, []);
+
+      await AppDatabaseService.instance.saveDocumentOcr(
+        'doc_ocr_1',
+        'Invoice for consulting services rendered by Dr. John Watson in London.',
+      );
+      await AppDatabaseService.instance.saveDocumentOcr(
+        'doc_ocr_2',
+        'Official prescription for penicillin from St. Jude Hospital.',
+      );
+
+      // Search by OCR content: 'Watson' matches doc1, not doc2
+      final resultsWatson = await AppDatabaseService.instance.getAllDocuments(
+        searchQuery: 'Watson',
+      );
+      expect(resultsWatson.length, equals(1));
+      expect(resultsWatson.first.id, equals('doc_ocr_1'));
+
+      // Search by OCR content: 'penicillin' matches doc2, not doc1
+      final resultsPenicillin = await AppDatabaseService.instance.getAllDocuments(
+        searchQuery: 'penicillin',
+      );
+      expect(resultsPenicillin.length, equals(1));
+      expect(resultsPenicillin.first.id, equals('doc_ocr_2'));
+
+      // Search by title still works
+      final resultsAlpha = await AppDatabaseService.instance.getAllDocuments(
+        searchQuery: 'Alpha',
+      );
+      expect(resultsAlpha.length, equals(1));
+      expect(resultsAlpha.first.id, equals('doc_ocr_1'));
+
+      // Deleting doc1 removes OCR record
+      await AppDatabaseService.instance.deleteDocument('doc_ocr_1');
+      final ocrRecord = await AppDatabaseService.instance.getDocumentOcr('doc_ocr_1');
+      expect(ocrRecord, isNull);
     });
   });
 }

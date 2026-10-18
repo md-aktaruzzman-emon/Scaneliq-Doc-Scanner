@@ -154,6 +154,20 @@ class _ContinuousCameraScreenState
                 ),
               );
             }
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Both ID card sides captured! Advancing to review...'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+              Future.delayed(const Duration(milliseconds: 600), () {
+                if (mounted) {
+                  _finishScan();
+                }
+              });
+            }
           }
         }
       }

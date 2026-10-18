@@ -33,7 +33,7 @@ class _DocumentsLibraryScreenState
 
   @override
   Widget build(BuildContext context) {
-    final docsAsync = ref.watch(documentsListProvider);
+    final docsAsync = ref.watch(searchedDocumentsProvider(_searchQuery));
 
     return Scaffold(
       appBar: AppBar(
@@ -124,10 +124,6 @@ class _DocumentsLibraryScreenState
               data: (documents) {
                 var filtered = documents.where((d) {
                   if (_onlyFavorites && !d.isFavorite) return false;
-                  if (_searchQuery.isNotEmpty &&
-                      !d.title.toLowerCase().contains(_searchQuery)) {
-                    return false;
-                  }
                   return true;
                 }).toList();
 
@@ -243,6 +239,7 @@ class _DocumentsLibraryScreenState
                                 await AppDatabaseService.instance
                                     .toggleFavorite(doc.id, !doc.isFavorite);
                                 ref.invalidate(documentsListProvider);
+                                ref.invalidate(searchedDocumentsProvider);
                               },
                             ),
                             PopupMenuButton<String>(
@@ -288,6 +285,7 @@ class _DocumentsLibraryScreenState
                                     await AppDatabaseService.instance
                                         .deleteDocument(doc.id);
                                     ref.invalidate(documentsListProvider);
+                                    ref.invalidate(searchedDocumentsProvider);
                                   }
                                 }
                               },

@@ -24,6 +24,7 @@ class _TranslateScreenState extends State<TranslateScreen> {
   String _targetLang = 'bn'; // Default to Bengali
   bool _isOcrExtracting = false;
   bool _isTranslating = false;
+  bool _privacyDisclosed = false;
 
   final Map<String, String> _languages = {
     'auto': 'Auto Detect',
@@ -87,6 +88,39 @@ class _TranslateScreenState extends State<TranslateScreen> {
         const SnackBar(content: Text('Please enter or scan some text first.')),
       );
       return;
+    }
+
+    if (!_privacyDisclosed) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.security, color: AppColors.brandPrimary),
+              SizedBox(width: 8),
+              Text('Translation Privacy Notice'),
+            ],
+          ),
+          content: const Text(
+            'Online translation transmits the selected document text securely to Google Translate servers. '
+            'Scaneliq does not track, store, or sell your documents.\n\n'
+            'Do you wish to proceed with online translation?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Proceed'),
+            ),
+          ],
+        ),
+      );
+
+      if (proceed != true) return;
+      _privacyDisclosed = true;
     }
 
     setState(() {

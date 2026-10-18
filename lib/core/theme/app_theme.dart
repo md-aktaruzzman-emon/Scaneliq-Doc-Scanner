@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 class AppColors {
   // Brand tokens
   static const Color brandPrimary = Color(0xFF2563EB);
+  static const Color primary = brandPrimary;
   static const Color brandPrimaryPressed = Color(0xFF1D4ED8);
   static const Color brandDeep = Color(0xFF173B8F);
   static const Color brandLight = Color(0xFFEFF6FF);

@@ -1,7 +1,7 @@
 # Scaneliq — Implementation, Optimization & Release Readiness Status
 
 **Specification Document:** [Scaneliq_Master_Blueprint_Improved.md](file:///c:/Scaneliq/docs/Scaneliq_Master_Blueprint_Improved.md)  
-**Status Document Version:** 6.0.0  
+**Status Document Version:** 7.0.0  
 **Verification Date:** 2026-10-19  
 **Repository:** [https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner](https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner)  
 **Toolchain:** Flutter 3.47.7 · Dart 3.13.5 · Android SDK 36 (build-tools 36.0.0 / 28.0.3) · Temurin OpenJDK 17.0.20.1  
@@ -10,11 +10,15 @@
 
 ## 1. Executive Summary
 
-Scaneliq has integrated full continuous batch scanning and 7 specialized scanning modes: Batch Scan, ID Card Scanner, Question Set, Book Scanner, Whiteboard Scanner, Scan Code (QR & Barcodes), CountCam (Object Estimator), and Translate (with Bengali & English OCR translation).
+Scaneliq has completed the Phase 1 & Phase 2 critical enhancements from the Master Strategic Plan:
+1. **Searchable PDF Generation:** Generates multi-page PDFs with an invisible selectable OCR text layer precisely mapped to source document geometry, verified through automated text extraction.
+2. **2-in-1 ID Card Sheet Stitcher:** Composites front and back ID cards onto a standard 200 DPI A4 page with clean card borders and instant PDF export.
+3. **Full-Text Document Search:** SQLite schema v3 with `document_ocr` table indexing and live real-time full-text search across all scanned documents in the Library.
+4. **Isolate PDF Offloading:** Decodes and processes filters on a background Dart isolate (`compute()`), keeping the UI responsive and eliminating ANR risks.
+5. **Security & Hygiene:** Added translation privacy notice modal (SEC-01) and automated cleanup for stale temporary files older than 24 hours (REL-02).
+6. **Clean Toolchain:** Pruned unused `flutter_doc_scanner` dependency to eliminate Gradle Kotlin warnings.
 
-The project also features the Phase E Advanced PDF Suite (Merge, Split, AES-256 Encryption, and Watermarking).
-
-All 33 automated tests across 9 test suites pass with 100% success rate, and `flutter analyze` reports zero issues.
+All 36 automated tests across 10 test suites pass with 100% success rate, and `flutter analyze` reports zero issues.
 
 ---
 
@@ -70,7 +74,7 @@ All 33 automated tests across 9 test suites pass with 100% success rate, and `fl
 ## 5. Release Readiness Checklist
 
 - [x] **Code Quality:** `flutter analyze` passes with 0 issues.
-- [x] **Automated Tests:** 25/25 tests passing (100%).
+- [x] **Automated Tests:** 36/36 tests passing (100%).
 - [x] **Release Builds:** Universal APK (110.3 MB), Split-per-ABI APKs (32.7–43.1 MB), and AAB (84.4 MB) generated.
 - [x] **ProGuard / R8 Rules:** Configured in `android/app/proguard-rules.pro` with `-dontwarn` for optional ML Kit scripts and keep rules for JNI.
 - [x] **Privacy & Local-First:** Zero telemetry, no cloud sync, minimal permissions.

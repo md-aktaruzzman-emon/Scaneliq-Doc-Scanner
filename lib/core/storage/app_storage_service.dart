@@ -18,6 +18,23 @@ class AppStorageService {
     await processedDir.create(recursive: true);
     await exportsDir.create(recursive: true);
     await tempDir.create(recursive: true);
+
+    // Stale temp file cleanup (>24 hours) for storage hygiene
+    try {
+      if (tempDir.existsSync()) {
+        final now = DateTime.now();
+        for (final entity in tempDir.listSync()) {
+          if (entity is File) {
+            final stat = entity.statSync();
+            if (now.difference(stat.modified).inHours >= 24) {
+              entity.deleteSync();
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // Non-critical startup cleanup
+    }
   }
 
   Directory get originalsDir => Directory(

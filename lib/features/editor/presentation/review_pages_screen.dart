@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
+import 'package:scaneliq/features/ocr/data/ocr_service.dart';
 import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 import 'package:scaneliq/features/editor/presentation/edit_page_screen.dart';
@@ -59,10 +60,33 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         pageCount: session.pages.length,
       );
 
+      // Extract OCR for each page for searchable PDF text layer & library indexing
+      final ocrBoxesByPage = <int, List<OcrBoundingBox>>{};
+      final ocrTexts = <String>[];
+
+      for (int i = 0; i < session.pages.length; i++) {
+        final page = session.pages[i];
+        final imageFile = File(page.processedPath ?? page.originalPath);
+        if (imageFile.existsSync()) {
+          try {
+            final pageOcr = await OcrService.instance.extractPageOcr(imageFile);
+            if (pageOcr.boxes.isNotEmpty) {
+              ocrBoxesByPage[i] = pageOcr.boxes;
+            }
+            if (pageOcr.text.trim().isNotEmpty) {
+              ocrTexts.add(pageOcr.text.trim());
+            }
+          } catch (_) {
+            // Non-critical: OCR extraction can fall back gracefully
+          }
+        }
+      }
+
       final pdfFile = await PdfService.generatePdf(
         document: doc,
         pages: session.pages,
         customTitle: doc.title,
+        ocrBoxesByPage: ocrBoxesByPage.isNotEmpty ? ocrBoxesByPage : null,
       );
 
       // Save verified export path to database and mark as finalized (not draft)
@@ -75,8 +99,17 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         session.pages,
       );
 
+      // Persist full-text OCR in SQLite for instant library search
+      if (ocrTexts.isNotEmpty) {
+        await AppDatabaseService.instance.saveDocumentOcr(
+          finalizedDoc.id,
+          ocrTexts.join('\n\n'),
+        );
+      }
+
       // Invalidate library and draft providers
       ref.invalidate(documentsListProvider);
+      ref.invalidate(searchedDocumentsProvider);
       ref.invalidate(latestDraftProvider);
 
       if (mounted) {
@@ -96,7 +129,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
               ],
             ),
             content: Text(
-              'PDF document successfully created and saved locally with ${session.pages.length} pages.',
+              'PDF document successfully created and saved locally with ${session.pages.length} pages.${ocrTexts.isNotEmpty ? ' Text made searchable.' : ''}',
             ),
             actions: [
               TextButton(
@@ -150,6 +183,63 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
             backgroundColor: AppColors.error,
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _stitch2In1IdCard() async {
+    final session = ref.read(scanSessionProvider);
+    if (session.pages.length != 2) return;
+
+    setState(() {
+      _isExporting = true;
+    });
+
+    try {
+      final frontFile = File(
+        session.pages[0].processedPath ?? session.pages[0].originalPath,
+      );
+      final backFile = File(
+        session.pages[1].processedPath ?? session.pages[1].originalPath,
+      );
+      final baseTitle = _titleController.text.trim().isEmpty
+          ? session.title
+          : _titleController.text.trim();
+
+      final stitchedJpg = await PdfService.stitchIdCard2In1(
+        frontImage: frontFile,
+        backImage: backFile,
+        baseTitle: '${baseTitle}_2in1',
+      );
+
+      await ref
+          .read(scanSessionProvider.notifier)
+          .replaceWithSinglePage(stitchedJpg);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Combined Front & Back into 2-in-1 ID Card Sheet!',
+            ),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ID Card stitching failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isExporting = false;
+        });
       }
     }
   }
@@ -260,6 +350,62 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                     },
                   ),
                 ),
+                if (session.pages.length == 2)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.brandPrimary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.badge_outlined,
+                            color: AppColors.brandPrimary,
+                            size: 28,
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '2-in-1 ID Card Sheet',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Combine front & back onto single A4 page',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondaryLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FilledButton.tonal(
+                            onPressed: _isExporting ? null : _stitch2In1IdCard,
+                            child: const Text('Combine'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
