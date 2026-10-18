@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'app/main_navigation_shell.dart';
 import 'core/storage/app_storage_service.dart';
 import 'core/theme/app_theme.dart';
-import 'features/documents/presentation/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,7 +28,7 @@ class ScaneliqApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
-      home: const HomeScreen(),
+      home: const MainNavigationShell(),
     );
   }
 }
