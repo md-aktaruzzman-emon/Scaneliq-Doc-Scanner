@@ -8,6 +8,7 @@ class ScannedDocument {
   final DateTime modifiedAt;
   final int pageCount;
   final bool isFavorite;
+  final bool isDraft;
   final String? exportPath;
   final List<DocumentPage> pages;
 
@@ -18,6 +19,7 @@ class ScannedDocument {
     required this.modifiedAt,
     this.pageCount = 0,
     this.isFavorite = false,
+    this.isDraft = false,
     this.exportPath,
     this.pages = const [],
   });
@@ -29,6 +31,7 @@ class ScannedDocument {
     DateTime? modifiedAt,
     int? pageCount,
     bool? isFavorite,
+    bool? isDraft,
     String? exportPath,
     List<DocumentPage>? pages,
   }) {
@@ -39,6 +42,7 @@ class ScannedDocument {
       modifiedAt: modifiedAt ?? this.modifiedAt,
       pageCount: pageCount ?? this.pageCount,
       isFavorite: isFavorite ?? this.isFavorite,
+      isDraft: isDraft ?? this.isDraft,
       exportPath: exportPath ?? this.exportPath,
       pages: pages ?? this.pages,
     );
@@ -52,6 +56,7 @@ class ScannedDocument {
       'modified_at': modifiedAt.millisecondsSinceEpoch,
       'page_count': pageCount,
       'is_favorite': isFavorite ? 1 : 0,
+      'is_draft': isDraft ? 1 : 0,
       'export_path': exportPath,
     };
   }
@@ -64,6 +69,7 @@ class ScannedDocument {
       modifiedAt: DateTime.fromMillisecondsSinceEpoch(map['modified_at'] as int),
       pageCount: map['page_count'] as int? ?? 0,
       isFavorite: (map['is_favorite'] as int? ?? 0) == 1,
+      isDraft: (map['is_draft'] as int? ?? 0) == 1,
       exportPath: map['export_path'] as String?,
       pages: pages,
     );

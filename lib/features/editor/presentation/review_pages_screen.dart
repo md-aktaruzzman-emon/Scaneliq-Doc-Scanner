@@ -8,6 +8,7 @@ import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 import 'package:scaneliq/features/editor/presentation/edit_page_screen.dart';
+import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 
 class ReviewPagesScreen extends ConsumerStatefulWidget {
   const ReviewPagesScreen({super.key});
@@ -61,12 +62,16 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         customTitle: doc.title,
       );
 
-      // Save verified export path to database
-      final finalizedDoc = doc.copyWith(exportPath: pdfFile.path);
+      // Save verified export path to database and mark as finalized (not draft)
+      final finalizedDoc = doc.copyWith(
+        exportPath: pdfFile.path,
+        isDraft: false,
+      );
       await AppDatabaseService.instance.saveDocumentWithPages(finalizedDoc, session.pages);
 
-      // Invalidate library list to refresh
+      // Invalidate library and draft providers
       ref.invalidate(documentsListProvider);
+      ref.invalidate(latestDraftProvider);
 
       if (mounted) {
         setState(() {
@@ -88,6 +93,18 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
               'PDF document successfully created and saved locally with ${session.pages.length} pages.',
             ),
             actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DocumentViewerScreen(document: finalizedDoc),
+                    ),
+                  );
+                },
+                child: const Text('View PDF'),
+              ),
               TextButton(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -263,11 +280,73 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                                 },
                               ),
                               IconButton(
+                                icon: const Icon(Icons.cameraswitch_outlined),
+                                tooltip: 'Retake Page',
+                                onPressed: () async {
+                                  final success = await ref.read(scanSessionProvider.notifier).retakePage(page.id);
+                                  if (!success && context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Retake cancelled or failed.')),
+                                    );
+                                  }
+                                },
+                              ),
+                              IconButton(
                                 icon: const Icon(Icons.delete_outline, color: AppColors.error),
                                 tooltip: 'Delete Page',
                                 onPressed: () {
                                   ref.read(scanSessionProvider.notifier).removePage(page.id);
                                 },
+                              ),
+                              PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert, size: 20),
+                                tooltip: 'Page Options',
+                                onSelected: (val) async {
+                                  if (val == 'export_jpeg') {
+                                    try {
+                                      final jpegFile = await PdfService.exportPageAsJpeg(
+                                        page: page,
+                                        baseName: _titleController.text.trim().isEmpty ? 'Page_${index + 1}' : _titleController.text.trim(),
+                                      );
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('JPEG saved: ${jpegFile.path.split(Platform.pathSeparator).last}'),
+                                            action: SnackBarAction(
+                                              label: 'Share',
+                                              onPressed: () {
+                                                SharePlus.instance.share(
+                                                  ShareParams(
+                                                    text: 'Scaneliq Page ${index + 1}',
+                                                    files: [XFile(jpegFile.path)],
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('JPEG export failed: $e'), backgroundColor: AppColors.error),
+                                        );
+                                      }
+                                    }
+                                  }
+                                },
+                                itemBuilder: (ctx) => const [
+                                  PopupMenuItem(
+                                    value: 'export_jpeg',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.image_outlined, size: 20),
+                                        SizedBox(width: 8),
+                                        Text('Export as JPEG'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                               const Icon(Icons.drag_handle, color: Colors.grey),
                             ],

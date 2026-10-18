@@ -61,6 +61,50 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
     );
   }
 
+  /// Restores a draft session into memory
+  void loadDraftSession(ScannedDocument draft) {
+    state = ScanSessionState(
+      documentId: draft.id,
+      title: draft.title,
+      pages: draft.pages,
+    );
+  }
+
+  /// Retakes/replaces a specific page image
+  Future<bool> retakePage(String pageId) async {
+    try {
+      final scanner = DocumentScanner(
+        options: DocumentScannerOptions(
+          documentFormats: {DocumentFormat.jpeg},
+          mode: ScannerMode.full,
+          pageLimit: 1,
+          isGalleryImport: true,
+        ),
+      );
+
+      final result = await scanner.scanDocument();
+      final images = result.images;
+      if (images == null || images.isEmpty) return false;
+
+      final sourceFile = File(images.first);
+      if (!await sourceFile.exists()) return false;
+
+      final savedOriginal = await AppStorageService.instance.copyToOriginals(pageId, sourceFile);
+      final updated = state.pages.map((p) {
+        if (p.id == pageId) {
+          return p.copyWith(originalPath: savedOriginal.path, processedPath: null);
+        }
+        return p;
+      }).toList();
+
+      state = state.copyWith(pages: updated);
+      await _persistDraft();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Launches the document scanner hardware/service and captures pages
   Future<bool> startScannerCapture() async {
     try {
@@ -207,6 +251,7 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
       createdAt: now,
       modifiedAt: now,
       pageCount: state.pages.length,
+      isDraft: true,
     );
     await AppDatabaseService.instance.saveDocumentWithPages(doc, state.pages);
   }
@@ -220,3 +265,9 @@ final scanSessionProvider = NotifierProvider<ScanSessionNotifier, ScanSessionSta
 final documentsListProvider = FutureProvider<List<ScannedDocument>>((ref) async {
   return await AppDatabaseService.instance.getAllDocuments();
 });
+
+/// Provider to check for an active unfinished draft
+final latestDraftProvider = FutureProvider<ScannedDocument?>((ref) async {
+  return await AppDatabaseService.instance.getLatestDraft();
+});
+

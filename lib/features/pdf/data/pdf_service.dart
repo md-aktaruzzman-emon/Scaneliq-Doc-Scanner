@@ -40,18 +40,8 @@ class PdfService {
         throw Exception('Failed to decode image for page ${i + 1}');
       }
 
-      // Apply non-destructive rotation or filter if specified
-      img.Image workingImage = decodedImage;
-      if (page.editRecipe.rotationDegrees != 0) {
-        workingImage = img.copyRotate(workingImage, angle: page.editRecipe.rotationDegrees);
-      }
-      if (page.editRecipe.filter == PageFilter.grayscale) {
-        workingImage = img.grayscale(workingImage);
-      } else if (page.editRecipe.filter == PageFilter.blackAndWhite) {
-        workingImage = img.grayscale(workingImage);
-        // Contrast enhancement for clean B&W document scans
-        workingImage = img.contrast(workingImage, contrast: 150);
-      }
+      // Apply non-destructive rotation, filter, brightness, contrast
+      img.Image workingImage = applyEditRecipe(decodedImage, page.editRecipe);
 
       final encodedJpg = Uint8List.fromList(img.encodeJpg(workingImage, quality: 85));
       final pdfImage = pw.MemoryImage(encodedJpg);
@@ -93,4 +83,57 @@ class PdfService {
     final finalFile = await tempFile.rename(finalPath);
     return finalFile;
   }
+
+  /// Exports an individual page as a processed JPEG file
+  static Future<File> exportPageAsJpeg({
+    required DocumentPage page,
+    required String baseName,
+  }) async {
+    final imagePath = page.processedPath ?? page.originalPath;
+    final file = File(imagePath);
+
+    if (!await file.exists()) {
+      throw Exception('Page source file does not exist at: $imagePath');
+    }
+
+    final bytes = await file.readAsBytes();
+    final decodedImage = img.decodeImage(bytes);
+    if (decodedImage == null) {
+      throw Exception('Failed to decode image for JPEG export');
+    }
+
+    img.Image workingImage = applyEditRecipe(decodedImage, page.editRecipe);
+
+    final sanitized = baseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final targetPath = '${AppStorageService.instance.exportsDir.path}/${sanitized}_p${page.pageOrder + 1}.jpg';
+    final tempPath = '$targetPath.tmp';
+
+    final tempFile = File(tempPath);
+    await tempFile.writeAsBytes(img.encodeJpg(workingImage, quality: 90), flush: true);
+
+    return await tempFile.rename(targetPath);
+  }
+
+  /// Helper to apply EditRecipe modifications (rotation, filter, brightness, contrast)
+  static img.Image applyEditRecipe(img.Image image, EditRecipe recipe) {
+    img.Image workingImage = image;
+    if (recipe.rotationDegrees != 0) {
+      workingImage = img.copyRotate(workingImage, angle: recipe.rotationDegrees);
+    }
+    if (recipe.filter == PageFilter.grayscale) {
+      workingImage = img.grayscale(workingImage);
+    } else if (recipe.filter == PageFilter.blackAndWhite) {
+      workingImage = img.grayscale(workingImage);
+      workingImage = img.contrast(workingImage, contrast: 150);
+    }
+    if (recipe.contrast != 1.0 || recipe.brightness != 0.0) {
+      workingImage = img.adjustColor(
+        workingImage,
+        brightness: 1.0 + recipe.brightness,
+        contrast: recipe.contrast,
+      );
+    }
+    return workingImage;
+  }
 }
+

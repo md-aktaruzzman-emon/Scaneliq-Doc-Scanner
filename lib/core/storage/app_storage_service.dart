@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:scaneliq/core/models/document_models.dart';
 
 /// Manages app-private local storage directories according to blueprint section 6.1
 class AppStorageService {
@@ -46,5 +47,33 @@ class AppStorageService {
   String getExportPdfPath(String baseName) {
     final sanitized = baseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     return p.join(exportsDir.path, '$sanitized.pdf');
+  }
+
+  /// Safely deletes the export file and associated page images for a document
+  Future<void> deleteDocumentFiles(ScannedDocument doc) async {
+    if (doc.exportPath != null) {
+      final exportFile = File(doc.exportPath!);
+      if (await exportFile.exists()) {
+        try {
+          await exportFile.delete();
+        } catch (_) {}
+      }
+    }
+    for (final page in doc.pages) {
+      final orig = File(page.originalPath);
+      if (await orig.exists() && orig.path.startsWith(originalsDir.path)) {
+        try {
+          await orig.delete();
+        } catch (_) {}
+      }
+      if (page.processedPath != null) {
+        final proc = File(page.processedPath!);
+        if (await proc.exists() && proc.path.startsWith(processedDir.path)) {
+          try {
+            await proc.delete();
+          } catch (_) {}
+        }
+      }
+    }
   }
 }

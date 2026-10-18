@@ -133,7 +133,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       icon: const Icon(Icons.file_upload_outlined, size: 22),
                       label: const Text('Import'),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+                    // Draft recovery card if active draft exists
+                    ref.watch(latestDraftProvider).maybeWhen(
+                          data: (draft) {
+                            if (draft == null || draft.pages.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.amber.shade300),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.history_toggle_off, color: Colors.orange),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Unfinished Scan Draft',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                        ),
+                                        Text(
+                                          '${draft.title} · ${draft.pages.length} pages',
+                                          style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      minimumSize: const Size(80, 36),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    ),
+                                    onPressed: () {
+                                      ref.read(scanSessionProvider.notifier).loadDraftSession(draft);
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const ReviewPagesScreen(),
+                                        ),
+                                      );
+                                    },
+                                    child: const Text('Resume', style: TextStyle(fontSize: 12)),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                          orElse: () => const SizedBox.shrink(),
+                        ),
+                    const SizedBox(height: 4),
                     // Search bar
                     TextField(
                       controller: _searchController,

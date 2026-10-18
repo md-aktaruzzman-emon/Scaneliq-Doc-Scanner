@@ -19,12 +19,16 @@ class EditPageScreen extends StatefulWidget {
 class _EditPageScreenState extends State<EditPageScreen> {
   late int _rotation;
   late PageFilter _filter;
+  late double _contrast;
+  late double _brightness;
 
   @override
   void initState() {
     super.initState();
     _rotation = widget.page.editRecipe.rotationDegrees;
     _filter = widget.page.editRecipe.filter;
+    _contrast = widget.page.editRecipe.contrast;
+    _brightness = widget.page.editRecipe.brightness;
   }
 
   void _rotateClockwise() {
@@ -37,6 +41,8 @@ class _EditPageScreenState extends State<EditPageScreen> {
     setState(() {
       _rotation = 0;
       _filter = PageFilter.original;
+      _contrast = 1.0;
+      _brightness = 0.0;
     });
   }
 
@@ -54,6 +60,8 @@ class _EditPageScreenState extends State<EditPageScreen> {
               final newRecipe = widget.page.editRecipe.copyWith(
                 rotationDegrees: _rotation,
                 filter: _filter,
+                contrast: _contrast,
+                brightness: _brightness,
               );
               widget.onApply(newRecipe);
               Navigator.pop(context);
@@ -155,6 +163,49 @@ class _EditPageScreenState extends State<EditPageScreen> {
                   },
                 ),
                 const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.brightness_6, size: 18),
+                    const SizedBox(width: 8),
+                    const Text('Brightness', style: TextStyle(fontSize: 12)),
+                    Expanded(
+                      child: Slider(
+                        value: _brightness,
+                        min: -0.5,
+                        max: 0.5,
+                        divisions: 10,
+                        label: _brightness.toStringAsFixed(1),
+                        onChanged: (val) {
+                          setState(() {
+                            _brightness = val;
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    const Icon(Icons.contrast, size: 18),
+                    const SizedBox(width: 8),
+                    const Text('Contrast', style: TextStyle(fontSize: 12)),
+                    Expanded(
+                      child: Slider(
+                        value: _contrast,
+                        min: 0.5,
+                        max: 2.0,
+                        divisions: 15,
+                        label: _contrast.toStringAsFixed(1),
+                        onChanged: (val) {
+                          setState(() {
+                            _contrast = val;
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
               ],
             ),
           ),

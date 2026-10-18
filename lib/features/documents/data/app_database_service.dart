@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:scaneliq/core/models/document_models.dart';
+import 'package:scaneliq/core/storage/app_storage_service.dart';
 
 /// Database service using SQLite with schema versioning and transactional operations
 class AppDatabaseService {
@@ -23,7 +24,7 @@ class AppDatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE documents (
@@ -33,6 +34,7 @@ class AppDatabaseService {
             modified_at INTEGER NOT NULL,
             page_count INTEGER NOT NULL DEFAULT 0,
             is_favorite INTEGER NOT NULL DEFAULT 0,
+            is_draft INTEGER NOT NULL DEFAULT 0,
             export_path TEXT
           )
         ''');
@@ -53,6 +55,11 @@ class AppDatabaseService {
 
         await db.execute('CREATE INDEX idx_pages_doc_order ON pages (document_id, page_order)');
         await db.execute('CREATE INDEX idx_docs_modified ON documents (modified_at DESC)');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE documents ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0');
+        }
       },
     );
   }
@@ -113,6 +120,30 @@ class AppDatabaseService {
     return results;
   }
 
+  /// Retrieves the latest unfinished draft document if one exists
+  Future<ScannedDocument?> getLatestDraft() async {
+    final db = await database;
+    final docRows = await db.query(
+      'documents',
+      where: 'is_draft = 1',
+      orderBy: 'modified_at DESC',
+      limit: 1,
+    );
+    if (docRows.isEmpty) return null;
+
+    final docId = docRows.first['id'] as String;
+    final pageRows = await db.query(
+      'pages',
+      where: 'document_id = ?',
+      whereArgs: [docId],
+      orderBy: 'page_order ASC',
+    );
+    final pages = pageRows.map((p) => DocumentPage.fromMap(p)).toList();
+    if (pages.isEmpty) return null;
+
+    return ScannedDocument.fromMap(docRows.first, pages: pages);
+  }
+
   /// Retrieves a single document with all its ordered pages
   Future<ScannedDocument?> getDocument(String id) async {
     final db = await database;
@@ -129,8 +160,12 @@ class AppDatabaseService {
     return ScannedDocument.fromMap(docRows.first, pages: pages);
   }
 
-  /// Deletes a document and cascades to pages
+  /// Deletes a document, cleans up associated storage files, and cascades to pages
   Future<void> deleteDocument(String id) async {
+    final doc = await getDocument(id);
+    if (doc != null) {
+      await AppStorageService.instance.deleteDocumentFiles(doc);
+    }
     final db = await database;
     await db.delete('documents', where: 'id = ?', whereArgs: [id]);
   }
