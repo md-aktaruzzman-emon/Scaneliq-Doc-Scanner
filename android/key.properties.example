@@ -1,0 +1,15 @@
+# Scaneliq Production Keystore Configuration Example
+#
+# Instructions:
+# 1. Generate an upload keystore (if you don't already have one):
+#    keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# 2. Place upload-keystore.jks in a secure location (e.g. C:\Users\<username>\keystores\)
+#
+# 3. Copy this file to 'android/key.properties' (this file is excluded by .gitignore)
+#
+# 4. Fill in your credentials below:
+# storePassword=YOUR_KEYSTORE_PASSWORD
+# keyPassword=YOUR_KEY_PASSWORD
+# keyAlias=upload
+# storeFile=C:\\path\\to\\upload-keystore.jks
