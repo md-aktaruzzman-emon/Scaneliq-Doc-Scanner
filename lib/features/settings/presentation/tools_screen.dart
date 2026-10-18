@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/features/ocr/data/ocr_service.dart';
+import 'package:scaneliq/features/pdf/presentation/pdf_tools_screen.dart';
 
 class ToolsScreen extends StatefulWidget {
   const ToolsScreen({super.key});
@@ -176,9 +177,37 @@ class _ToolsScreenState extends State<ToolsScreen> {
               },
             ),
           ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              contentPadding: const EdgeInsets.all(16),
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.picture_as_pdf, color: Colors.blue),
+              ),
+              title: const Text(
+                'PDF Productivity Tools',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text(
+                'Merge multiple PDFs, split pages, encrypt with password & watermark',
+              ),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PdfToolsScreen()),
+                );
+              },
+            ),
+          ),
           const SizedBox(height: 16),
           const Text(
-            'Roadmap Features',
+            'Upcoming Platform Integrations',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -186,22 +215,6 @@ class _ToolsScreenState extends State<ToolsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Card(
-            color: Theme.of(context).cardColor.withValues(alpha: 0.6),
-            child: const ListTile(
-              contentPadding: EdgeInsets.all(16),
-              leading: Icon(Icons.lock_outline, color: Colors.grey),
-              title: Text(
-                'PDF Encryption & Password',
-                style: TextStyle(color: Colors.grey),
-              ),
-              subtitle: Text(
-                'Phase 7 — Secure password-protected PDF exports',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
           Card(
             color: Theme.of(context).cardColor.withValues(alpha: 0.6),
             child: const ListTile(

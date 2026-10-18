@@ -49,15 +49,15 @@ void main() {
     );
 
     testWidgets(
-      'ToolsScreen renders Instant Image OCR action and roadmap cards',
+      'ToolsScreen renders Instant Image OCR and PDF Productivity Tools',
       (WidgetTester tester) async {
         await tester.pumpWidget(const MaterialApp(home: ToolsScreen()));
 
         expect(find.text('Productivity & OCR Tools'), findsOneWidget);
         expect(find.text('Instant Image OCR'), findsOneWidget);
         expect(find.text('Share & Export'), findsOneWidget);
-        expect(find.text('Roadmap Features'), findsOneWidget);
-        expect(find.text('PDF Encryption & Password'), findsOneWidget);
+        expect(find.text('PDF Productivity Tools'), findsOneWidget);
+        expect(find.text('Upcoming Platform Integrations'), findsOneWidget);
       },
     );
   });
