@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
@@ -86,19 +87,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
-                'assets/branding/scaneliq_logo_original.jpg',
-                width: 32,
-                height: 32,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.document_scanner,
-                  color: AppColors.brandPrimary,
-                ),
-              ),
-            ),
+            const ScaneliqLogo(size: 32, borderRadius: 8),
             const SizedBox(width: 10),
             const Text(
               'Scaneliq',

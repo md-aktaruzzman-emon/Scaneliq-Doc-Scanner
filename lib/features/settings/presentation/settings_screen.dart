@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -33,15 +34,7 @@ class SettingsScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(
-                      'assets/branding/scaneliq_logo_original.jpg',
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                  const ScaneliqLogo(size: 56, borderRadius: 12),
                   const SizedBox(width: 16),
                   const Expanded(
                     child: Column(

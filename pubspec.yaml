@@ -109,7 +109,7 @@ flutter:
 
 flutter_launcher_icons:
   android: "launcher_icon"
-  image_path: "assets/branding/scaneliq_logo_original.jpg"
-  adaptive_icon_background: "#0F172A"
-  adaptive_icon_foreground: "assets/branding/scaneliq_logo_original.jpg"
+  image_path: "assets/branding/scaneliq_logo.jpg"
+  adaptive_icon_background: "#0A1128"
+  adaptive_icon_foreground: "assets/branding/scaneliq_logo.jpg"
 
