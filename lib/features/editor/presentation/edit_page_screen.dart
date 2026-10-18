@@ -165,30 +165,43 @@ class _EditPageScreenState extends State<EditPageScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                SegmentedButton<PageFilter>(
-                  segments: const [
-                    ButtonSegment(
-                      value: PageFilter.original,
-                      label: Text('Original'),
-                      icon: Icon(Icons.photo_outlined),
-                    ),
-                    ButtonSegment(
-                      value: PageFilter.grayscale,
-                      label: Text('Grayscale'),
-                      icon: Icon(Icons.filter_b_and_w),
-                    ),
-                    ButtonSegment(
-                      value: PageFilter.blackAndWhite,
-                      label: Text('B&W'),
-                      icon: Icon(Icons.contrast),
-                    ),
-                  ],
-                  selected: {_filter},
-                  onSelectionChanged: (newSelection) {
-                    setState(() {
-                      _filter = newSelection.first;
-                    });
-                  },
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<PageFilter>(
+                    segments: const [
+                      ButtonSegment(
+                        value: PageFilter.original,
+                        label: Text('Original'),
+                        icon: Icon(Icons.photo_outlined),
+                      ),
+                      ButtonSegment(
+                        value: PageFilter.grayscale,
+                        label: Text('Grayscale'),
+                        icon: Icon(Icons.filter_b_and_w),
+                      ),
+                      ButtonSegment(
+                        value: PageFilter.blackAndWhite,
+                        label: Text('B&W'),
+                        icon: Icon(Icons.contrast),
+                      ),
+                      ButtonSegment(
+                        value: PageFilter.whiteboard,
+                        label: Text('Whiteboard'),
+                        icon: Icon(Icons.edit_note),
+                      ),
+                      ButtonSegment(
+                        value: PageFilter.enhancedText,
+                        label: Text('Text+'),
+                        icon: Icon(Icons.auto_fix_high),
+                      ),
+                    ],
+                    selected: {_filter},
+                    onSelectionChanged: (newSelection) {
+                      setState(() {
+                        _filter = newSelection.first;
+                      });
+                    },
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(

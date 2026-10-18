@@ -9,7 +9,11 @@ import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
+import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
+import 'package:scaneliq/features/scanner/presentation/count_cam_screen.dart';
+import 'package:scaneliq/features/scanner/presentation/scan_code_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
+import 'package:scaneliq/features/scanner/presentation/translate_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -134,6 +138,130 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       onPressed: _importFiles,
                       icon: const Icon(Icons.file_upload_outlined, size: 22),
                       label: const Text('Import'),
+                    ),
+                    const SizedBox(height: 18),
+                    // New Scanner Features Grid
+                    const Text(
+                      'Smart Scanning Modes',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimaryLight,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    GridView.count(
+                      crossAxisCount: 4,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 0.85,
+                      children: [
+                        _buildModeItem(
+                          icon: Icons.burst_mode,
+                          label: 'Batch',
+                          color: Colors.blue,
+                          onTap: () {
+                            ref.read(scanSessionProvider.notifier).resetSession('Batch_Scan');
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.batch),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildModeItem(
+                          icon: Icons.badge,
+                          label: 'ID Card',
+                          color: Colors.indigo,
+                          onTap: () {
+                            ref.read(scanSessionProvider.notifier).resetSession('ID_Card');
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.idCard),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildModeItem(
+                          icon: Icons.quiz,
+                          label: 'Questions',
+                          color: Colors.orange,
+                          onTap: () {
+                            ref.read(scanSessionProvider.notifier).resetSession('Question_Set');
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.questionSet),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildModeItem(
+                          icon: Icons.menu_book,
+                          label: 'Book',
+                          color: Colors.teal,
+                          onTap: () {
+                            ref.read(scanSessionProvider.notifier).resetSession('Book_Scan');
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.book),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildModeItem(
+                          icon: Icons.co_present,
+                          label: 'Board',
+                          color: Colors.deepPurple,
+                          onTap: () {
+                            ref.read(scanSessionProvider.notifier).resetSession('Whiteboard');
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.whiteboard),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildModeItem(
+                          icon: Icons.qr_code_scanner,
+                          label: 'Scan Code',
+                          color: Colors.green,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ScanCodeScreen()),
+                            );
+                          },
+                        ),
+                        _buildModeItem(
+                          icon: Icons.calculate,
+                          label: 'CountCam',
+                          color: Colors.amber.shade800,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CountCamScreen()),
+                            );
+                          },
+                        ),
+                        _buildModeItem(
+                          icon: Icons.translate,
+                          label: 'Translate',
+                          color: Colors.redAccent,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const TranslateScreen()),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     // Draft recovery card if active draft exists
@@ -452,6 +580,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildModeItem({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

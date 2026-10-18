@@ -134,6 +134,22 @@ class PdfService {
     } else if (recipe.filter == PageFilter.blackAndWhite) {
       workingImage = img.grayscale(workingImage);
       workingImage = img.contrast(workingImage, contrast: 150);
+    } else if (recipe.filter == PageFilter.whiteboard) {
+      // Whitens background while keeping colored markers/writing vivid
+      workingImage = img.adjustColor(
+        workingImage,
+        brightness: 1.15,
+        contrast: 1.35,
+        saturation: 1.2,
+      );
+    } else if (recipe.filter == PageFilter.enhancedText) {
+      // High-contrast readable document filter
+      workingImage = img.grayscale(workingImage);
+      workingImage = img.adjustColor(
+        workingImage,
+        brightness: 1.1,
+        contrast: 1.4,
+      );
     }
     if (recipe.contrast != 1.0 || recipe.brightness != 0.0) {
       workingImage = img.adjustColor(

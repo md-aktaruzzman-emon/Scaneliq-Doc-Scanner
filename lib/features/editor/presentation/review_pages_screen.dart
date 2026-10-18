@@ -112,6 +112,13 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                 },
                 child: const Text('View PDF'),
               ),
+              TextButton.icon(
+                icon: const Icon(Icons.image),
+                label: const Text('Export Images (JPG)'),
+                onPressed: () async {
+                  await _exportAllPagesAsJpegs(session);
+                },
+              ),
               TextButton(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -140,6 +147,49 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Export failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportAllPagesAsJpegs(ScanSessionState session) async {
+    try {
+      final exportedFiles = <XFile>[];
+      for (final page in session.pages) {
+        final jpegFile = await PdfService.exportPageAsJpeg(
+          page: page,
+          baseName: _titleController.text.trim().isEmpty
+              ? session.title
+              : _titleController.text.trim(),
+        );
+        exportedFiles.add(XFile(jpegFile.path));
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exported ${exportedFiles.length} JPEGs to exports folder.'),
+            action: SnackBarAction(
+              label: 'Share All',
+              onPressed: () {
+                SharePlus.instance.share(
+                  ShareParams(
+                    text: 'Scaneliq Exported Pages',
+                    files: exportedFiles,
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exporting images failed: $e'),
             backgroundColor: AppColors.error,
           ),
         );

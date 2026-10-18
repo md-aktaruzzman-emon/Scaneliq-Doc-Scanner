@@ -162,7 +162,7 @@ class DocumentPage {
   }
 }
 
-enum PageFilter { original, grayscale, blackAndWhite }
+enum PageFilter { original, grayscale, blackAndWhite, whiteboard, enhancedText }
 
 /// Non-destructive edit recipe
 class EditRecipe {
