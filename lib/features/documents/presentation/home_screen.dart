@@ -115,14 +115,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Scan documents. Keep everything organized.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textSecondaryLight,
+                    Center(
+                      child: Column(
+                        children: [
+                          const ScaneliqLogo(size: 88, borderRadius: 22),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'Scaneliq',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Scan documents. Keep everything organized.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondaryLight,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     // Primary Action: Scan Document
                     ElevatedButton.icon(
                       onPressed: _startNewScan,

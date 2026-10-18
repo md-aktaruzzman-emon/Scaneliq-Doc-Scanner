@@ -9,7 +9,7 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: ScaneliqApp()));
 
     // Verify app title and primary actions are present
-    expect(find.text('Scaneliq'), findsOneWidget);
+    expect(find.text('Scaneliq'), findsWidgets);
     expect(
       find.text('Scan documents. Keep everything organized.'),
       findsOneWidget,

@@ -34,7 +34,7 @@ class SettingsScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const ScaneliqLogo(size: 56, borderRadius: 12),
+                  const ScaneliqLogo(size: 72, borderRadius: 16),
                   const SizedBox(width: 16),
                   const Expanded(
                     child: Column(
