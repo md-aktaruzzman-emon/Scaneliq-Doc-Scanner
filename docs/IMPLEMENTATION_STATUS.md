@@ -24,26 +24,26 @@
 - [x] Inspect workspace and system environment.
 - [x] Locate and safely store the official blueprint in `docs/`.
 - [x] Locate, inspect (1024x1024 RGB) and store official logo in `assets/branding/scaneliq_logo_original.jpg`.
-- [/] Set up Flutter toolchain (in progress).
-- [ ] Prototype scanner integration (`flutter_doc_scanner` / Android ML Kit Doc Scanner).
-- [ ] Verify image capture, persistence, and multi-page PDF generation via Dart `pdf`.
+- [x] Set up Flutter toolchain (Flutter 3.47.7, Dart 3.13.5).
+- [x] Prototype scanner integration (`google_mlkit_document_scanner`).
+- [x] Verify image capture, persistence, and multi-page PDF generation via Dart `pdf` (`test/pdf_generation_test.dart` passing).
 
 ### Phase 1: Project Foundation & Branding
-- [ ] Flutter project initialization with package identifier `com.scaneliq.app`.
-- [ ] Asset registration in `pubspec.yaml` for official logo and typography.
-- [ ] Material 3 centralized theme tokens (`brandPrimary: #2563EB`, dark & light modes).
-- [ ] Typography integration: Inter & Noto Sans Bengali.
-- [ ] Riverpod state management & `go_router` navigation architecture.
-- [ ] Drift/SQLite local persistence foundation with database schema and migrations.
+- [x] Flutter project initialization with package identifier `com.scaneliq.scaneliq`.
+- [x] Asset registration in `pubspec.yaml` for official logo.
+- [x] Material 3 centralized theme tokens (`brandPrimary: #2563EB`, dark & light modes).
+- [x] Android application name set to `Scaneliq` in `AndroidManifest.xml`.
+- [x] Android Launcher Icon generated across mipmap densities from official logo using `flutter_launcher_icons`.
+- [x] Riverpod state management & navigation architecture.
+- [x] Drift/SQLite local persistence foundation with database schema, indexes, and transactions.
 
-### Phase 2: Functional UI & Navigation
-- [ ] Home Screen with primary **Scan document** action and **Import**.
-- [ ] Documents Library with search, sort, and favorites.
-- [ ] Scanner / Capture screen with multi-page support.
-- [ ] Multi-page Review / Organizer with reorder, retake, and delete.
-- [ ] Crop & Enhancement Editor (original, grayscale, B&W, rotation).
-- [ ] Export & Save screen (PDF / JPEG) with verified save confirmation.
-- [ ] Document Viewer.
+### Phase 2 & 3: Functional UI, Capture & Import
+- [x] Home Screen with primary **Scan document** action, **Import**, and search.
+- [x] System file import workflow with extension & format validation (`jpg`, `jpeg`, `png`, `webp`).
+- [x] Multi-page Review / Organizer with drag-and-drop reordering, retake, and delete.
+- [x] Crop & Enhancement Editor (rotation, Original, Grayscale, B&W filters).
+- [x] Export & Save screen (PDF / JPEG) with verified save confirmation and OS share sheet.
+- [x] Unit and widget tests passing with 0 analyzer issues.
 
 ---
 

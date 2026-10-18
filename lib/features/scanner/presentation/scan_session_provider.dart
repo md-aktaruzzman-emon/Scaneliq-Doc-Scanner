@@ -118,23 +118,39 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
     }
   }
 
-  /// Adds a page directly from image bytes (e.g. file import)
+  /// Adds a single page from file
   Future<void> addImportedPage(File file) async {
-    final pageId = const Uuid().v4();
-    final savedOriginal = await AppStorageService.instance.copyToOriginals(pageId, file);
+    await importFiles([file]);
+  }
 
-    final newPage = DocumentPage(
-      id: pageId,
-      documentId: state.documentId,
-      pageOrder: state.pages.length,
-      originalPath: savedOriginal.path,
-    );
+  /// Adds multiple pages from imported files with format/existence validation
+  Future<int> importFiles(List<File> files) async {
+    final validImages = <DocumentPage>[];
+    for (final file in files) {
+      if (!await file.exists()) continue;
+      final ext = file.path.split('.').last.toLowerCase();
+      if (!['jpg', 'jpeg', 'png', 'webp'].contains(ext)) continue;
 
-    state = state.copyWith(
-      pages: [...state.pages, newPage],
-    );
+      final pageId = const Uuid().v4();
+      final savedOriginal = await AppStorageService.instance.copyToOriginals(pageId, file, extension: ext);
+      validImages.add(
+        DocumentPage(
+          id: pageId,
+          documentId: state.documentId,
+          pageOrder: state.pages.length + validImages.length,
+          originalPath: savedOriginal.path,
+        ),
+      );
+    }
 
-    await _persistDraft();
+    if (validImages.isNotEmpty) {
+      state = state.copyWith(
+        pages: [...state.pages, ...validImages],
+      );
+      await _persistDraft();
+    }
+
+    return validImages.length;
   }
 
   /// Reorders pages in the active session

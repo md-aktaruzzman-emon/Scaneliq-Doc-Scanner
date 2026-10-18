@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -32,6 +33,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         context,
         MaterialPageRoute(builder: (_) => const ReviewPagesScreen()),
       );
+    }
+  }
+
+  void _importFiles() async {
+    try {
+      final pickedFiles = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+      );
+
+      if (pickedFiles.isNotEmpty) {
+        final files = pickedFiles
+            .where((p) => p.path != null)
+            .map((p) => File(p.path!))
+            .toList();
+
+        if (files.isNotEmpty) {
+          ref.read(scanSessionProvider.notifier).resetSession();
+          final count = await ref.read(scanSessionProvider.notifier).importFiles(files);
+          if (count > 0 && mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ReviewPagesScreen()),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not import files: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
@@ -91,10 +128,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const SizedBox(height: 12),
                     // Secondary Action: Import
                     OutlinedButton.icon(
-                      onPressed: () {
-                        // Import fallback/handler
-                        _startNewScan();
-                      },
+                      onPressed: _importFiles,
                       icon: const Icon(Icons.file_upload_outlined, size: 22),
                       label: const Text('Import'),
                     ),

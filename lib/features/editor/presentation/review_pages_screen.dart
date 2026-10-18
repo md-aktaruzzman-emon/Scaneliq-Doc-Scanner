@@ -197,7 +197,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                   child: ReorderableListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     itemCount: session.pages.length,
-                    onReorder: (oldIndex, newIndex) {
+                    onReorderItem: (oldIndex, newIndex) {
                       ref.read(scanSessionProvider.notifier).reorderPages(oldIndex, newIndex);
                     },
                     itemBuilder: (context, index) {
