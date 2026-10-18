@@ -1,0 +1,139 @@
+/** Central storage keys, defaults and preset configuration. Preset logic lives ONLY here. */
+import type { Settings, PresetName } from '../../types/schemas.js';
+
+export const CURRENT_SCHEMA_VERSION = 3;
+
+export const STORAGE_KEYS = {
+  settings: 'settings',
+  snapshots: 'snapshots',
+  siteStats: 'siteStats',
+  threatLog: 'threatLog',
+  pack: 'pack',
+  packRuleIds: 'packRuleIds',
+  telemetryQueue: 'telemetryQueue',
+  onboardingDone: 'onboardingDone',
+  updateState: 'updateState',
+  tabThreats: 'tabThreats'
+} as const;
+
+export type ModuleToggles = Pick<Settings['modules'], 'ads' | 'trackers' | 'cookies' | 'heuristics' | 'fingerprintShields' | 'annoyances'>;
+
+export interface PresetConfig {
+  label: string;
+  description: string;
+  tag: string;
+  recommended?: boolean;
+  modules: ModuleToggles;
+  developerMode: boolean;
+}
+
+/** Presets map to explicit module configurations; nothing else may scatter preset logic. */
+export const PRESETS: Record<PresetName, PresetConfig> = {
+  basic: {
+    label: 'Basic',
+    description: 'Essential ad blocking with maximum compatibility.',
+    tag: 'Best when you want simple ad blocking with minimal site impact.',
+    recommended: false,
+    modules: { ads: true, trackers: false, cookies: false, heuristics: false, fingerprintShields: false, annoyances: false },
+    developerMode: false
+  },
+  balanced: {
+    label: 'Balanced',
+    description: 'Everyday ad, tracker, cookie, and threat protection.',
+    tag: 'Recommended for most browsing.',
+    recommended: true,
+    modules: { ads: true, trackers: true, cookies: true, heuristics: true, fingerprintShields: false, annoyances: false },
+    developerMode: false
+  },
+  strong: {
+    label: 'Strong',
+    description: 'Stronger tracking, annoyance, and threat protection.',
+    tag: 'More protection with a higher chance of website compatibility issues.',
+    recommended: false,
+    modules: { ads: true, trackers: true, cookies: true, heuristics: true, fingerprintShields: false, annoyances: true },
+    developerMode: false
+  },
+  maximum: {
+    label: 'Maximum',
+    description: 'Maximum available protection, including fingerprint defenses.',
+    tag: 'Strongest protection. Some websites may require additional adjustments.',
+    recommended: false,
+    modules: { ads: true, trackers: true, cookies: true, heuristics: true, fingerprintShields: true, annoyances: true },
+    developerMode: false
+  },
+  expert: {
+    label: 'Expert',
+    description: 'Full manual control over protection modules.',
+    tag: 'Configure each protection module individually.',
+    recommended: false,
+    modules: { ads: true, trackers: true, cookies: true, heuristics: true, fingerprintShields: true, annoyances: true },
+    developerMode: true
+  }
+};
+
+export const DEFAULT_FP_SHIELDS: Record<string, boolean> = {
+  canvas: false,
+  webgl: false,
+  navigator: false,
+  screen: false,
+  timing: false
+};
+
+export const MAXIMUM_FP_SHIELDS: Record<string, boolean> = {
+  canvas: true,
+  webgl: true,
+  navigator: true,
+  screen: true,
+  timing: true
+};
+
+/**
+ * Derives the active preset from the canonical module configuration.
+ * If modules match a standard preset profile, returns that preset name.
+ * If modules have been customized, returns 'expert'.
+ */
+export function matchPreset(settings: Pick<Settings, 'modules' | 'preset'> & { fpShields?: Record<string, boolean>; developerMode?: boolean }): PresetName {
+  const m = settings.modules;
+  if (!m) return 'balanced';
+
+  // Basic: ads only
+  if (m.ads === true && m.trackers === false && m.cookies === false && m.heuristics === false && m.fingerprintShields === false && !m.annoyances) {
+    return 'basic';
+  }
+
+  // Balanced: ads + trackers + cookies + heuristics, annoyances and fpShields off
+  if (m.ads === true && m.trackers === true && m.cookies === true && m.heuristics === true && m.fingerprintShields === false && !m.annoyances) {
+    return 'balanced';
+  }
+
+  // Strong: ads + trackers + cookies + heuristics + annoyances, fpShields off
+  if (m.ads === true && m.trackers === true && m.cookies === true && m.heuristics === true && m.fingerprintShields === false && m.annoyances === true) {
+    return 'strong';
+  }
+
+  // Maximum: all modules active AND all fpShields active
+  if (m.ads === true && m.trackers === true && m.cookies === true && m.heuristics === true && m.fingerprintShields === true && m.annoyances === true) {
+    if (!settings.fpShields || Object.values(settings.fpShields).every(Boolean)) {
+      return settings.developerMode ? 'expert' : 'maximum';
+    }
+    return 'expert';
+  }
+
+  // Custom configuration not matching standard presets
+  return 'expert';
+}
+
+export function defaultSettings(): Settings {
+  return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    preset: 'balanced',
+    masterEnabled: true,
+    modules: { ...PRESETS.balanced.modules },
+    perSite: {},
+    telemetryOptIn: false,
+    fpShields: { ...DEFAULT_FP_SHIELDS },
+    logRetentionDays: 30,
+    developerMode: false,
+    theme: 'system'
+  };
+}
