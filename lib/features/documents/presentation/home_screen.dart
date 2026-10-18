@@ -118,7 +118,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     Center(
                       child: Column(
                         children: [
-                          const ScaneliqLogo(size: 88, borderRadius: 22),
+                          const ScaneliqLogo(size: 96),
                           const SizedBox(height: 10),
                           const Text(
                             'Scaneliq',
