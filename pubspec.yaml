@@ -48,6 +48,9 @@ dependencies:
   google_mlkit_document_scanner: ^0.6.1
   flutter_doc_scanner: ^0.0.21
   file_picker: ^13.1.0
+  google_mlkit_text_recognition: ^0.17.1
+  pdfrx: ^2.6.5
+  google_fonts: ^9.0.0
 
 dev_dependencies:
   flutter_test:

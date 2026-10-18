@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Centralized Scaneliq design tokens defined in Master Blueprint Section 0.1
 class AppColors {
@@ -34,6 +35,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: GoogleFonts.inter().fontFamily,
       primaryColor: AppColors.brandPrimary,
       scaffoldBackgroundColor: AppColors.appBackgroundLight,
       colorScheme: const ColorScheme.light(
@@ -94,6 +96,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      fontFamily: GoogleFonts.inter().fontFamily,
       primaryColor: AppColors.brandPrimary,
       scaffoldBackgroundColor: AppColors.appBackgroundDark,
       colorScheme: const ColorScheme.dark(

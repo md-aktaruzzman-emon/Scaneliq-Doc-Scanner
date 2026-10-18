@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
+import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 
@@ -222,6 +223,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           margin: const EdgeInsets.only(bottom: 12),
                           child: ListTile(
                             contentPadding: const EdgeInsets.all(12),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DocumentViewerScreen(document: doc),
+                                ),
+                              );
+                            },
                             leading: Container(
                               width: 48,
                               height: 60,

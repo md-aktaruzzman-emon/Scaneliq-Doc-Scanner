@@ -1,8 +1,8 @@
 # Scaneliq Implementation Status
 
-**Status Document Version:** 1.0.0  
+**Status Document Version:** 1.2.0  
 **Updated:** 2026-10-18  
-**Current Phase:** Phase 0 — Environment and Proof of Concept / Phase 1 — Project Foundation  
+**Current Phase:** Full Project Complete (MVP + Viewer + OCR + Launcher Branding)  
 
 ---
 
@@ -10,11 +10,12 @@
 
 | Item | Status | Notes |
 |---|---|---|
-| **App Name** | **Scaneliq** | Consistent across project |
-| **Blueprint** | Found & Stored | [Scaneliq_Master_Blueprint_Improved.md](file:///C:/Scaneliq/docs/Scaneliq_Master_Blueprint_Improved.md) |
-| **Official Logo** | Integrated (Original) | [scaneliq_logo_original.jpg](file:///C:/Scaneliq/assets/branding/scaneliq_logo_original.jpg) (1024x1024) |
-| **Flutter SDK** | Installing (C:\flutter) | Cloning stable branch via Git |
-| **Git Remote** | Configured | `https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner.git` (main) |
+| **App Name** | **Scaneliq** | Set in `AndroidManifest.xml`, app titles, and themes |
+| **Blueprint** | Complete & Stored | [Scaneliq_Master_Blueprint_Improved.md](file:///C:/Scaneliq/docs/Scaneliq_Master_Blueprint_Improved.md) |
+| **Official Logo** | Integrated | [scaneliq_logo_original.jpg](file:///C:/Scaneliq/assets/branding/scaneliq_logo_original.jpg) |
+| **Android Launcher Icons** | Generated | Created adaptive & legacy mipmaps from official logo |
+| **Flutter Toolchain** | Stable | Flutter 3.47.7, Dart 3.13.5 |
+| **Git Remote** | Synchronized | `https://github.com/md-aktaruzzman-emon/scaneliq-doc-scanner.git` (main) |
 
 ---
 
@@ -32,6 +33,7 @@
 - [x] Flutter project initialization with package identifier `com.scaneliq.scaneliq`.
 - [x] Asset registration in `pubspec.yaml` for official logo.
 - [x] Material 3 centralized theme tokens (`brandPrimary: #2563EB`, dark & light modes).
+- [x] Typography configured with Inter design hierarchy.
 - [x] Android application name set to `Scaneliq` in `AndroidManifest.xml`.
 - [x] Android Launcher Icon generated across mipmap densities from official logo using `flutter_launcher_icons`.
 - [x] Riverpod state management & navigation architecture.
@@ -43,7 +45,12 @@
 - [x] Multi-page Review / Organizer with drag-and-drop reordering, retake, and delete.
 - [x] Crop & Enhancement Editor (rotation, Original, Grayscale, B&W filters).
 - [x] Export & Save screen (PDF / JPEG) with verified save confirmation and OS share sheet.
-- [x] Unit and widget tests passing with 0 analyzer issues.
+
+### Phase 4, 5 & 6: Document Viewer & OCR Text Extraction
+- [x] In-app PDF Viewer (`pdfrx`) with pinch-to-zoom and multi-page smooth scrolling.
+- [x] On-device OCR text extraction (`google_mlkit_text_recognition`).
+- [x] Modal bottom sheet for viewing and copying recognized text.
+- [x] Zero analyzer issues, all tests passing.
 
 ---
 
