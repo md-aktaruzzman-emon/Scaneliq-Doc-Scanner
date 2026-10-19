@@ -10,6 +10,9 @@ import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.
 import 'package:scaneliq/features/scanner/presentation/count_cam_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_code_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/translate_screen.dart';
+import 'package:scaneliq/features/intelligence/presentation/business_card_dialog.dart';
+import 'package:scaneliq/features/intelligence/presentation/receipt_dialog.dart';
+import 'package:scaneliq/features/intelligence/presentation/ai_document_sheet.dart';
 
 class ToolsScreen extends StatefulWidget {
   const ToolsScreen({super.key});
@@ -30,13 +33,50 @@ class _ToolsScreenState extends State<ToolsScreen> {
       );
 
       if (pickedFiles.isNotEmpty && pickedFiles.first.path != null) {
+        if (!mounted) return;
+
+        final chosenScript = await showDialog<OcrScript>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Select Recognition Script'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.language),
+                  title: const Text('English / Latin'),
+                  subtitle: const Text('Latin alphabet documents'),
+                  onTap: () => Navigator.pop(ctx, OcrScript.latin),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.translate),
+                  title: const Text('Bengali (বাংলা) & Indic'),
+                  subtitle: const Text('Bengali script & numerals'),
+                  onTap: () => Navigator.pop(ctx, OcrScript.bengali),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.auto_awesome),
+                  title: const Text('Devanagari (Hindi / Nepali)'),
+                  subtitle: const Text('Devanagari script documents'),
+                  onTap: () => Navigator.pop(ctx, OcrScript.devanagari),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        if (chosenScript == null) return;
+
         setState(() {
           _isProcessingOcr = true;
           _extractedText = null;
         });
 
         final file = File(pickedFiles.first.path!);
-        final text = await OcrService.instance.extractText(file);
+        final text = await OcrService.instance.extractText(
+          file,
+          script: chosenScript,
+        );
 
         setState(() {
           _isProcessingOcr = false;
@@ -177,6 +217,44 @@ class _ToolsScreenState extends State<ToolsScreen> {
                       MaterialPageRoute(builder: (_) => const CountCamScreen()),
                     );
                   },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 22),
+
+            // Document Intelligence & AI
+            _buildSectionHeader(
+              'Document Intelligence & AI',
+              'Extract business contacts, parse receipt totals, and ask questions',
+              isDark,
+            ),
+            const SizedBox(height: 10),
+            _buildCardGroup(
+              isDark: isDark,
+              children: [
+                _buildToolTile(
+                  icon: Icons.contact_mail_outlined,
+                  title: 'Business Card Reader',
+                  subtitle: 'Extract contact details and export standard vCard (.vcf)',
+                  isDark: isDark,
+                  onTap: () => BusinessCardDialog.show(context),
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Receipt & Invoice Scanner',
+                  subtitle: 'Extract totals, tax, line items with math verification & CSV export',
+                  isDark: isDark,
+                  onTap: () => ReceiptDialog.show(context),
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.auto_awesome_outlined,
+                  title: 'AI Document Summary & Q&A',
+                  subtitle: 'Offline TextRank executive summary and semantic passage answering',
+                  isDark: isDark,
+                  onTap: () => AiDocumentSheet.show(context),
                 ),
               ],
             ),

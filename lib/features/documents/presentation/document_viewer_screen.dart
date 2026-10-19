@@ -10,6 +10,7 @@ import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/ocr/data/ocr_service.dart';
 import 'package:scaneliq/features/pdf/data/advanced_pdf_service.dart';
 import 'package:scaneliq/features/pdf/presentation/pdf_page_organizer_screen.dart';
+import 'package:scaneliq/features/intelligence/presentation/ai_document_sheet.dart';
 
 class DocumentViewerScreen extends StatefulWidget {
   final ScannedDocument document;
@@ -206,17 +207,36 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                     'Extracted Text (OCR)',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.copy),
-                    tooltip: 'Copy all text',
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: text));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Text copied to clipboard!'),
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        icon: const Icon(
+                          Icons.auto_awesome,
+                          size: 18,
+                          color: Color(0xFF6366F1),
                         ),
-                      );
-                    },
+                        label: const Text(
+                          'AI Summary',
+                          style: TextStyle(color: Color(0xFF6366F1)),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          AiDocumentSheet.show(context, text: text);
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.copy),
+                        tooltip: 'Copy all text',
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: text));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Text copied to clipboard!'),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -934,9 +954,30 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                   case 'share':
                     _shareDocument();
                     break;
+                  case 'ai_summary':
+                    if (_extractedText != null && _extractedText!.isNotEmpty) {
+                      AiDocumentSheet.show(context, text: _extractedText);
+                    } else {
+                      _runOcr();
+                    }
+                    break;
                 }
               },
               itemBuilder: (ctx) => [
+                const PopupMenuItem(
+                  value: 'ai_summary',
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.auto_awesome,
+                        size: 20,
+                        color: Color(0xFF6366F1),
+                      ),
+                      SizedBox(width: 8),
+                      Text('AI Summary & Q&A'),
+                    ],
+                  ),
+                ),
                 const PopupMenuItem(
                   value: 'organize',
                   child: Row(

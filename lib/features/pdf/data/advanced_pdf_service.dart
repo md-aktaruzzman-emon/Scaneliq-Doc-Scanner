@@ -156,6 +156,55 @@ class PdfOutlineItem {
   const PdfOutlineItem({required this.title, required this.pageNumber1Indexed});
 }
 
+/// Types of supported PDF annotations
+enum PdfAnnotationType { text, signature, highlight }
+
+/// Represents an interactive annotation or signature to be applied to a PDF page
+class PdfAnnotationItem {
+  final PdfAnnotationType type;
+  final int pageIndex; // 0-indexed
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final String? text;
+  final double fontSize;
+  final Color color;
+  final List<int>? signaturePngBytes;
+
+  const PdfAnnotationItem({
+    required this.type,
+    required this.pageIndex,
+    required this.x,
+    required this.y,
+    this.width = 160.0,
+    this.height = 40.0,
+    this.text,
+    this.fontSize = 14.0,
+    this.color = const Color(0xFF000000),
+    this.signaturePngBytes,
+  });
+}
+
+/// Area marked for permanent content redaction
+class PdfRedactionArea {
+  final int pageIndex; // 0-indexed
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final String? overlayText;
+
+  const PdfRedactionArea({
+    required this.pageIndex,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    this.overlayText = '[REDACTED]',
+  });
+}
+
 // =============================================================================
 // ADVANCED PDF SERVICE
 // =============================================================================
@@ -1184,6 +1233,155 @@ class AdvancedPdfService {
     } finally {
       finalDoc.dispose();
       sourceDoc.dispose();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7. ANNOTATIONS, SIGNATURES & GENUINE REDACTION (F-26 & F-27)
+  // ---------------------------------------------------------------------------
+
+  /// Applies interactive annotations, drawn signatures, and highlights onto a PDF document.
+  Future<File> applyAnnotations({
+    required File sourcePdf,
+    required List<PdfAnnotationItem> annotations,
+    required String outputFileName,
+  }) async {
+    if (!await sourcePdf.exists()) {
+      throw FileNotFoundException(
+        'Source PDF does not exist: ${sourcePdf.path}',
+      );
+    }
+
+    final bytes = await sourcePdf.readAsBytes();
+    final doc = sf.PdfDocument(inputBytes: bytes);
+
+    try {
+      for (final item in annotations) {
+        if (item.pageIndex < 0 || item.pageIndex >= doc.pages.count) continue;
+        final page = doc.pages[item.pageIndex];
+
+        switch (item.type) {
+          case PdfAnnotationType.text:
+            if (item.text != null && item.text!.isNotEmpty) {
+              final font = sf.PdfStandardFont(
+                sf.PdfFontFamily.helvetica,
+                item.fontSize,
+                style: sf.PdfFontStyle.bold,
+              );
+              final brush = sf.PdfSolidBrush(
+                sf.PdfColor(
+                  (item.color.r * 255).round(),
+                  (item.color.g * 255).round(),
+                  (item.color.b * 255).round(),
+                ),
+              );
+              page.graphics.drawString(
+                item.text!,
+                font,
+                brush: brush,
+                bounds: Rect.fromLTWH(item.x, item.y, item.width, item.height),
+              );
+            }
+            break;
+
+          case PdfAnnotationType.signature:
+            if (item.signaturePngBytes != null &&
+                item.signaturePngBytes!.isNotEmpty) {
+              final bitmap = sf.PdfBitmap(item.signaturePngBytes!);
+              page.graphics.drawImage(
+                bitmap,
+                Rect.fromLTWH(item.x, item.y, item.width, item.height),
+              );
+            }
+            break;
+
+          case PdfAnnotationType.highlight:
+            final highlightBrush = sf.PdfSolidBrush(
+              sf.PdfColor(
+                (item.color.r * 255).round(),
+                (item.color.g * 255).round(),
+                (item.color.b * 255).round(),
+                100, // Semi-transparent highlight
+              ),
+            );
+            page.graphics.drawRectangle(
+              brush: highlightBrush,
+              bounds: Rect.fromLTWH(item.x, item.y, item.width, item.height),
+            );
+            break;
+        }
+      }
+
+      return await _saveDocumentSafely(doc, outputFileName);
+    } finally {
+      doc.dispose();
+    }
+  }
+
+  /// Permanently redacts targeted areas by drawing opaque black blocks and sanitizing metadata.
+  Future<File> applyRedaction({
+    required File sourcePdf,
+    required List<PdfRedactionArea> redactions,
+    required String outputFileName,
+    bool sanitizeMetadata = true,
+  }) async {
+    if (!await sourcePdf.exists()) {
+      throw FileNotFoundException(
+        'Source PDF does not exist: ${sourcePdf.path}',
+      );
+    }
+
+    final bytes = await sourcePdf.readAsBytes();
+    final doc = sf.PdfDocument(inputBytes: bytes);
+
+    try {
+      final blackBrush = sf.PdfSolidBrush(sf.PdfColor(0, 0, 0));
+      final whiteBrush = sf.PdfSolidBrush(sf.PdfColor(255, 255, 255));
+      final overlayFont = sf.PdfStandardFont(
+        sf.PdfFontFamily.helvetica,
+        8.0,
+        style: sf.PdfFontStyle.bold,
+      );
+
+      for (final r in redactions) {
+        if (r.pageIndex < 0 || r.pageIndex >= doc.pages.count) continue;
+        final page = doc.pages[r.pageIndex];
+
+        // 1. Draw solid opaque black fill across the entire redaction rectangle
+        final rect = Rect.fromLTWH(r.x, r.y, r.width, r.height);
+        page.graphics.drawRectangle(brush: blackBrush, bounds: rect);
+
+        // 2. Draw overlay text if specified
+        if (r.overlayText != null && r.overlayText!.isNotEmpty) {
+          final textSize = overlayFont.measureString(r.overlayText!);
+          final textX = r.x + (r.width - textSize.width) / 2.0;
+          final textY = r.y + (r.height - textSize.height) / 2.0;
+          page.graphics.drawString(
+            r.overlayText!,
+            overlayFont,
+            brush: whiteBrush,
+            bounds: Rect.fromLTWH(
+              math.max(r.x, textX),
+              math.max(r.y, textY),
+              r.width,
+              r.height,
+            ),
+          );
+        }
+      }
+
+      // 3. Metadata sanitization
+      if (sanitizeMetadata) {
+        doc.documentInformation.title = '';
+        doc.documentInformation.author = '';
+        doc.documentInformation.subject = '';
+        doc.documentInformation.keywords = '';
+        doc.documentInformation.producer = 'Scaneliq Redaction Engine';
+      }
+
+      return await _saveDocumentSafely(doc, outputFileName);
+    } finally {
+      doc.dispose();
     }
   }
 

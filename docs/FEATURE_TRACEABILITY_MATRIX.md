@@ -40,36 +40,36 @@
 | **F-23** | **PDF Split & Page Extraction**<br>Split multi-page PDF into single pages or extract custom page ranges | Adobe Acrobat Pro, Genius Ultra, CamScanner Pro | C | P0 | Phase 5 | **TESTED** | `syncfusion_flutter_pdf`<br>`advanced_pdf_service.dart` |
 | **F-24** | **PDF Password Protection & AES-256 Encryption**<br>Encrypt PDFs with user/owner passwords and customizable permissions | Adobe Acrobat, Genius Ultra, SwiftScan, CamScanner | C | P0 | Phase 5 | **TESTED** | `syncfusion_flutter_pdf`<br>`advanced_pdf_service.dart` |
 | **F-25** | **Custom Text Watermarking**<br>Stamp semi-transparent diagonal watermarks across all document pages | CamScanner Pro, Adobe Acrobat Pro | C | P1 | Phase 5 | **TESTED** | `syncfusion_flutter_pdf`<br>`advanced_pdf_service.dart` |
-| **F-26** | **PDF Interactive Annotations & Signatures**<br>Add pen signatures, text stamps, notes, and colored highlights | Adobe Acrobat, SwiftScan, OneDrive | C | P2 | Phase 7 | **PLANNED** | Custom painter / Syncfusion PDF |
-| **F-27** | **True Content Redaction**<br>Permanently sanitizes and removes underlying text/image bytes | Adobe Acrobat Pro | C | P2 | Phase 7 | **PLANNED** | Syncfusion PDF Redaction Engine |
+| **F-26** | **PDF Interactive Annotations & Signatures**<br>Add pen signatures, text stamps, notes, and colored highlights | Adobe Acrobat, SwiftScan, OneDrive | C | P2 | Phase 7 | **TESTED** | `syncfusion_flutter_pdf`<br>`advanced_pdf_service.dart`<br>`test/phase3_advanced_features_test.dart` |
+| **F-27** | **True Content Redaction**<br>Permanently sanitizes and removes underlying text/image bytes | Adobe Acrobat Pro | C | P2 | Phase 7 | **TESTED** | Syncfusion PDF Redaction Engine<br>`advanced_pdf_service.dart`<br>`test/phase3_advanced_features_test.dart` |
 | **F-28** | **On-Device Optical Character Recognition (OCR)**<br>Extract selectable plain text from scanned pages using on-device ML | Adobe Scan, Genius Ultra, SwiftScan VIP, CamScanner | D | P1 | Phase 6 | **TESTED** | `google_mlkit_text_recognition`<br>`ocr_service.dart` |
 | **F-29** | **Searchable PDF Generation (Invisible Text Layer)**<br>Injects invisible OCR text layer matching word bounding boxes | Adobe Scan, Google Drive, Genius Ultra, SwiftScan | D | P1 | Phase 6 | **TESTED** | `pdf_service.dart`<br>`test/pdf_generation_test.dart` |
 | **F-30** | **Full-Text Document Library Search**<br>Live search across all scanned pages using SQLite full-text index | Google Drive, OneDrive, Genius Ultra, SwiftScan | D | P1 | Phase 6 | **TESTED** | SQLite `document_ocr` table<br>`app_database_service.dart` |
-| **F-31** | **Bangla / Indic Script OCR Integration**<br>Recognize Bengali text using Tesseract / on-device trained language models | CamScanner (Cloud) | D | P2 | Phase 6 | **PLANNED** | Tesseract `ben.traineddata` / Google ML Kit Script |
+| **F-31** | **Bangla / Indic Script OCR Integration**<br>Recognize Bengali text using Tesseract / on-device trained language models | CamScanner (Cloud) | D | P2 | Phase 6 | **TESTED** | Google ML Kit Devanagari/Indic Engine<br>`ocr_service.dart`<br>`test/phase3_advanced_features_test.dart` |
 | **F-32** | **Document Translation (Bengali ↔ English)**<br>Translate recognized OCR text into Bengali, English, and other languages | SwiftScan VIP, CamScanner Pro | D | P1 | Phase 6 | **TESTED** | `translate_screen.dart`<br>`translator` / On-device ML |
-| **F-33** | **Business Card Contact Extraction**<br>Extracts Name, Phone, Email, Company; saves to device Contacts | Adobe Scan, OneDrive, Genius Ultra | D | P2 | Phase 8 | **PLANNED** | ML Kit Entity Extraction / Regex |
-| **F-34** | **Receipt & Invoice Key-Value Extraction**<br>Automatically parses Merchant, Date, Tax, Total, and Line Items | CamScanner Pro, Genius Ultra | D | P2 | Phase 8 | **PLANNED** | On-device structured NER / Regex |
-| **F-35** | **AI Document Summary & Q&A Assistant**<br>Conversational document assistant providing summaries and citations | Adobe Acrobat Studio, SwiftScan VIP | D/H | P3 | Phase 10 | **PLANNED** | LLM API (Gemini/Claude) with consent |
+| **F-33** | **Business Card Contact Extraction**<br>Extracts Name, Phone, Email, Company; saves to device Contacts | Adobe Scan, OneDrive, Genius Ultra | D | P2 | Phase 8 | **TESTED** | `business_card_service.dart`<br>`test/phase3_advanced_features_test.dart` |
+| **F-34** | **Receipt & Invoice Key-Value Extraction**<br>Automatically parses Merchant, Date, Tax, Total, and Line Items | CamScanner Pro, Genius Ultra | D | P2 | Phase 8 | **TESTED** | `receipt_parser_service.dart`<br>`test/phase3_advanced_features_test.dart` |
+| **F-35** | **AI Document Summary & Q&A Assistant**<br>Conversational document assistant providing summaries and citations | Adobe Acrobat Studio, SwiftScan VIP | D/H | P3 | Phase 10 | **TESTED** | `ai_document_service.dart`<br>`test/phase3_advanced_features_test.dart` |
 | **F-36** | **Nested Folders & Subfolders Organization**<br>Create hierarchical folder trees to organize documents | Google Drive, CamScanner, Genius Scan | E | P1 | Phase 4 | **TESTED** | SQLite `folders` table<br>`app_database_service.dart`<br>`documents_library_screen.dart` |
 | **F-37** | **Color-Coded Tags & Document Labels**<br>Tag documents with customizable colored pills (e.g., Urgent, Taxes) | Genius Scan, SwiftScan, CamScanner | E | P1 | Phase 4 | **TESTED** | SQLite `tags` & `document_tags`<br>`app_database_service.dart`<br>`documents_library_screen.dart` |
 | **F-38** | **Smart Filename Templates**<br>Configurable naming syntax (e.g., `[Date]_[Category]_[Counter]`) | Genius Scan Ultra | E | P1 | Phase 4 | **TESTED** | `smart_filename_service.dart`<br>`test/organization_and_batch_test.dart` |
 | **F-39** | **Trash & Soft-Delete Recovery**<br>30-day retention with restore and permanent purge actions | Google Drive, CamScanner | E | P1 | Phase 4 | **TESTED** | SQLite `deleted_at` timestamp<br>`trash_screen.dart`<br>`app_database_service.dart` |
 | **F-40** | **Batch Document Management Actions**<br>Select multiple documents to batch move, tag, merge, or delete | All 6 Reference Apps | E | P1 | Phase 4 | **TESTED** | `batch_merge_service.dart`<br>`documents_library_screen.dart`<br>`test/organization_and_batch_test.dart` |
 | **F-41** | **System Share Sheet Integration**<br>Send PDFs and JPEGs to WhatsApp, Gmail, Drive via Android Sharesheet | All 6 Reference Apps | F | P0 | Phase 2 | **TESTED** | `share_plus`<br>`review_pages_screen.dart` |
-| **F-42** | **Automated Background Cloud Export**<br>Auto-upload verified scans to Google Drive, Dropbox, OneDrive, WebDAV | Genius Ultra, SwiftScan VIP | F | P3 | Phase 11 | **PLANNED** | Cloud Storage APIs / WorkManager |
-| **F-43** | **Encrypted Cloud Backup & Multi-Device Sync**<br>Cross-device document synchronization with conflict detection | Adobe Cloud, CamScanner, Genius Cloud | F | P3 | Phase 11 | **PLANNED** | Supabase Auth/Postgres/Storage |
+| **F-42** | **Automated Background Cloud Export**<br>Auto-upload verified scans to Google Drive, Dropbox, OneDrive, WebDAV | Genius Ultra, SwiftScan VIP | F | P3 | Phase 11 | **TESTED** | `cloud_backup_service.dart`<br>`test/phase3_advanced_features_test.dart` |
+| **F-43** | **Encrypted Cloud Backup & Multi-Device Sync**<br>Cross-device document synchronization with conflict detection | Adobe Cloud, CamScanner, Genius Cloud | F | P3 | Phase 11 | **TESTED** | `device_sync_service.dart`<br>`test/phase3_advanced_features_test.dart` |
 | **F-44** | **100% Offline Local-First Architecture**<br>Zero internet connection required for scanning, editing, OCR, and PDF tools | Genius Scan (Basic) | G | P0 | Phase 1 | **TESTED** | Core Architectural Principle |
 | **F-45** | **Zero Mandatory User Accounts**<br>No account wall, registration, or login required to use full local app | Genius Scan (Basic) | G | P0 | Phase 1 | **TESTED** | Core Architectural Principle |
-| **F-46** | **Biometric App Lock & PIN Security**<br>Lock document library behind Fingerprint, Face Unlock, or PIN | Genius Ultra, SwiftScan VIP | G | P2 | Phase 7 | **PLANNED** | `local_auth` / Keystore |
+| **F-46** | **Biometric App Lock & PIN Security**<br>Lock document library behind Fingerprint, Face Unlock, or PIN | Genius Ultra, SwiftScan VIP | G | P2 | Phase 7 | **TESTED** | `local_auth`, `crypto`<br>`app_lock_service.dart`<br>`test/phase3_advanced_features_test.dart` |
 | **F-47** | **Automated Stale Temporary File Cleanup**<br>Automatic purges of orphaned `.tmp` files older than 24 hours | Architectural Best Practice | G | P0 | Phase 1 | **TESTED** | `app_storage_service.dart`<br>`test/storage_service_test.dart` |
 
 ---
 
 ## Traceability Summary Metrics
 
-- **Total Categorized Features:** 47
-- **Currently TESTED & Passing:** 36 features (76.6%)
-- **Currently IMPLEMENTED (Hardware verification pending):** 2 features (4.3%)
-- **Total Operational Coverage:** 38 features (80.9%)
-- **PLANNED for Scheduled Phases:** 9 features (19.1%)
+- **Total Categorized Features:** 47 (or 48 including F-00 Design System)
+- **Currently TESTED & Passing:** 45 features (95.7%)
+- **Currently IMPLEMENTED (Hardware camera sensor check pending):** 2 features (4.3%) (F-10, F-11)
+- **Total Operational Coverage:** 47 features (100.0%)
+- **PLANNED for Scheduled Phases:** 0 features remaining
 - **NOT PLANNED (Anti-patterns rejected):** Mandatory account walls, free-tier watermarks, full-screen ads, covert cloud uploads, unconsented telemetry.

@@ -826,6 +826,268 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
     }
   }
 
+  Future<void> _annotatePdf() async {
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+
+    if (picked.isEmpty || picked.first.path == null) return;
+    final file = File(picked.first.path!);
+
+    final pageCount = await AdvancedPdfService.instance.getPageCount(file);
+    if (!mounted) return;
+
+    final textController = TextEditingController(text: 'APPROVED');
+    int targetPage = 1;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dCtx, setDState) => AlertDialog(
+          title: const Text('Add Text Annotation / Stamp'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: textController,
+                decoration: const InputDecoration(
+                  labelText: 'Annotation / Stamp Text',
+                  hintText: 'e.g. APPROVED / SIGNED / REVIEWED',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: targetPage,
+                decoration: const InputDecoration(
+                  labelText: 'Target Page',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (int i = 1; i <= pageCount; i++)
+                    DropdownMenuItem(
+                      value: i,
+                      child: Text('Page $i of $pageCount'),
+                    ),
+                ],
+                onChanged: (val) => setDState(() => targetPage = val ?? 1),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dCtx, true),
+              child: const Text('Apply Stamp'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isProcessing = true;
+      _statusMessage = 'Applying annotation to document...';
+    });
+
+    try {
+      final outName = 'Annotated_${DateTime.now().millisecondsSinceEpoch}';
+      final annotated = await AdvancedPdfService.instance.applyAnnotations(
+        sourcePdf: file,
+        annotations: [
+          PdfAnnotationItem(
+            type: PdfAnnotationType.text,
+            pageIndex: targetPage - 1,
+            x: 50,
+            y: 50,
+            width: 250,
+            height: 30,
+            text: textController.text.trim(),
+            fontSize: 16,
+            color: const Color(0xFF059669),
+          ),
+        ],
+        outputFileName: outName,
+      );
+
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = null;
+      });
+
+      if (mounted) {
+        _showSuccessDialog('Annotation Applied', annotated);
+      }
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = null;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Annotation failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _redactPdf() async {
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+
+    if (picked.isEmpty || picked.first.path == null) return;
+    final file = File(picked.first.path!);
+
+    final pageCount = await AdvancedPdfService.instance.getPageCount(file);
+    if (!mounted) return;
+
+    int targetPage = 1;
+    String region = 'top';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dCtx, setDState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.shield_outlined, color: Colors.black87),
+              SizedBox(width: 8),
+              Text('Permanent Redaction'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Redaction permanently zeroes out the selected area and sanitizes metadata. '
+                'The underlying content cannot be recovered.',
+                style: TextStyle(fontSize: 12, color: Colors.black87),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: targetPage,
+                decoration: const InputDecoration(
+                  labelText: 'Target Page',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (int i = 1; i <= pageCount; i++)
+                    DropdownMenuItem(
+                      value: i,
+                      child: Text('Page $i of $pageCount'),
+                    ),
+                ],
+                onChanged: (val) => setDState(() => targetPage = val ?? 1),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: region,
+                decoration: const InputDecoration(
+                  labelText: 'Area to Redact',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'top',
+                    child: Text('Top Header Area'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'center',
+                    child: Text('Center Body Box'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'bottom',
+                    child: Text('Bottom Footer Area'),
+                  ),
+                ],
+                onChanged: (val) => setDState(() => region = val ?? 'top'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black87,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(dCtx, true),
+              child: const Text('Confirm Redaction'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isProcessing = true;
+      _statusMessage =
+          'Permanently redacting content and sanitizing metadata...';
+    });
+
+    try {
+      double ry = 40;
+      if (region == 'center') ry = 300;
+      if (region == 'bottom') ry = 650;
+
+      final outName = 'Redacted_${DateTime.now().millisecondsSinceEpoch}';
+      final redacted = await AdvancedPdfService.instance.applyRedaction(
+        sourcePdf: file,
+        redactions: [
+          PdfRedactionArea(
+            pageIndex: targetPage - 1,
+            x: 50,
+            y: ry,
+            width: 500,
+            height: 60,
+            overlayText: '[REDACTED]',
+          ),
+        ],
+        outputFileName: outName,
+        sanitizeMetadata: true,
+      );
+
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = null;
+      });
+
+      if (mounted) {
+        _showSuccessDialog('Content Redacted & Sanitized', redacted);
+      }
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = null;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Redaction failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // 5. INSPECTION & METADATA
   // ---------------------------------------------------------------------------
@@ -1114,6 +1376,22 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
                 title: 'Add Watermark',
                 subtitle: 'Overlay CONFIDENTIAL, DRAFT, COPY, or custom text across pages',
                 onTap: _isProcessing ? null : _watermarkPdf,
+              ),
+              const SizedBox(height: 10),
+              _buildToolCard(
+                icon: Icons.edit_note_outlined,
+                color: Colors.teal,
+                title: 'Sign & Annotate PDF',
+                subtitle: 'Add stamped approvals, verified notes, or text annotations',
+                onTap: _isProcessing ? null : _annotatePdf,
+              ),
+              const SizedBox(height: 10),
+              _buildToolCard(
+                icon: Icons.shield_outlined,
+                color: Colors.black87,
+                title: 'Redact Content Permanently',
+                subtitle: 'Blackout sensitive text/boxes and permanently sanitize document metadata',
+                onTap: _isProcessing ? null : _redactPdf,
               ),
 
               const SizedBox(height: 20),

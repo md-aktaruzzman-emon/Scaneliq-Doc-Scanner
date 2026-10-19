@@ -5,6 +5,8 @@ import 'package:scaneliq/features/documents/presentation/documents_library_scree
 import 'package:scaneliq/features/documents/presentation/home_screen.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
+import 'package:scaneliq/features/security/data/app_lock_service.dart';
+import 'package:scaneliq/features/security/presentation/app_lock_dialog.dart';
 import 'package:scaneliq/features/settings/presentation/settings_screen.dart';
 import 'package:scaneliq/features/settings/presentation/tools_screen.dart';
 
@@ -17,9 +19,45 @@ class MainNavigationShell extends ConsumerStatefulWidget {
       _MainNavigationShellState();
 }
 
-class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
+class _MainNavigationShellState extends ConsumerState<MainNavigationShell>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _isLaunchingScanner = false;
+  bool _isPromptingLock = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLockRequirements();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      AppLockService.instance.onAppPaused();
+    } else if (state == AppLifecycleState.resumed) {
+      _checkLockRequirements();
+    }
+  }
+
+  Future<void> _checkLockRequirements() async {
+    if (_isPromptingLock || !mounted) return;
+    if (AppLockService.instance.shouldRequireUnlockOnResume()) {
+      _isPromptingLock = true;
+      await AppLockDialog.showUnlockBarrier(context);
+      _isPromptingLock = false;
+    }
+  }
 
   final List<Widget> _screens = const [
     HomeScreen(),

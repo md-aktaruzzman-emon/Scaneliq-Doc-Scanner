@@ -1,11 +1,416 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
+import 'package:scaneliq/features/cloud_sync/data/cloud_backup_service.dart';
+import 'package:scaneliq/features/cloud_sync/data/device_sync_service.dart';
 import 'package:scaneliq/features/documents/presentation/trash_screen.dart';
+import 'package:scaneliq/features/security/data/app_lock_service.dart';
+import 'package:scaneliq/features/security/presentation/app_lock_dialog.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final AppLockService _lockService = AppLockService.instance;
+  final CloudBackupService _backupService = CloudBackupService.instance;
+  final DeviceSyncService _syncService = DeviceSyncService.instance;
+
+  bool _isLockEnabled = false;
+  bool _isBiometricsEnabled = false;
+  bool _canUseBiometrics = false;
+  int _timeoutSeconds = 0;
+  bool _isBackingUp = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSecurityState();
+  }
+
+  Future<void> _loadSecurityState() async {
+    await _lockService.init();
+    final canBio = await _lockService.canUseBiometrics();
+    if (mounted) {
+      setState(() {
+        _isLockEnabled = _lockService.isAppLockEnabled;
+        _isBiometricsEnabled = _lockService.isBiometricsEnabled;
+        _timeoutSeconds = _lockService.lockTimeoutSeconds;
+        _canUseBiometrics = canBio;
+      });
+    }
+  }
+
+  Future<void> _toggleAppLock(bool value) async {
+    if (value) {
+      // Prompt to set PIN
+      final success = await AppLockDialog.showSetPin(context);
+      if (success) {
+        _loadSecurityState();
+      }
+    } else {
+      // Prompt to verify current PIN before disabling
+      final verified = await AppLockDialog.showVerifyCurrent(context);
+      if (verified) {
+        await _lockService.disableAppLock();
+        _loadSecurityState();
+      }
+    }
+  }
+
+  Future<void> _toggleBiometrics(bool value) async {
+    await _lockService.setBiometricsEnabled(value);
+    _loadSecurityState();
+  }
+
+  Future<void> _changePin() async {
+    final verified = await AppLockDialog.showVerifyCurrent(context);
+    if (verified && mounted) {
+      await AppLockDialog.showSetPin(context);
+      _loadSecurityState();
+    }
+  }
+
+  Future<void> _selectTimeout() async {
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Auto-Lock Timeout'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 0),
+            child: const Text('Immediately (when app closes)'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 60),
+            child: const Text('After 1 minute'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 300),
+            child: const Text('After 5 minutes'),
+          ),
+        ],
+      ),
+    );
+
+    if (selected != null) {
+      await _lockService.setTimeoutSeconds(selected);
+      _loadSecurityState();
+    }
+  }
+
+  Future<void> _createBackup() async {
+    setState(() => _isBackingUp = true);
+    try {
+      final file = await _backupService.createBackupArchive();
+      setState(() => _isBackingUp = false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Backup archive created: ${file.path.split('/').last.split('\\').last}',
+            ),
+            backgroundColor: AppColors.success,
+          ),
+        );
+
+        SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path)],
+            text: 'Scaneliq Database & Documents Backup',
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isBackingUp = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Backup failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreBackup() async {
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['scaneliq', 'zip'],
+    );
+
+    if (picked.isEmpty || picked.first.path == null) return;
+    final file = File(picked.first.path!);
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restore Backup Archive'),
+        content: const Text(
+          'This will import all documents, folders, tags, and pages from the backup package non-destructively. Existing documents will not be erased.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final result = await _backupService.restoreBackupArchive(file);
+    if (!mounted) return;
+
+    if (result.success) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Restore Completed'),
+          content: Text(
+            'Successfully restored ${result.restoredDocuments} documents and ${result.restoredFolders} folders.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.errorMessage ?? 'Restore failed'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openSyncModal() async {
+    final deviceId = await _syncService.getDeviceId();
+    final deviceName = await _syncService.getDeviceName();
+    final lastSync = await _syncService.getLastSyncTime();
+    final nameCtrl = TextEditingController(text: deviceName);
+    final passCtrl = TextEditingController();
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
+          return Container(
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surface1Dark : Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            padding: EdgeInsets.only(
+              top: 20,
+              left: 20,
+              right: 20,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.sync_lock_rounded,
+                      color: AppColors.brandPrimary,
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Encrypted Multi-Device Sync (E2EE)',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(sheetCtx),
+                    ),
+                  ],
+                ),
+                const Divider(),
+                const SizedBox(height: 8),
+                Text(
+                  'Device ID: ${deviceId.substring(0, 8)}... (UUIDv4)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+                if (lastSync != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Last Synced: ${lastSync.toLocal().toString().split('.').first}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.success,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Device Name',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (val) => _syncService.setDeviceName(val),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'End-to-End Encryption Passphrase',
+                    hintText: 'Must match across your devices',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.upload_rounded),
+                        label: const Text('Export Package'),
+                        onPressed: () async {
+                          if (passCtrl.text.isEmpty) {
+                            ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Enter a passphrase'),
+                              ),
+                            );
+                            return;
+                          }
+                          try {
+                            final env = await _syncService
+                                .createEncryptedEnvelope(
+                                  encryptionPassphrase: passCtrl.text,
+                                );
+                            final jsonStr = jsonEncode(env.toJson());
+                            final tempFile = File(
+                              '${AppStorageService.instance.exportsDir.path}/SyncEnvelope_${DateTime.now().millisecondsSinceEpoch}.json',
+                            );
+                            await tempFile.writeAsString(jsonStr);
+                            if (sheetCtx.mounted) {
+                              SharePlus.instance.share(
+                                ShareParams(
+                                  files: [XFile(tempFile.path)],
+                                  text: 'Scaneliq Encrypted Sync Package',
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (sheetCtx.mounted) {
+                              ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                                SnackBar(content: Text('Export error: $e')),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.download_rounded),
+                        label: const Text('Import Package'),
+                        onPressed: () async {
+                          if (passCtrl.text.isEmpty) {
+                            ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Enter passphrase first'),
+                              ),
+                            );
+                            return;
+                          }
+                          final picked = await FilePicker.pickFiles(
+                            type: FileType.custom,
+                            allowedExtensions: ['json'],
+                          );
+                          if (picked.isEmpty || picked.first.path == null) {
+                            return;
+                          }
+                          try {
+                            final file = File(picked.first.path!);
+                            final content = await file.readAsString();
+                            final envMap =
+                                jsonDecode(content) as Map<String, dynamic>;
+                            final env = EncryptedSyncEnvelope.fromJson(envMap);
+                            final merged = await _syncService
+                                .processIncomingEnvelope(
+                                  envelope: env,
+                                  decryptionPassphrase: passCtrl.text,
+                                );
+                            if (sheetCtx.mounted) {
+                              Navigator.pop(sheetCtx);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Merged $merged documents & folders!',
+                                    ),
+                                    backgroundColor: AppColors.success,
+                                  ),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            if (sheetCtx.mounted) {
+                              ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                                SnackBar(
+                                  content: Text('Import failed: $e'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -222,6 +627,145 @@ class SettingsScreen extends StatelessWidget {
                   color: AppColors.success,
                   size: 20,
                 ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 22),
+
+          // Security & App Lock (F-46)
+          _buildSectionHeader('Security & App Lock', isDark),
+          const SizedBox(height: 10),
+          _buildCardGroup(
+            isDark: isDark,
+            children: [
+              _buildSettingTile(
+                icon: Icons.lock_outline_rounded,
+                iconColor: AppColors.brandPrimary,
+                title: 'App Lock (PIN)',
+                subtitle: _isLockEnabled
+                    ? 'Protected with 4-digit security PIN'
+                    : 'Lock Scaneliq with a PIN code',
+                isDark: isDark,
+                trailing: Switch(
+                  value: _isLockEnabled,
+                  onChanged: _toggleAppLock,
+                ),
+              ),
+              if (_isLockEnabled && _canUseBiometrics) ...[
+                _buildDivider(isDark),
+                _buildSettingTile(
+                  icon: Icons.fingerprint_rounded,
+                  iconColor: const Color(0xFF10B981),
+                  title: 'Biometric Unlock',
+                  subtitle: 'Use fingerprint or facial recognition',
+                  isDark: isDark,
+                  trailing: Switch(
+                    value: _isBiometricsEnabled,
+                    onChanged: _toggleBiometrics,
+                  ),
+                ),
+              ],
+              if (_isLockEnabled) ...[
+                _buildDivider(isDark),
+                _buildSettingTile(
+                  icon: Icons.password_rounded,
+                  iconColor: AppColors.brandPrimary,
+                  title: 'Change PIN',
+                  subtitle: 'Update your 4-digit security code',
+                  isDark: isDark,
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: isDark
+                        ? AppColors.textTertiaryDark
+                        : AppColors.textTertiaryLight,
+                  ),
+                  onTap: _changePin,
+                ),
+                _buildDivider(isDark),
+                _buildSettingTile(
+                  icon: Icons.timer_outlined,
+                  iconColor: AppColors.brandPrimary,
+                  title: 'Auto-Lock Timeout',
+                  subtitle: _timeoutSeconds == 0
+                      ? 'Immediately on exit'
+                      : 'After ${_timeoutSeconds ~/ 60} min',
+                  isDark: isDark,
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: isDark
+                        ? AppColors.textTertiaryDark
+                        : AppColors.textTertiaryLight,
+                  ),
+                  onTap: _selectTimeout,
+                ),
+              ],
+            ],
+          ),
+
+          const SizedBox(height: 22),
+
+          // Cloud Backup & Multi-Device Sync (F-42, F-43)
+          _buildSectionHeader('Cloud Backup & Multi-Device Sync', isDark),
+          const SizedBox(height: 10),
+          _buildCardGroup(
+            isDark: isDark,
+            children: [
+              _buildSettingTile(
+                icon: Icons.cloud_upload_outlined,
+                iconColor: const Color(0xFF0284C7),
+                title: 'Create Backup Archive (.scaneliq)',
+                subtitle: _isBackingUp ? 'Packaging database & documents...' : 'Export complete ZIP backup package with SHA-256 verification',
+                isDark: isDark,
+                trailing: _isBackingUp
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        Icons.chevron_right_rounded,
+                        size: 20,
+                        color: isDark
+                            ? AppColors.textTertiaryDark
+                            : AppColors.textTertiaryLight,
+                      ),
+                onTap: _isBackingUp ? null : _createBackup,
+              ),
+              _buildDivider(isDark),
+              _buildSettingTile(
+                icon: Icons.cloud_download_outlined,
+                iconColor: const Color(0xFF0284C7),
+                title: 'Restore Backup Archive',
+                subtitle:
+                    'Import documents from .scaneliq backup non-destructively',
+                isDark: isDark,
+                trailing: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: isDark
+                      ? AppColors.textTertiaryDark
+                      : AppColors.textTertiaryLight,
+                ),
+                onTap: _restoreBackup,
+              ),
+              _buildDivider(isDark),
+              _buildSettingTile(
+                icon: Icons.sync_lock_rounded,
+                iconColor: const Color(0xFF6366F1),
+                title: 'Encrypted Multi-Device Sync (E2EE)',
+                subtitle: 'Peer-to-peer sync with AES-256 passphrase & LWW conflict resolution',
+                isDark: isDark,
+                trailing: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: isDark
+                      ? AppColors.textTertiaryDark
+                      : AppColors.textTertiaryLight,
+                ),
+                onTap: _openSyncModal,
               ),
             ],
           ),

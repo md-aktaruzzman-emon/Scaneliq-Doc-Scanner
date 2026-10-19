@@ -55,6 +55,10 @@ dependencies:
   mobile_scanner: ^7.4.2
   google_mlkit_barcode_scanning: ^0.16.1
   translator: ^1.0.4+1
+  crypto: ^3.0.6
+  local_auth: ^2.3.0
+  shared_preferences: ^2.5.2
+  archive: ^4.0.2
 
 dev_dependencies:
   flutter_test:
