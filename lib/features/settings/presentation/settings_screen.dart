@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
+import 'package:scaneliq/features/documents/presentation/trash_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -123,6 +124,38 @@ class SettingsScreen extends StatelessWidget {
                     'Exports: ${storage.exportsDir.path}\nOriginals: ${storage.originalsDir.path}',
                     style: const TextStyle(fontSize: 11),
                   ),
+                ),
+                const Divider(height: 1, indent: 56),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.delete_sweep_outlined,
+                      color: AppColors.error,
+                      size: 20,
+                    ),
+                  ),
+                  title: const Text(
+                    'Trash & Recovery',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'View soft-deleted documents with 30-day retention.',
+                  ),
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14,
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TrashScreen()),
+                    );
+                  },
                 ),
               ],
             ),

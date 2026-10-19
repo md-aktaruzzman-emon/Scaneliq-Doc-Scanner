@@ -21,11 +21,43 @@ void main() {
       db = await databaseFactoryFfi.openDatabase(
         inMemoryDatabasePath,
         options: OpenDatabaseOptions(
-          version: 3,
+          version: 4,
           onConfigure: (db) async {
             await db.execute('PRAGMA foreign_keys = ON;');
           },
           onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE folders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                parent_id TEXT,
+                created_at INTEGER NOT NULL,
+                modified_at INTEGER NOT NULL,
+                FOREIGN KEY (parent_id) REFERENCES folders (id) ON DELETE CASCADE
+              )
+            ''');
+
+            await db.execute('''
+              CREATE TABLE tags (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                color INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                modified_at INTEGER NOT NULL
+              )
+            ''');
+
+            await db.execute('''
+              CREATE TABLE document_tags (
+                document_id TEXT NOT NULL,
+                tag_id TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (document_id, tag_id),
+                FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
+              )
+            ''');
+
             await db.execute('''
               CREATE TABLE documents (
                 id TEXT PRIMARY KEY,
@@ -35,7 +67,10 @@ void main() {
                 page_count INTEGER NOT NULL DEFAULT 0,
                 is_favorite INTEGER NOT NULL DEFAULT 0,
                 is_draft INTEGER NOT NULL DEFAULT 0,
-                export_path TEXT
+                export_path TEXT,
+                folder_id TEXT,
+                deleted_at INTEGER,
+                FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE SET NULL
               )
             ''');
 

@@ -343,3 +343,21 @@ final searchedDocumentsProvider =
 final latestDraftProvider = FutureProvider<ScannedDocument?>((ref) async {
   return await AppDatabaseService.instance.getLatestDraft();
 });
+
+/// Provider for loading hierarchical folders
+final foldersListProvider =
+    FutureProvider.family<List<DocumentFolder>, String?>((ref, parentId) async {
+      return await AppDatabaseService.instance.getFolders(parentId: parentId);
+    });
+
+/// Provider for loading all configured tags
+final tagsListProvider = FutureProvider<List<DocumentTag>>((ref) async {
+  return await AppDatabaseService.instance.getTags();
+});
+
+/// Provider for loading all trashed documents
+final trashedDocumentsProvider = FutureProvider<List<ScannedDocument>>((
+  ref,
+) async {
+  return await AppDatabaseService.instance.getAllDocuments(onlyTrashed: true);
+});

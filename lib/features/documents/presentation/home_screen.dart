@@ -108,30 +108,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _deleteDocument(ScannedDocument doc) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Document?'),
-        content: Text('Are you sure you want to delete "${doc.title}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+    await AppDatabaseService.instance.moveToTrash(doc.id);
+    ref.invalidate(documentsListProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Moved "${doc.title}" to Trash.'),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () async {
+              await AppDatabaseService.instance.restoreFromTrash(doc.id);
+              ref.invalidate(documentsListProvider);
+            },
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await AppDatabaseService.instance.deleteDocument(doc.id);
-      ref.invalidate(documentsListProvider);
+        ),
+      );
     }
   }
 

@@ -1,5 +1,124 @@
 import 'dart:convert';
 
+/// Folder model for organizing documents hierarchically
+class DocumentFolder {
+  final String id;
+  final String name;
+  final String? parentId;
+  final DateTime createdAt;
+  final DateTime modifiedAt;
+  final int documentCount;
+
+  const DocumentFolder({
+    required this.id,
+    required this.name,
+    this.parentId,
+    required this.createdAt,
+    required this.modifiedAt,
+    this.documentCount = 0,
+  });
+
+  DocumentFolder copyWith({
+    String? id,
+    String? name,
+    String? parentId,
+    bool clearParentId = false,
+    DateTime? createdAt,
+    DateTime? modifiedAt,
+    int? documentCount,
+  }) {
+    return DocumentFolder(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      parentId: clearParentId ? null : (parentId ?? this.parentId),
+      createdAt: createdAt ?? this.createdAt,
+      modifiedAt: modifiedAt ?? this.modifiedAt,
+      documentCount: documentCount ?? this.documentCount,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'parent_id': parentId,
+      'created_at': createdAt.millisecondsSinceEpoch,
+      'modified_at': modifiedAt.millisecondsSinceEpoch,
+    };
+  }
+
+  factory DocumentFolder.fromMap(
+    Map<String, dynamic> map, {
+    int documentCount = 0,
+  }) {
+    return DocumentFolder(
+      id: map['id'] as String,
+      name: map['name'] as String,
+      parentId: map['parent_id'] as String?,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+      modifiedAt: DateTime.fromMillisecondsSinceEpoch(
+        map['modified_at'] as int,
+      ),
+      documentCount: documentCount,
+    );
+  }
+}
+
+/// Category/tag model for multi-tagging documents
+class DocumentTag {
+  final String id;
+  final String name;
+  final int colorValue;
+  final DateTime createdAt;
+  final DateTime modifiedAt;
+
+  const DocumentTag({
+    required this.id,
+    required this.name,
+    required this.colorValue,
+    required this.createdAt,
+    required this.modifiedAt,
+  });
+
+  DocumentTag copyWith({
+    String? id,
+    String? name,
+    int? colorValue,
+    DateTime? createdAt,
+    DateTime? modifiedAt,
+  }) {
+    return DocumentTag(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      colorValue: colorValue ?? this.colorValue,
+      createdAt: createdAt ?? this.createdAt,
+      modifiedAt: modifiedAt ?? this.modifiedAt,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'color': colorValue,
+      'created_at': createdAt.millisecondsSinceEpoch,
+      'modified_at': modifiedAt.millisecondsSinceEpoch,
+    };
+  }
+
+  factory DocumentTag.fromMap(Map<String, dynamic> map) {
+    return DocumentTag(
+      id: map['id'] as String,
+      name: map['name'] as String,
+      colorValue: map['color'] as int? ?? 0xFF2563EB,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+      modifiedAt: DateTime.fromMillisecondsSinceEpoch(
+        map['modified_at'] as int,
+      ),
+    );
+  }
+}
+
 /// Document representation following blueprint schema
 class ScannedDocument {
   final String id;
@@ -10,7 +129,10 @@ class ScannedDocument {
   final bool isFavorite;
   final bool isDraft;
   final String? exportPath;
+  final String? folderId;
+  final DateTime? deletedAt;
   final List<DocumentPage> pages;
+  final List<DocumentTag> tags;
 
   const ScannedDocument({
     required this.id,
@@ -21,8 +143,13 @@ class ScannedDocument {
     this.isFavorite = false,
     this.isDraft = false,
     this.exportPath,
+    this.folderId,
+    this.deletedAt,
     this.pages = const [],
+    this.tags = const [],
   });
+
+  bool get isTrashed => deletedAt != null;
 
   ScannedDocument copyWith({
     String? id,
@@ -33,7 +160,12 @@ class ScannedDocument {
     bool? isFavorite,
     bool? isDraft,
     String? exportPath,
+    String? folderId,
+    bool clearFolderId = false,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
     List<DocumentPage>? pages,
+    List<DocumentTag>? tags,
   }) {
     return ScannedDocument(
       id: id ?? this.id,
@@ -44,7 +176,10 @@ class ScannedDocument {
       isFavorite: isFavorite ?? this.isFavorite,
       isDraft: isDraft ?? this.isDraft,
       exportPath: exportPath ?? this.exportPath,
+      folderId: clearFolderId ? null : (folderId ?? this.folderId),
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
       pages: pages ?? this.pages,
+      tags: tags ?? this.tags,
     );
   }
 
@@ -58,12 +193,15 @@ class ScannedDocument {
       'is_favorite': isFavorite ? 1 : 0,
       'is_draft': isDraft ? 1 : 0,
       'export_path': exportPath,
+      'folder_id': folderId,
+      'deleted_at': deletedAt?.millisecondsSinceEpoch,
     };
   }
 
   factory ScannedDocument.fromMap(
     Map<String, dynamic> map, {
     List<DocumentPage> pages = const [],
+    List<DocumentTag> tags = const [],
   }) {
     return ScannedDocument(
       id: map['id'] as String,
@@ -76,7 +214,12 @@ class ScannedDocument {
       isFavorite: (map['is_favorite'] as int? ?? 0) == 1,
       isDraft: (map['is_draft'] as int? ?? 0) == 1,
       exportPath: map['export_path'] as String?,
+      folderId: map['folder_id'] as String?,
+      deletedAt: map['deleted_at'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['deleted_at'] as int)
+          : null,
       pages: pages,
+      tags: tags,
     );
   }
 }
