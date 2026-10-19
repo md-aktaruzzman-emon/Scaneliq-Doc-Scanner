@@ -30,7 +30,7 @@
 | **F-13** | **Clean Black & White Document Filter**<br>Adaptive binarization eliminating paper shadows while keeping text crisp | All 6 Reference Apps | B | P0 | Phase 3 | **TESTED** | Pure Dart `image`<br>`app_storage_service.dart` |
 | **F-14** | **Grayscale & Color Enhancement Presets**<br>Smooth 256-level grayscale and vibrant "Magic Color" contrast enhancement | All 6 Reference Apps | B | P0 | Phase 3 | **TESTED** | `app_storage_service.dart`<br>`edit_page_screen.dart` |
 | **F-15** | **Brightness & Contrast Slider Adjustment**<br>Fine-tune luminance (-0.5 to +0.5) and dynamic range (0.5x to 2.0x) | Genius Scan, SwiftScan, CamScanner | B | P0 | Phase 3 | **TESTED** | `edit_recipe_test.dart`<br>`edit_page_screen.dart` |
-| **F-16** | **Finger & Stray Shadow Eraser**<br>Touch brush tool to paint over and remove fingers or hole punches | Google Drive, Adobe Scan, CamScanner | B | P2 | Phase 3 | **PLANNED** | Inpainting filter / Custom painter |
+| **F-16** | **Finger & Stray Shadow Eraser**<br>Touch brush tool to paint over and remove fingers or hole punches | Google Drive, Adobe Scan, CamScanner | B | P2 | Phase 3 | **TESTED** | `ImageProcessingService.applyCleanupPatches`<br>`test/image_processing_test.dart` |
 | **F-17** | **Multi-Page A4 PDF Generation**<br>Standardized A4 compilation with JPEG compression and `%PDF-` validation | All 6 Reference Apps | C | P0 | Phase 5 | **TESTED** | `pdf` (Dart)<br>`pdf_service.dart` |
 | **F-18** | **High-Definition (HD) Quality Presets**<br>Compact (150 DPI), Standard (200 DPI), High (300 DPI) export choices | Genius Scan, SwiftScan, CamScanner | C | P0 | Phase 5 | **TESTED** | `pdf_service.dart`<br>`review_pages_screen.dart` |
 | **F-19** | **Unwatermarked Free PDF & JPEG Export**<br>Clean exports with zero forced promotional watermarks or branding | Genius Scan, Google Drive, Adobe Scan | C | P0 | Phase 5 | **TESTED** | Core Brand Commitment<br>`pdf_service.dart` |
@@ -68,8 +68,8 @@
 ## Traceability Summary Metrics
 
 - **Total Categorized Features:** 47
-- **Currently TESTED & Passing:** 24 features (51.1%)
+- **Currently TESTED & Passing:** 25 features (53.2%)
 - **Currently IMPLEMENTED (Hardware verification pending):** 5 features (10.6%)
-- **Total Operational Coverage:** 29 features (61.7%)
-- **PLANNED for Scheduled Phases:** 18 features (38.3%)
+- **Total Operational Coverage:** 30 features (63.8%)
+- **PLANNED for Scheduled Phases:** 17 features (36.2%)
 - **NOT PLANNED (Anti-patterns rejected):** Mandatory account walls, free-tier watermarks, full-screen ads, covert cloud uploads, unconsented telemetry.

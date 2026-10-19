@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/features/ocr/data/ocr_service.dart';
@@ -323,70 +324,8 @@ class PdfService {
     return await tempFile.rename(targetPath);
   }
 
-  /// Helper to apply EditRecipe modifications (crop, rotation, filter, brightness, contrast)
+  /// Helper to apply EditRecipe modifications using the unified ImageProcessingService
   static img.Image applyEditRecipe(img.Image image, EditRecipe recipe) {
-    img.Image workingImage = image;
-
-    // 1. Non-destructive crop if customized
-    if (recipe.hasCrop) {
-      final x = (recipe.cropLeft * workingImage.width).round().clamp(
-        0,
-        workingImage.width - 1,
-      );
-      final y = (recipe.cropTop * workingImage.height).round().clamp(
-        0,
-        workingImage.height - 1,
-      );
-      final w = ((recipe.cropRight - recipe.cropLeft) * workingImage.width)
-          .round()
-          .clamp(10, workingImage.width - x);
-      final h = ((recipe.cropBottom - recipe.cropTop) * workingImage.height)
-          .round()
-          .clamp(10, workingImage.height - y);
-      workingImage = img.copyCrop(
-        workingImage,
-        x: x,
-        y: y,
-        width: w,
-        height: h,
-      );
-    }
-
-    if (recipe.rotationDegrees != 0) {
-      workingImage = img.copyRotate(
-        workingImage,
-        angle: recipe.rotationDegrees,
-      );
-    }
-    if (recipe.filter == PageFilter.grayscale) {
-      workingImage = img.grayscale(workingImage);
-    } else if (recipe.filter == PageFilter.blackAndWhite) {
-      workingImage = img.grayscale(workingImage);
-      workingImage = img.contrast(workingImage, contrast: 150);
-    } else if (recipe.filter == PageFilter.whiteboard) {
-      // Whitens background while keeping colored markers/writing vivid
-      workingImage = img.adjustColor(
-        workingImage,
-        brightness: 1.15,
-        contrast: 1.35,
-        saturation: 1.2,
-      );
-    } else if (recipe.filter == PageFilter.enhancedText) {
-      // High-contrast readable document filter
-      workingImage = img.grayscale(workingImage);
-      workingImage = img.adjustColor(
-        workingImage,
-        brightness: 1.1,
-        contrast: 1.4,
-      );
-    }
-    if (recipe.contrast != 1.0 || recipe.brightness != 0.0) {
-      workingImage = img.adjustColor(
-        workingImage,
-        brightness: 1.0 + recipe.brightness,
-        contrast: recipe.contrast,
-      );
-    }
-    return workingImage;
+    return ImageProcessingService.applyEditRecipe(image, recipe);
   }
 }

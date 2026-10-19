@@ -727,7 +727,13 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Filter: ${page.editRecipe.filter.name.toUpperCase()}${page.editRecipe.rotationDegrees != 0 ? ' · ${page.editRecipe.rotationDegrees}°' : ''}${page.editRecipe.hasCrop ? ' · Cropped' : ''}',
+                                      'Filter: ${page.editRecipe.filter.name.toUpperCase()}'
+                                      '${page.editRecipe.rotationDegrees != 0 ? ' · ${page.editRecipe.rotationDegrees}°' : ''}'
+                                      '${page.editRecipe.hasCrop ? ' · Cropped' : ''}'
+                                      '${page.editRecipe.hasPerspective ? ' · Warped' : ''}'
+                                      '${page.editRecipe.binarization != BinarizationMode.none ? ' · ${page.editRecipe.binarization.name.toUpperCase()}' : ''}'
+                                      '${page.editRecipe.shadowCorrection ? ' · Shadows' : ''}'
+                                      '${page.editRecipe.hasCleanup ? ' · Cleaned' : ''}',
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: isDark
