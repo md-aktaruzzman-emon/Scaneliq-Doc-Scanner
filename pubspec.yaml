@@ -59,6 +59,8 @@ dependencies:
   local_auth: ^2.3.0
   shared_preferences: ^2.5.2
   archive: ^4.0.2
+  encrypt: ^5.0.3
+  pointycastle: ^3.9.1
 
 dev_dependencies:
   flutter_test:

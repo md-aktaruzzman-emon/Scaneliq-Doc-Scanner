@@ -330,6 +330,31 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
 
   /// Removes a page from the active session
   Future<void> removePage(String pageId) async {
+    // Evict and clean up processed cache file for this page if it exists
+    final targetPath =
+        '${AppStorageService.instance.processedDir.path}/${pageId}_proc.jpg';
+    final procFile = File(targetPath);
+    if (await procFile.exists()) {
+      try {
+        PaintingBinding.instance.imageCache.evict(FileImage(procFile));
+        await procFile.delete();
+      } catch (_) {}
+    }
+
+    final pageIndex = state.pages.indexWhere((p) => p.id == pageId);
+    if (pageIndex != -1) {
+      final page = state.pages[pageIndex];
+      if (page.processedPath != null && page.processedPath != targetPath) {
+        final customProc = File(page.processedPath!);
+        if (await customProc.exists()) {
+          try {
+            PaintingBinding.instance.imageCache.evict(FileImage(customProc));
+            await customProc.delete();
+          } catch (_) {}
+        }
+      }
+    }
+
     final remaining = state.pages.where((p) => p.id != pageId).toList();
     final reindexed = [
       for (int i = 0; i < remaining.length; i++)

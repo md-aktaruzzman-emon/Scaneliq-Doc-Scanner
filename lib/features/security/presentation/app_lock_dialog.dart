@@ -21,6 +21,7 @@ class AppLockDialog extends StatefulWidget {
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (ctx) => const PopScope(
         canPop: false,
         child: AppLockDialog(mode: AppLockMode.unlock, dismissible: false),

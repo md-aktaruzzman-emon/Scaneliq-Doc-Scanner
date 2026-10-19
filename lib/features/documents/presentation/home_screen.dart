@@ -9,6 +9,7 @@ import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
+import 'package:scaneliq/features/documents/presentation/documents_library_screen.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/count_cam_screen.dart';
@@ -162,7 +163,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       'Scan documents. Keep everything organized.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+
+                    // Search Pill (Elevated at top for immediate discoverability)
+                    TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search documents by name...',
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchController.clear();
+                                    _searchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (val) {
+                        setState(() {
+                          _searchQuery = val.trim().toLowerCase();
+                        });
+                      },
+                    ),
+
+                    const SizedBox(height: 14),
 
                     // Primary scan & import actions
                     Row(
@@ -179,7 +211,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.brandPrimary,
                               foregroundColor: Colors.white,
-                              minimumSize: const Size(0, 50),
+                              minimumSize: const Size(0, 48),
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -204,7 +236,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               foregroundColor: isDark
                                   ? AppColors.textPrimaryDark
                                   : AppColors.textPrimaryLight,
-                              minimumSize: const Size(0, 50),
+                              minimumSize: const Size(0, 48),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -309,7 +341,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           orElse: () => const SizedBox.shrink(),
                         ),
 
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
 
                     // Smart Scanning Modes Header
                     Row(
@@ -465,38 +497,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 18),
-
-                    // Search Pill
-                    TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search documents by name...',
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  setState(() {
-                                    _searchController.clear();
-                                    _searchQuery = '';
-                                  });
-                                },
-                              )
-                            : null,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      onChanged: (val) {
-                        setState(() {
-                          _searchQuery = val.trim().toLowerCase();
-                        });
-                      },
-                    ),
-
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
 
                     // Recent Documents Section Header
                     Row(
@@ -509,21 +510,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        IconButton(
-                          icon: Icon(
-                            _isGridView
-                                ? Icons.view_agenda_outlined
-                                : Icons.grid_view_outlined,
-                            size: 20,
-                          ),
-                          tooltip: _isGridView
-                              ? 'Switch to List'
-                              : 'Switch to Grid',
-                          onPressed: () {
-                            setState(() {
-                              _isGridView = !_isGridView;
-                            });
-                          },
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const DocumentsLibraryScreen(),
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'See all',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: Icon(
+                                _isGridView
+                                    ? Icons.view_agenda_outlined
+                                    : Icons.grid_view_outlined,
+                                size: 20,
+                              ),
+                              tooltip: _isGridView
+                                  ? 'Switch to List'
+                                  : 'Switch to Grid',
+                              onPressed: () {
+                                setState(() {
+                                  _isGridView = !_isGridView;
+                                });
+                              },
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -684,53 +717,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      margin: const EdgeInsets.only(right: 10),
+      margin: const EdgeInsets.only(right: 8),
       child: Material(
-        color: isDark ? AppColors.surface1Dark : AppColors.surface0Light,
+        color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
           child: Container(
-            width: 86,
-            height: 94,
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                width: 1,
               ),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: isDark
                         ? AppColors.surface2Dark
                         : AppColors.brandLight,
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     icon,
                     color: isDark
-                        ? AppColors.brandLight
+                        ? AppColors.brandAccent
                         : AppColors.brandPrimary,
-                    size: 20,
+                    size: 18,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(width: 8),
                 Text(
                   label,
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    height: 1.15,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
+                  maxLines: 1,
                 ),
               ],
             ),

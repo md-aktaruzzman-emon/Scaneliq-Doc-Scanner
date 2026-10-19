@@ -457,10 +457,12 @@ class _ToolsScreenState extends State<ToolsScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surface1Dark : AppColors.surface0Light,
+        color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+          color: isDark
+              ? AppColors.borderSubtleDark
+              : AppColors.borderSubtleLight,
         ),
       ),
       child: Column(children: children),

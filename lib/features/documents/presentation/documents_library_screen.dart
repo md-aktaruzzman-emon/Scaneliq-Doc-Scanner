@@ -438,9 +438,9 @@ class _DocumentsLibraryScreenState
                       for (final tag in allTags)
                         FilterChip(
                           selected: selectedTagIds.contains(tag.id),
-                          avatar: CircleAvatar(
-                            backgroundColor: Color(tag.colorValue),
-                            radius: 6,
+                          avatar: const Icon(
+                            Icons.local_offer_outlined,
+                            size: 14,
                           ),
                           label: Text(tag.name),
                           onSelected: (selected) {
@@ -969,6 +969,69 @@ class _DocumentsLibraryScreenState
             ),
           ),
 
+          // 2b. Category Filter Pills (All, Favorites, PDFs)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                FilterChip(
+                  selected: _selectedCategory == FileCategoryFilter.all,
+                  label: const Text('All Documents'),
+                  onSelected: (val) {
+                    if (val) {
+                      setState(
+                        () => _selectedCategory = FileCategoryFilter.all,
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  selected: _selectedCategory == FileCategoryFilter.favorites,
+                  avatar: Icon(
+                    Icons.star_rounded,
+                    size: 16,
+                    color: _selectedCategory == FileCategoryFilter.favorites
+                        ? AppColors.warning
+                        : (isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight),
+                  ),
+                  label: const Text('Favorites'),
+                  onSelected: (val) {
+                    setState(() {
+                      _selectedCategory = val
+                          ? FileCategoryFilter.favorites
+                          : FileCategoryFilter.all;
+                    });
+                  },
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                  selected: _selectedCategory == FileCategoryFilter.pdfs,
+                  avatar: Icon(
+                    Icons.picture_as_pdf_outlined,
+                    size: 15,
+                    color: _selectedCategory == FileCategoryFilter.pdfs
+                        ? AppColors.brandPrimary
+                        : (isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight),
+                  ),
+                  label: const Text('PDFs Only'),
+                  onSelected: (val) {
+                    setState(() {
+                      _selectedCategory = val
+                          ? FileCategoryFilter.pdfs
+                          : FileCategoryFilter.all;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+
           // 3. Subfolders row (if subfolders exist)
           foldersAsync.maybeWhen(
             data: (folders) {
@@ -1023,7 +1086,7 @@ class _DocumentsLibraryScreenState
                         padding: const EdgeInsets.only(right: 8),
                         child: FilterChip(
                           selected: isAllSelected,
-                          label: const Text('All'),
+                          label: const Text('All Tags'),
                           onSelected: (_) {
                             setState(() => _selectedTagIds.clear());
                           },
@@ -1036,9 +1099,16 @@ class _DocumentsLibraryScreenState
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
                         selected: isSelected,
-                        avatar: CircleAvatar(
-                          backgroundColor: Color(t.colorValue),
-                          radius: 5,
+                        avatar: Icon(
+                          Icons.local_offer_outlined,
+                          size: 14,
+                          color: isSelected
+                              ? (isDark
+                                    ? AppColors.brandAccent
+                                    : AppColors.brandPrimary)
+                              : (isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight),
                         ),
                         label: Text(t.name),
                         onSelected: (val) {

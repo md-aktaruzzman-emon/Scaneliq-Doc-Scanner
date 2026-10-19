@@ -20,21 +20,29 @@ class AppStorageService {
     await tempDir.create(recursive: true);
 
     // Stale temp file cleanup (>24 hours) for storage hygiene
+    await cleanStaleTempFiles();
+  }
+
+  /// Cleans up temporary files older than maxAge (default: 24 hours)
+  Future<int> cleanStaleTempFiles({
+    Duration maxAge = const Duration(hours: 24),
+  }) async {
+    int count = 0;
     try {
       if (tempDir.existsSync()) {
         final now = DateTime.now();
         for (final entity in tempDir.listSync()) {
           if (entity is File) {
             final stat = entity.statSync();
-            if (now.difference(stat.modified).inHours >= 24) {
+            if (now.difference(stat.modified) >= maxAge) {
               entity.deleteSync();
+              count++;
             }
           }
         }
       }
-    } catch (_) {
-      // Non-critical startup cleanup
-    }
+    } catch (_) {}
+    return count;
   }
 
   Directory get originalsDir => Directory(
@@ -127,8 +135,11 @@ class AppStorageService {
 
   /// Creates a safe unique path for a PDF export
   String getExportPdfPath(String baseName) {
-    final sanitized = baseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    return p.join(exportsDir.path, '$sanitized.pdf');
+    final trimmed = baseName.trim();
+    final sanitized = trimmed.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+    final clean = sanitized.replaceAll('_', '').trim();
+    final effectiveName = clean.isEmpty ? 'Scaneliq_Doc' : sanitized;
+    return p.join(exportsDir.path, '$effectiveName.pdf');
   }
 
   /// Safely deletes the export file and associated page images for a document

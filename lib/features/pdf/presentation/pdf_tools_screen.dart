@@ -963,7 +963,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
             children: [
               Icon(Icons.shield_outlined, color: Colors.black87),
               SizedBox(width: 8),
-              Text('Permanent Redaction'),
+              Text('Visual Masking & Metadata'),
             ],
           ),
           content: Column(
@@ -971,8 +971,9 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Redaction permanently zeroes out the selected area and sanitizes metadata. '
-                'The underlying content cannot be recovered.',
+                'Notice: Applies an opaque blackout overlay and strips document metadata.\n\n'
+                'Security Warning: For digital vector PDFs, underlying text streams remain in the file structure beneath the overlay and can still be extracted by text tools. '
+                'For guaranteed permanent text destruction, use image-based scanned documents where raw pixels are physically zeroed out.',
                 style: TextStyle(fontSize: 12, color: Colors.black87),
               ),
               const SizedBox(height: 12),
@@ -995,7 +996,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
               DropdownButtonFormField<String>(
                 initialValue: region,
                 decoration: const InputDecoration(
-                  labelText: 'Area to Redact',
+                  labelText: 'Area to Mask',
                   border: OutlineInputBorder(),
                 ),
                 items: const [
@@ -1027,7 +1028,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
                 foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.pop(dCtx, true),
-              child: const Text('Confirm Redaction'),
+              child: const Text('Apply Visual Mask'),
             ),
           ],
         ),
@@ -1038,8 +1039,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
 
     setState(() {
       _isProcessing = true;
-      _statusMessage =
-          'Permanently redacting content and sanitizing metadata...';
+      _statusMessage = 'Applying visual mask and sanitizing metadata...';
     });
 
     try {
@@ -1047,7 +1047,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       if (region == 'center') ry = 300;
       if (region == 'bottom') ry = 650;
 
-      final outName = 'Redacted_${DateTime.now().millisecondsSinceEpoch}';
+      final outName = 'Masked_${DateTime.now().millisecondsSinceEpoch}';
       final redacted = await AdvancedPdfService.instance.applyRedaction(
         sourcePdf: file,
         redactions: [
@@ -1070,7 +1070,10 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       });
 
       if (mounted) {
-        _showSuccessDialog('Content Redacted & Sanitized', redacted);
+        _showSuccessDialog(
+          'Visual Mask Applied & Metadata Sanitized',
+          redacted,
+        );
       }
     } catch (e) {
       setState(() {
@@ -1389,8 +1392,8 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
               _buildToolCard(
                 icon: Icons.shield_outlined,
                 color: Colors.black87,
-                title: 'Redact Content Permanently',
-                subtitle: 'Blackout sensitive text/boxes and permanently sanitize document metadata',
+                title: 'Visual Masking & Metadata Sanitizer',
+                subtitle: 'Blackout sensitive areas and sanitize metadata (Note: visual overlay on vector PDFs)',
                 onTap: _isProcessing ? null : _redactPdf,
               ),
 

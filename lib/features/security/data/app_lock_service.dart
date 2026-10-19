@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:pointycastle/export.dart' as pc;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PinVerificationResult {
@@ -21,7 +22,8 @@ class PinVerificationResult {
   });
 }
 
-/// Service providing Biometric & salted PIN app lock security (F-46).
+/// Service providing Biometric & standard RFC 2898 PBKDF2-HMAC-SHA256 (100,000 iterations)
+/// salted PIN app lock security with constant-time verification, lockout protection, and fail-safe operation (F-46).
 class AppLockService {
   AppLockService._();
   static final AppLockService instance = AppLockService._();
@@ -107,27 +109,87 @@ class AppLockService {
   }
 
   // ---------------------------------------------------------------------------
-  // PIN Operations (Salted SHA-256)
+  // PIN Operations (Standard RFC 2898 PBKDF2-HMAC-SHA256, 100k Iterations)
   // ---------------------------------------------------------------------------
 
-  String _hashPin(String pin, String salt) {
+  static const int pinHashIterationsV3 = 100000;
+  static const int pinHashIterationsV2 = 10000;
+
+  /// Standard RFC 2898 PBKDF2-HMAC-SHA256 derivation with 100,000 iterations
+  String _hashPinV3(
+    String pin,
+    Uint8List saltBytes, {
+    int iterations = pinHashIterationsV3,
+  }) {
+    final pbkdf2 = pc.KeyDerivator('SHA-256/HMAC/PBKDF2');
+    final params = pc.Pbkdf2Parameters(saltBytes, iterations, 32);
+    pbkdf2.init(params);
+    final key = pbkdf2.process(utf8.encode('scaneliq_pin::$pin'));
+    return base64Url.encode(key);
+  }
+
+  /// Phase 4 V2 iterative HMAC loop (for transparent backward compatibility migration)
+  String _hashPinV2(
+    String pin,
+    String salt, {
+    int iterations = pinHashIterationsV2,
+  }) {
+    List<int> key = utf8.encode('$salt::$pin::scaneliq_security_salt');
+    final saltBytes = utf8.encode(salt);
+    for (int i = 0; i < iterations; i++) {
+      final hmac = Hmac(sha256, key);
+      key = hmac.convert([...key, ...saltBytes, i & 0xFF]).bytes;
+    }
+    return base64Url.encode(key);
+  }
+
+  /// Legacy single-round SHA-256 fallback (for seamless V1 backward compatibility)
+  String _legacyHashPin(String pin, String salt) {
     final bytes = utf8.encode('$salt::$pin::scaneliq_security_salt');
     return sha256.convert(bytes).toString();
   }
 
+  /// Constant-time string equality check to mitigate timing side-channel attacks
+  static bool _constantTimeEquals(String a, String b) {
+    final aBytes = utf8.encode(a);
+    final bBytes = utf8.encode(b);
+    if (aBytes.length != bBytes.length) return false;
+    int diff = 0;
+    for (int i = 0; i < aBytes.length; i++) {
+      diff |= aBytes[i] ^ bBytes[i];
+    }
+    return diff == 0;
+  }
+
   String _generateSalt() {
     final rnd = Random.secure();
-    final bytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+    final bytes = Uint8List.fromList(
+      List<int>.generate(16, (_) => rnd.nextInt(256)),
+    );
     return base64Url.encode(bytes);
   }
 
+  Uint8List _decodeSalt(String saltStr) {
+    try {
+      return base64Url.decode(saltStr);
+    } catch (_) {
+      return Uint8List.fromList(utf8.encode(saltStr));
+    }
+  }
+
   Future<void> setPin(String newPin) async {
+    final cleanPin = newPin.trim();
+    if (cleanPin.isEmpty || !RegExp(r'^\d{4,8}$').hasMatch(cleanPin)) {
+      throw ArgumentError('PIN must be between 4 and 8 numeric digits');
+    }
+
     final p = await prefs;
     final salt = _generateSalt();
-    final hash = _hashPin(newPin, salt);
+    final saltBytes = _decodeSalt(salt);
+    final hash = _hashPinV3(cleanPin, saltBytes);
 
     await p.setString(_prefPinSalt, salt);
-    await p.setString(_prefPinHash, hash);
+    await p.setString(_prefPinHash, 'v3:$pinHashIterationsV3:$hash');
     await p.setBool(_prefLockEnabled, true);
     await p.setInt(_prefFailedAttempts, 0);
     await p.remove(_prefLockoutUntilEpoch);
@@ -169,33 +231,74 @@ class AppLockService {
   Future<PinVerificationResult> verifyPin(String inputPin) async {
     final p = await prefs;
 
-    // Check existing lockout
+    // Check existing lockout before running key derivation (DoS mitigation)
     final cooldown = getRemainingCooldownSeconds();
     if (cooldown > 0) {
       return PinVerificationResult(
         success: false,
         isLockedOut: true,
         remainingCooldownSeconds: cooldown,
+        remainingAttempts: 0,
       );
     }
 
     final storedHash = p.getString(_prefPinHash);
     final salt = p.getString(_prefPinSalt);
 
-    if (storedHash == null || salt == null) {
-      // No PIN set
+    // Fail-safe handling for corrupted or unconfigured authentication state
+    if (isAppLockEnabled &&
+        (storedHash == null ||
+            salt == null ||
+            storedHash.isEmpty ||
+            salt.isEmpty)) {
+      _isSessionUnlocked = false;
+      return const PinVerificationResult(success: false, remainingAttempts: 0);
+    }
+
+    if (!isAppLockEnabled && (storedHash == null || salt == null)) {
       _isSessionUnlocked = true;
       return const PinVerificationResult(success: true);
     }
 
-    final computedHash = _hashPin(inputPin, salt);
-    if (computedHash == storedHash) {
-      // Success! Reset attempts
+    final saltBytes = _decodeSalt(salt!);
+    bool isMatch = false;
+
+    if (storedHash!.startsWith('v3:')) {
+      final parts = storedHash.split(':');
+      if (parts.length == 3) {
+        final iters = int.tryParse(parts[1]) ?? pinHashIterationsV3;
+        final expectedHash = parts[2];
+        final computed = _hashPinV3(inputPin, saltBytes, iterations: iters);
+        isMatch = _constantTimeEquals(computed, expectedHash);
+      }
+    } else {
+      // V2 Phase 4 format check
+      final v2Hash = _hashPinV2(inputPin, salt);
+      if (_constantTimeEquals(v2Hash, storedHash)) {
+        isMatch = true;
+        // Transparently upgrade to hardened V3 PBKDF2
+        final newV3Hash = _hashPinV3(inputPin, saltBytes);
+        await p.setString(_prefPinHash, 'v3:$pinHashIterationsV3:$newV3Hash');
+      } else {
+        // V1 single-round SHA-256 legacy check
+        final v1Hash = _legacyHashPin(inputPin, salt);
+        if (_constantTimeEquals(v1Hash, storedHash)) {
+          isMatch = true;
+          // Transparently upgrade to hardened V3 PBKDF2
+          final newV3Hash = _hashPinV3(inputPin, saltBytes);
+          await p.setString(_prefPinHash, 'v3:$pinHashIterationsV3:$newV3Hash');
+        }
+      }
+    }
+
+    if (isMatch) {
+      // Success! Reset failed attempts
       await p.setInt(_prefFailedAttempts, 0);
       await p.remove(_prefLockoutUntilEpoch);
       _isSessionUnlocked = true;
       return const PinVerificationResult(success: true);
     } else {
+      _isSessionUnlocked = false;
       // Failed attempt
       int failed = (p.getInt(_prefFailedAttempts) ?? 0) + 1;
       if (failed >= maxFailedAttempts) {
@@ -209,7 +312,7 @@ class AppLockService {
         await p.setInt(
           _prefFailedAttempts,
           0,
-        ); // reset after triggering lockout
+        ); // reset counter after triggering lockout
         return const PinVerificationResult(
           success: false,
           isLockedOut: true,

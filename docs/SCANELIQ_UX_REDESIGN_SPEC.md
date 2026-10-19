@@ -318,33 +318,84 @@ Scaneliq utilizes a **Streamlined Bottom Navigation Bar** combined with a promin
 
 ### 3.8 Screen 8: Unified Tools Hub
 
-**Purpose:** Dedicated utility workspace for processing loose files without cluttering the Home feed.
+**Purpose:** Dedicated utility workspace organizing non-library tools into 4 logical task categories.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ Tools Hub                                                   │
+│ Tools                                                       │
 ├─────────────────────────────────────────────────────────────┤
-│ PDF TOOLS                                                   │
+│ 1. PDF PRODUCTIVITY TOOLS                                   │
 │ ┌─────────────────────────────────────────────────────────┐ │
 │ │ [ 📄 Merge PDFs ]       Combine multiple files into one │ │
 │ │ [ ✂ Split PDF ]         Extract pages or cut into files │ │
+│ │ [ 📑 Organize Pages ]   Reorder, rotate & duplicate pgs │ │
+│ │ [ 🗜 Compress PDF ]     Reduce file size (Low/Med/High) │ │
 │ │ [ 🔒 Encrypt PDF ]      Add AES-256 password security   │ │
-│ │ [ 💧 Watermark Studio ] Stamp confidential watermarks   │ │
+│ │ [ 💧 Watermark Studio ] Stamp confidential text marks   │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                             │
-│ SPECIALIZED CAPTURE MODES                                   │
+│ 2. IMAGE & SCAN ENHANCEMENT                                 │
 │ ┌─────────────────────────────────────────────────────────┐ │
-│ │ [ 🪪 ID 2-in-1 Sheet ]   Front & Back stitched on A4    │ │
-│ │ [ 🔲 QR / Barcode ]     Decode codes & export history   │ │
+│ │ [ 🪪 ID Card 2-in-1 ]   Front & Back stitched on A4     │ │
+│ │ [ 📚 Book Scanning ]    Two-page split & curve flat     │ │
+│ │ [ 📋 Batch Capture ]    Continuous rapid multi-page     │ │
+│ │ [ 📝 Exam / Q&A Mode ]  Contrast handwriting enhancement│ │
+│ │ [ 🖼 Whiteboard Clean ] Glare & reflection removal      │ │
+│ └─────────────────────────────────────────────────────────┘ │
+│                                                             │
+│ 3. TEXT & OCR INTELLIGENCE                                  │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ [ 🔤 Instant Image OCR] Extract plain text from image   │ │
+│ │ [ 🪪 Business Card ]    Extract contact fields          │ │
+│ │ [ 🧾 Receipt Extractor] Parse total, tax & merchant     │ │
+│ │ [ ✨ AI Summary Sheet ] Document key takeaway analysis  │ │
+│ └─────────────────────────────────────────────────────────┘ │
+│                                                             │
+│ 4. UTILITIES & SCANNING                                     │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ [ 🔲 QR & Barcode ]     Scan codes & view history       │ │
 │ │ [ 🔢 CountCam ]         Count physical items via camera │ │
-│ │ [ 🌐 Document Translate] Translate OCR text into Bengali │ │
+│ │ [ 🌐 Document Translate] Translate text into Bengali    │ │
 │ └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 3.9 Screen 9: Me & Workspace Settings Screen
+
+**Purpose:** Clean personal application settings and local storage workspace. Local-first architecture with zero fake accounts.
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ Settings                                                    │
+├─────────────────────────────────────────────────────────────┤
+│ 1. APPEARANCE                                               │
+│ [ 🌓 Theme ]               System Default / Light / Dark    │
 │                                                             │
-│ OCR & CONVERSION                                            │
-│ ┌─────────────────────────────────────────────────────────┐ │
-│ │ [ 🔤 Instant OCR ]      Extract plain text from photo   │ │
-│ │ [ 📄 Searchable PDF ]   Inject text layer into image    │ │
-│ └─────────────────────────────────────────────────────────┘ │
+│ 2. SCAN PREFERENCES                                         │
+│ [ 📷 Default Scan Mode ]   Document (Standard)              │
+│ [ 📐 Auto Edge Detection ] Enabled                          │
+│ [ 🔍 High-Resolution Scan] 200+ DPI enabled                 │
+│                                                             │
+│ 3. PDF & EXPORT PREFERENCES                                 │
+│ [ 📄 Default Export Format] PDF (Multi-page)                │
+│ [ 🏷 Naming Template ]     [Date]_[Title]                   │
+│ [ 🗜 Default Compression ] Balanced (Standard)             │
+│                                                             │
+│ 4. STORAGE & TRASH                                          │
+│ [ 💾 Documents Storage ]   Calculated on-device storage MB  │
+│ [ 🧹 Clear Temp Cache ]    Clean temporary scan cache       │
+│ [ 🗑 Trash / Recycle Bin ] View and restore deleted scans   │
+│                                                             │
+│ 5. PRIVACY & SECURITY                                       │
+│ [ 🔒 Biometric & PIN Lock] Require fingerprint/PIN to open │
+│ [ ⏱ Auto-Lock Timeout ]   Immediately on app minimize       │
+│ [ 📦 Backup & Restore ]    Export/Import local backup archive│
+│ [ 🛡 Local-First Safety ]  100% on-device, zero cloud leak  │
+│                                                             │
+│ 6. BRANDING & ABOUT                                         │
+│ [ ℹ Scaneliq v1.0.0 ]      Licenses, privacy policy & build │
 └─────────────────────────────────────────────────────────────┘
 ```
 

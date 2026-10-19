@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
@@ -117,9 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Backup archive created: ${file.path.split('/').last.split('\\').last}',
-            ),
+            content: Text('Backup archive created: ${p.basename(file.path)}'),
             backgroundColor: AppColors.success,
           ),
         );
@@ -435,10 +434,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.surface1Dark : AppColors.surface0Light,
+              color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                color: isDark
+                    ? AppColors.borderSubtleDark
+                    : AppColors.borderSubtleLight,
               ),
             ),
             child: Row(
@@ -883,10 +884,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surface1Dark : AppColors.surface0Light,
+        color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+          color: isDark
+              ? AppColors.borderSubtleDark
+              : AppColors.borderSubtleLight,
         ),
       ),
       child: Column(children: children),

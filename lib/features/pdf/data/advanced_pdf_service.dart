@@ -1318,7 +1318,13 @@ class AdvancedPdfService {
     }
   }
 
-  /// Permanently redacts targeted areas by drawing opaque black blocks and sanitizing metadata.
+  /// Applies visual blackout mask rectangles over specified regions and sanitizes document metadata.
+  ///
+  /// IMPORTANT SECURITY NOTE:
+  /// On digital vector PDFs with searchable text streams, drawing rectangles on page graphics masks
+  /// content visually, but underlying text operators may remain in the PDF stream.
+  /// For absolute data destruction on sensitive scanned pages, use [ImageProcessingService.permanentlyRedactImage]
+  /// which irreversibly zeroes out raw bitmap pixels before PDF compilation.
   Future<File> applyRedaction({
     required File sourcePdf,
     required List<PdfRedactionArea> redactions,

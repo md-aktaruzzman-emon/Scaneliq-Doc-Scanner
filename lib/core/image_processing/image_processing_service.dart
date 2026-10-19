@@ -721,4 +721,69 @@ class ImageProcessingService {
 
     return [leftFile, rightFile];
   }
+
+  // ===========================================================================
+  // 8. GENUINE PERMANENT IMAGE REDACTION (PIXEL DESTRUCTION)
+  // ===========================================================================
+
+  /// Irreversibly zeroes out pixels within the specified normalized rectangular region [x, y, w, h].
+  /// Overwrites underlying pixels with solid black (RGB 0, 0, 0), permanently destroying
+  /// the underlying image content at the byte level.
+  static img.Image permanentlyRedactImage({
+    required img.Image src,
+    required double normX,
+    required double normY,
+    required double normW,
+    required double normH,
+    img.Color? fillColor,
+  }) {
+    final dst = img.Image.from(src);
+    final int w = dst.width;
+    final int h = dst.height;
+
+    final int x0 = (normX * w).round().clamp(0, w - 1);
+    final int y0 = (normY * h).round().clamp(0, h - 1);
+    final int rw = (normW * w).round().clamp(1, w - x0);
+    final int rh = (normH * h).round().clamp(1, h - y0);
+
+    final black = fillColor ?? img.ColorRgb8(0, 0, 0);
+
+    for (int y = y0; y < y0 + rh; y++) {
+      for (int x = x0; x < x0 + rw; x++) {
+        dst.setPixel(x, y, black);
+      }
+    }
+    return dst;
+  }
+
+  /// Permanently redacts an image file on disk, writing the redacted bitmap to a target file.
+  static Future<File> permanentlyRedactImageFile({
+    required File sourceImage,
+    required File targetImage,
+    required double normX,
+    required double normY,
+    required double normW,
+    required double normH,
+    int quality = 90,
+  }) async {
+    final bytes = await sourceImage.readAsBytes();
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) {
+      throw Exception(
+        'Failed to decode image file for redaction: ${sourceImage.path}',
+      );
+    }
+
+    final redacted = permanentlyRedactImage(
+      src: decoded,
+      normX: normX,
+      normY: normY,
+      normW: normW,
+      normH: normH,
+    );
+
+    final encoded = img.encodeJpg(redacted, quality: quality);
+    await targetImage.writeAsBytes(encoded, flush: true);
+    return targetImage;
+  }
 }
