@@ -102,8 +102,7 @@ class SettingsScreen extends StatelessWidget {
                 icon: Icons.security_rounded,
                 iconColor: AppColors.success,
                 title: 'Local-First Document Safety',
-                subtitle:
-                    'Scans stay in app-private storage. No automatic uploads or tracking.',
+                subtitle: 'Scans stay in app-private storage. No automatic uploads or tracking.',
                 isDark: isDark,
               ),
               _buildDivider(isDark),
@@ -184,8 +183,7 @@ class SettingsScreen extends StatelessWidget {
                     ? AppColors.textSecondaryDark
                     : AppColors.textSecondaryLight,
                 title: 'Trash & Recovery',
-                subtitle:
-                    'View soft-deleted documents with 30-day retention.',
+                subtitle: 'View soft-deleted documents with 30-day retention.',
                 isDark: isDark,
                 trailing: Icon(
                   Icons.chevron_right_rounded,
@@ -197,9 +195,7 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const TrashScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const TrashScreen()),
                   );
                 },
               ),
@@ -219,8 +215,7 @@ class SettingsScreen extends StatelessWidget {
                 icon: Icons.translate_rounded,
                 iconColor: const Color(0xFF4F46E5),
                 title: 'English & Latin Scripts (Active)',
-                subtitle:
-                    'On-device ML Kit text recognition with offline Bangla support architecture.',
+                subtitle: 'On-device ML Kit text recognition with offline Bangla support architecture.',
                 isDark: isDark,
                 trailing: const Icon(
                   Icons.check_circle_rounded,
@@ -286,10 +281,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   child: const Text(
                     'A4',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -409,10 +401,7 @@ class SettingsScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              if (trailing != null) ...[
-                const SizedBox(width: 8),
-                trailing,
-              ],
+              if (trailing != null) ...[const SizedBox(width: 8), trailing],
             ],
           ),
         ),

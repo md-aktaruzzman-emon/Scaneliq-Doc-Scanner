@@ -1126,11 +1126,9 @@ class _DocumentsLibraryScreenState
                             _searchQuery.isNotEmpty
                                 ? 'No matching documents'
                                 : (_currentFolder != null
-                                    ? 'Folder is empty'
-                                    : 'No documents yet'),
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
+                                      ? 'Folder is empty'
+                                      : 'No documents yet'),
+                            style: Theme.of(context).textTheme.titleLarge
                                 ?.copyWith(fontWeight: FontWeight.bold),
                             textAlign: TextAlign.center,
                           ),
@@ -1139,9 +1137,7 @@ class _DocumentsLibraryScreenState
                             _searchQuery.isNotEmpty
                                 ? 'Try clearing your search query or removing filters.'
                                 : 'Scan receipts, contracts, IDs, or import files from your device.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: isDark
                                       ? AppColors.textSecondaryDark
@@ -1382,10 +1378,7 @@ class _DocumentsLibraryScreenState
                   child: (thumbPath != null && File(thumbPath).existsSync())
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            File(thumbPath),
-                            fit: BoxFit.cover,
-                          ),
+                          child: Image.file(File(thumbPath), fit: BoxFit.cover),
                         )
                       : const Center(
                           child: Icon(
@@ -1434,14 +1427,12 @@ class _DocumentsLibraryScreenState
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Color(tag.colorValue).withValues(
-                                    alpha: 0.12,
-                                  ),
+                                  color: Color(tag.colorValue)
+                                      .withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
-                                    color: Color(tag.colorValue).withValues(
-                                      alpha: 0.35,
-                                    ),
+                                    color: Color(tag.colorValue)
+                                        .withValues(alpha: 0.35),
                                     width: 1,
                                   ),
                                 ),
@@ -1484,8 +1475,7 @@ class _DocumentsLibraryScreenState
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) =>
-                                DocumentViewerScreen(document: doc),
+                            builder: (_) => DocumentViewerScreen(document: doc),
                           ),
                         );
                       } else if (val == 'share') {
@@ -1505,10 +1495,7 @@ class _DocumentsLibraryScreenState
                         value: 'view',
                         child: Text('View Document'),
                       ),
-                      PopupMenuItem(
-                        value: 'share',
-                        child: Text('Share PDF'),
-                      ),
+                      PopupMenuItem(value: 'share', child: Text('Share PDF')),
                       PopupMenuItem(
                         value: 'rename',
                         child: Text('Rename (Smart Name)'),
@@ -1517,17 +1504,12 @@ class _DocumentsLibraryScreenState
                         value: 'move',
                         child: Text('Move to Folder'),
                       ),
-                      PopupMenuItem(
-                        value: 'tag',
-                        child: Text('Assign Tags'),
-                      ),
+                      PopupMenuItem(value: 'tag', child: Text('Assign Tags')),
                       PopupMenuItem(
                         value: 'trash',
                         child: Text(
                           'Move to Trash',
-                          style: TextStyle(
-                            color: AppColors.error,
-                          ),
+                          style: TextStyle(color: AppColors.error),
                         ),
                       ),
                     ],
@@ -1602,21 +1584,21 @@ class _DocumentsLibraryScreenState
                         ),
                         child:
                             (thumbPath != null && File(thumbPath).existsSync())
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.file(
-                                      File(thumbPath),
-                                      fit: BoxFit.cover,
-                                      width: double.infinity,
-                                    ),
-                                  )
-                                : const Center(
-                                    child: Icon(
-                                      Icons.picture_as_pdf_rounded,
-                                      color: AppColors.brandPrimary,
-                                      size: 32,
-                                    ),
-                                  ),
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  File(thumbPath),
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                ),
+                              )
+                            : const Center(
+                                child: Icon(
+                                  Icons.picture_as_pdf_rounded,
+                                  color: AppColors.brandPrimary,
+                                  size: 32,
+                                ),
+                              ),
                       ),
                       if (_isSelectionMode)
                         Positioned(

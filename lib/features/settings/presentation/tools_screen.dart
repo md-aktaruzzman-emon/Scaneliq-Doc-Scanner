@@ -124,8 +124,7 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 _buildToolTile(
                   icon: Icons.document_scanner_rounded,
                   title: 'Instant Image OCR',
-                  subtitle:
-                      'Extract selectable text from any image file on your phone',
+                  subtitle: 'Extract selectable text from any image file on your phone',
                   isDark: isDark,
                   trailing: _isProcessingOcr
                       ? const SizedBox(
@@ -140,14 +139,13 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 _buildToolTile(
                   icon: Icons.qr_code_scanner_rounded,
                   title: 'QR & Barcode Scanner',
-                  subtitle: 'Instant code detection, URL open, and clipboard copy',
+                  subtitle:
+                      'Instant code detection, URL open, and clipboard copy',
                   isDark: isDark,
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const ScanCodeScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const ScanCodeScreen()),
                     );
                   },
                 ),
@@ -155,7 +153,8 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 _buildToolTile(
                   icon: Icons.translate_rounded,
                   title: 'Translate Lens',
-                  subtitle: 'Optical camera translation overlay across languages',
+                  subtitle:
+                      'Optical camera translation overlay across languages',
                   isDark: isDark,
                   onTap: () {
                     Navigator.push(
@@ -175,9 +174,7 @@ class _ToolsScreenState extends State<ToolsScreen> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const CountCamScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const CountCamScreen()),
                     );
                   },
                 ),
@@ -199,15 +196,12 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 _buildToolTile(
                   icon: Icons.picture_as_pdf_rounded,
                   title: 'PDF Productivity Tools',
-                  subtitle:
-                      'Merge multiple PDFs, split pages, encrypt with password & watermark',
+                  subtitle: 'Merge multiple PDFs, split pages, encrypt with password & watermark',
                   isDark: isDark,
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const PdfToolsScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const PdfToolsScreen()),
                     );
                   },
                 ),
@@ -215,8 +209,7 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 _buildToolTile(
                   icon: Icons.share_outlined,
                   title: 'Share & Export',
-                  subtitle:
-                      'Send scanned documents via email, messaging, or system drive',
+                  subtitle: 'Send scanned documents via email, messaging, or system drive',
                   isDark: isDark,
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -247,15 +240,15 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 _buildToolTile(
                   icon: Icons.burst_mode_rounded,
                   title: 'Batch Scanning',
-                  subtitle: 'Continuous rapid multi-page capture with live counter',
+                  subtitle:
+                      'Continuous rapid multi-page capture with live counter',
                   isDark: isDark,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const ContinuousCameraScreen(
-                          mode: ScanMode.batch,
-                        ),
+                        builder: (_) =>
+                            const ContinuousCameraScreen(mode: ScanMode.batch),
                       ),
                     );
                   },
@@ -264,15 +257,15 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 _buildToolTile(
                   icon: Icons.badge_outlined,
                   title: 'ID Card 2-in-1',
-                  subtitle: 'Scan front and back sides onto a single formatted page',
+                  subtitle:
+                      'Scan front and back sides onto a single formatted page',
                   isDark: isDark,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const ContinuousCameraScreen(
-                          mode: ScanMode.idCard,
-                        ),
+                        builder: (_) =>
+                            const ContinuousCameraScreen(mode: ScanMode.idCard),
                       ),
                     );
                   },
@@ -281,7 +274,8 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 _buildToolTile(
                   icon: Icons.quiz_outlined,
                   title: 'Q&A / Exam Mode',
-                  subtitle: 'Structured capture for question sets and worksheets',
+                  subtitle:
+                      'Structured capture for question sets and worksheets',
                   isDark: isDark,
                   onTap: () {
                     Navigator.push(
@@ -298,15 +292,15 @@ class _ToolsScreenState extends State<ToolsScreen> {
                 _buildToolTile(
                   icon: Icons.menu_book_outlined,
                   title: 'Book Mode',
-                  subtitle: 'Scan open book spreads with curve flattening guidance',
+                  subtitle:
+                      'Scan open book spreads with curve flattening guidance',
                   isDark: isDark,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const ContinuousCameraScreen(
-                          mode: ScanMode.book,
-                        ),
+                        builder: (_) =>
+                            const ContinuousCameraScreen(mode: ScanMode.book),
                       ),
                     );
                   },

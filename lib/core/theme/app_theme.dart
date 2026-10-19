@@ -17,7 +17,9 @@ class AppColors {
   static const Color appBackgroundLight = surface0Light;
   static const Color surface1Light = Color(0xFFFFFFFF); // Cards & Sheets
   static const Color surfaceLight = surface1Light;
-  static const Color surface2Light = Color(0xFFF1F5F9); // Inputs, Pills & Secondary
+  static const Color surface2Light = Color(
+    0xFFF1F5F9,
+  ); // Inputs, Pills & Secondary
   static const Color surface3Light = Color(0xFFE4E7EC); // Dividers & Borders
 
   // Light Theme Typography
@@ -30,10 +32,16 @@ class AppColors {
   // Layered Dark Theme Surfaces
   static const Color surface0Dark = Color(0xFF090D16); // Deep Midnight Canvas
   static const Color appBackgroundDark = surface0Dark;
-  static const Color surface1Dark = Color(0xFF131B2E); // Navy Slate Cards & Sheets
+  static const Color surface1Dark = Color(
+    0xFF131B2E,
+  ); // Navy Slate Cards & Sheets
   static const Color surfaceDark = surface1Dark;
-  static const Color surface2Dark = Color(0xFF1E293B); // Slate 800 Inputs & Pills
-  static const Color surface3Dark = Color(0xFF293548); // Slate 700 Borders & Dividers
+  static const Color surface2Dark = Color(
+    0xFF1E293B,
+  ); // Slate 800 Inputs & Pills
+  static const Color surface3Dark = Color(
+    0xFF293548,
+  ); // Slate 700 Borders & Dividers
 
   // Dark Theme Typography
   static const Color textPrimaryDark = Color(0xFFF8FAFC); // Slate 50
@@ -45,7 +53,9 @@ class AppColors {
   // Semantic Status Tokens (Accessible & Strict)
   static const Color success = Color(0xFF16803C); // Green check ONLY
   static const Color warning = Color(0xFFB54708); // Amber alert
-  static const Color error = Color(0xFFB42318); // Destructive / Irreversible action ONLY
+  static const Color error = Color(
+    0xFFB42318,
+  ); // Destructive / Irreversible action ONLY
   static const Color focus = Color(0xFF0EA5E9); // Focus Sky Blue
 
   // Strict 4-Color Categorical Palette (Tags & Folders ONLY - Never for Status)
@@ -257,7 +267,10 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.brandPrimary,
           minimumSize: const Size(double.infinity, 50),
-          side: const BorderSide(color: AppColors.borderSubtleLight, width: 1.5),
+          side: const BorderSide(
+            color: AppColors.borderSubtleLight,
+            width: 1.5,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),

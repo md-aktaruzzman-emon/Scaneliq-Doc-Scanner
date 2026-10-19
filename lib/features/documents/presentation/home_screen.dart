@@ -578,9 +578,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               _searchQuery.isEmpty
                                   ? 'No scans yet'
                                   : 'No matching documents',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 8),
@@ -588,7 +587,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               _searchQuery.isEmpty
                                   ? 'Digitize receipts, notes, IDs, and multi-page documents in seconds.'
                                   : 'Try adjusting your search terms to find what you are looking for.',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
                                     color: isDark
                                         ? AppColors.textSecondaryDark
                                         : AppColors.textSecondaryLight,
@@ -714,7 +714,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   child: Icon(
                     icon,
-                    color: isDark ? AppColors.brandLight : AppColors.brandPrimary,
+                    color: isDark
+                        ? AppColors.brandLight
+                        : AppColors.brandPrimary,
                     size: 20,
                   ),
                 ),
