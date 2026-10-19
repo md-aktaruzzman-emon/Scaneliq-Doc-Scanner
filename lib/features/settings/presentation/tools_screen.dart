@@ -107,379 +107,393 @@ class _ToolsScreenState extends State<ToolsScreen> {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Productivity & OCR Tools Section
+            // 1. Productivity & OCR Tools Section
             _buildSectionHeader(
               'Productivity & OCR Tools',
-              'Utilities for text extraction, sharing, and PDF manipulation',
+              'Extract text, recognize codes, and translate documents',
               isDark,
             ),
             const SizedBox(height: 10),
-
-            // Instant Image OCR
-            Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(14),
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandPrimary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.document_scanner_rounded,
-                    color: AppColors.brandPrimary,
-                  ),
+            _buildCardGroup(
+              isDark: isDark,
+              children: [
+                _buildToolTile(
+                  icon: Icons.document_scanner_rounded,
+                  title: 'Instant Image OCR',
+                  subtitle:
+                      'Extract selectable text from any image file on your phone',
+                  isDark: isDark,
+                  trailing: _isProcessingOcr
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
+                  onTap: _isProcessingOcr ? null : _runDirectOcrOnPickedFile,
                 ),
-                title: const Text(
-                  'Instant Image OCR',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: const Text(
-                  'Extract selectable text from any image file on your phone',
-                ),
-                trailing: _isProcessingOcr
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                onTap: _isProcessingOcr ? null : _runDirectOcrOnPickedFile,
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            // PDF Productivity Tools
-            Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(14),
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.picture_as_pdf_rounded,
-                    color: Color(0xFF2563EB),
-                  ),
-                ),
-                title: const Text(
-                  'PDF Productivity Tools',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: const Text(
-                  'Merge multiple PDFs, split pages, encrypt with password & watermark',
-                ),
-                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const PdfToolsScreen()),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            // Share & Export
-            Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(14),
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.share_rounded,
-                    color: AppColors.success,
-                  ),
-                ),
-                title: const Text(
-                  'Share & Export',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: const Text(
-                  'Send scanned documents via email, messaging, or system drive',
-                ),
-                trailing: const Icon(
-                  Icons.check_circle_outline_rounded,
-                  color: AppColors.success,
-                ),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Sharing is integrated inside every document card and viewer.',
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.qr_code_scanner_rounded,
+                  title: 'QR & Barcode Scanner',
+                  subtitle: 'Instant code detection, URL open, and clipboard copy',
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ScanCodeScreen(),
                       ),
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.translate_rounded,
+                  title: 'Translate Lens',
+                  subtitle: 'Optical camera translation overlay across languages',
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TranslateScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.calculate_outlined,
+                  title: 'CountCam',
+                  subtitle: 'AI object detection and inventory item counting',
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CountCamScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
 
             const SizedBox(height: 22),
 
-            // Specialized Capture Modes Section
+            // 2. PDF Productivity Section
+            _buildSectionHeader(
+              'PDF Productivity Suite',
+              'Merge, split, organize pages, watermark, and encrypt PDFs',
+              isDark,
+            ),
+            const SizedBox(height: 10),
+            _buildCardGroup(
+              isDark: isDark,
+              children: [
+                _buildToolTile(
+                  icon: Icons.picture_as_pdf_rounded,
+                  title: 'PDF Productivity Tools',
+                  subtitle:
+                      'Merge multiple PDFs, split pages, encrypt with password & watermark',
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PdfToolsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.share_outlined,
+                  title: 'Share & Export',
+                  subtitle:
+                      'Send scanned documents via email, messaging, or system drive',
+                  isDark: isDark,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Sharing is integrated inside every document card and viewer.',
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 22),
+
+            // 3. Specialized Capture Modes Section
             _buildSectionHeader(
               'Specialized Capture Modes',
-              'Direct access to advanced camera workflows',
+              'Direct access to camera capture workflows',
               isDark,
             ),
             const SizedBox(height: 10),
-
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(
-                      Icons.burst_mode,
-                      color: Color(0xFF2563EB),
-                    ),
-                    title: const Text('Batch Scanning'),
-                    subtitle: const Text(
-                      'Continuous rapid capture with live counter',
-                    ),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ContinuousCameraScreen(
-                            mode: ScanMode.batch,
-                          ),
+            _buildCardGroup(
+              isDark: isDark,
+              children: [
+                _buildToolTile(
+                  icon: Icons.burst_mode_rounded,
+                  title: 'Batch Scanning',
+                  subtitle: 'Continuous rapid multi-page capture with live counter',
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ContinuousCameraScreen(
+                          mode: ScanMode.batch,
                         ),
-                      );
-                    },
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(Icons.badge, color: Color(0xFF4F46E5)),
-                    title: const Text('ID Card 2-in-1'),
-                    subtitle: const Text(
-                      'Scan front and back on a single page',
-                    ),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ContinuousCameraScreen(
-                            mode: ScanMode.idCard,
-                          ),
+                      ),
+                    );
+                  },
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.badge_outlined,
+                  title: 'ID Card 2-in-1',
+                  subtitle: 'Scan front and back sides onto a single formatted page',
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ContinuousCameraScreen(
+                          mode: ScanMode.idCard,
                         ),
-                      );
-                    },
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.menu_book,
-                      color: Color(0xFF0D9488),
-                    ),
-                    title: const Text('Book Mode'),
-                    subtitle: const Text(
-                      'Scan open books with curve flatten guidance',
-                    ),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const ContinuousCameraScreen(mode: ScanMode.book),
+                      ),
+                    );
+                  },
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.quiz_outlined,
+                  title: 'Q&A / Exam Mode',
+                  subtitle: 'Structured capture for question sets and worksheets',
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ContinuousCameraScreen(
+                          mode: ScanMode.questionSet,
                         ),
-                      );
-                    },
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.qr_code_scanner,
-                      color: Color(0xFF059669),
-                    ),
-                    title: const Text('QR & Barcode Scanner'),
-                    subtitle: const Text('Instant code detection and copy'),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ScanCodeScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.menu_book_outlined,
+                  title: 'Book Mode',
+                  subtitle: 'Scan open book spreads with curve flattening guidance',
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ContinuousCameraScreen(
+                          mode: ScanMode.book,
                         ),
-                      );
-                    },
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.calculate,
-                      color: Color(0xFFD97706),
-                    ),
-                    title: const Text('CountCam'),
-                    subtitle: const Text(
-                      'AI object detection and inventory counting',
-                    ),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CountCamScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.co_present_outlined,
+                  title: 'Whiteboard',
+                  subtitle: 'Capture meeting boards with glare elimination',
+                  isDark: isDark,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ContinuousCameraScreen(
+                          mode: ScanMode.whiteboard,
                         ),
-                      );
-                    },
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.translate,
-                      color: Color(0xFFE11D48),
-                    ),
-                    title: const Text('Translate Lens'),
-                    subtitle: const Text('Live optical translation overlay'),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const TranslateScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
 
             const SizedBox(height: 22),
 
-            // Upcoming Platform Integrations Section
+            // 4. Upcoming Platform Integrations Section
             _buildSectionHeader(
               'Upcoming Platform Integrations',
               'Features scheduled in the Scaneliq Master Blueprint roadmap',
               isDark,
             ),
             const SizedBox(height: 10),
-
-            Card(
-              color: isDark ? AppColors.surface2Dark : AppColors.surface1Light,
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(
-                      Icons.cloud_sync_outlined,
-                      color: Colors.grey,
-                    ),
-                    title: const Text(
-                      'Cloud Backup & Multi-device Sync',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    subtitle: const Text(
-                      'Phase 8 — Privacy-preserving optional cloud sync',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'Planned',
-                        style: TextStyle(color: Colors.grey, fontSize: 11),
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.draw_outlined,
-                      color: Colors.grey,
-                    ),
-                    title: const Text(
-                      'E-Signature & Document Annotations',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    subtitle: const Text(
-                      'Phase 4 — Freehand signature & stamp overlay',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'Planned',
-                        style: TextStyle(color: Colors.grey, fontSize: 11),
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1, indent: 56),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.table_chart_outlined,
-                      color: Colors.grey,
-                    ),
-                    title: const Text(
-                      'Table & Expense Extraction to Excel',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    subtitle: const Text(
-                      'Phase 10 — Receipt ledger & CSV export',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'Planned',
-                        style: TextStyle(color: Colors.grey, fontSize: 11),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            _buildCardGroup(
+              isDark: isDark,
+              children: [
+                _buildToolTile(
+                  icon: Icons.cloud_sync_outlined,
+                  title: 'Cloud Backup & Multi-device Sync',
+                  subtitle: 'Zero-knowledge encrypted cloud backup and cross-device sync',
+                  isDark: isDark,
+                  trailing: _buildComingSoonBadge(isDark),
+                  onTap: null,
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.draw_outlined,
+                  title: 'E-Signature & Annotations',
+                  subtitle: 'Freehand signatures, stamp overlays, and page annotations',
+                  isDark: isDark,
+                  trailing: _buildComingSoonBadge(isDark),
+                  onTap: null,
+                ),
+                _buildDivider(isDark),
+                _buildToolTile(
+                  icon: Icons.table_chart_outlined,
+                  title: 'Table & Expense Extraction',
+                  subtitle: 'Receipt ledger parsing and CSV spreadsheet export',
+                  isDark: isDark,
+                  trailing: _buildComingSoonBadge(isDark),
+                  onTap: null,
+                ),
+              ],
             ),
+
+            const SizedBox(height: 16),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardGroup({
+    required List<Widget> children,
+    required bool isDark,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surface1Dark : AppColors.surface0Light,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+        ),
+      ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _buildToolTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback? onTap,
+    Widget? trailing,
+    required bool isDark,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.surface2Dark : AppColors.brandLight,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: isDark ? AppColors.brandLight : AppColors.brandPrimary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (trailing != null)
+                trailing
+              else
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: isDark
+                      ? AppColors.textTertiaryDark
+                      : AppColors.textTertiaryLight,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider(bool isDark) {
+    return Divider(
+      height: 1,
+      indent: 70,
+      endIndent: 14,
+      color: isDark
+          ? AppColors.borderDark.withValues(alpha: 0.5)
+          : AppColors.borderLight.withValues(alpha: 0.7),
+    );
+  }
+
+  Widget _buildComingSoonBadge(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surface2Dark : AppColors.surface2Light,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        'Coming soon',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: isDark
+              ? AppColors.textSecondaryDark
+              : AppColors.textSecondaryLight,
         ),
       ),
     );
