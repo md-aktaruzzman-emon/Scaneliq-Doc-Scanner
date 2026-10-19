@@ -92,18 +92,18 @@ class _EditPageScreenState extends State<EditPageScreen> {
     super.dispose();
   }
 
-  EditRecipe _buildCurrentRecipe() {
+  EditRecipe _buildCurrentRecipe({bool forCropTab = false}) {
     return widget.page.editRecipe.copyWith(
       rotationDegrees: _rotation,
       filter: _filter,
       contrast: _contrast,
       brightness: _brightness,
-      cropLeft: _cropLeft,
-      cropTop: _cropTop,
-      cropRight: _cropRight,
-      cropBottom: _cropBottom,
-      perspectiveQuad: _usePerspectiveWarp ? _quad : null,
-      clearPerspectiveQuad: !_usePerspectiveWarp,
+      cropLeft: forCropTab ? 0.0 : _cropLeft,
+      cropTop: forCropTab ? 0.0 : _cropTop,
+      cropRight: forCropTab ? 1.0 : _cropRight,
+      cropBottom: forCropTab ? 1.0 : _cropBottom,
+      perspectiveQuad: forCropTab || !_usePerspectiveWarp ? null : _quad,
+      clearPerspectiveQuad: forCropTab || !_usePerspectiveWarp,
       binarization: _binarization,
       shadowCorrection: _shadowCorrection,
       cleanupPatches: _cleanupPatches,
@@ -113,22 +113,24 @@ class _EditPageScreenState extends State<EditPageScreen> {
 
   void _schedulePreviewUpdate() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 180), () async {
-      final imagePath = widget.page.processedPath ?? widget.page.originalPath;
+    _debounceTimer = Timer(const Duration(milliseconds: 100), () async {
+      // Always derive from original uncompressed image to prevent generation loss
+      final imagePath = widget.page.originalPath;
       final file = File(imagePath);
       if (!file.existsSync() || !mounted) return;
 
-      // Only run heavy full-pipeline preview when advanced filters are active
-      final hasAdvancedFilters =
-          _binarization != BinarizationMode.none ||
-          _shadowCorrection ||
-          _cleanupPatches.isNotEmpty ||
-          _usePerspectiveWarp ||
-          _filter == PageFilter.whiteboard ||
-          _filter == PageFilter.colorBoost;
+      final currentRecipe = _buildCurrentRecipe(
+        forCropTab: _currentTab == EditTab.crop,
+      );
 
-      if (!hasAdvancedFilters) {
-        if (mounted) setState(() => _previewBytes = null);
+      // If entirely default and not in crop tab, use fast base renderer
+      if (currentRecipe.isDefault && _currentTab != EditTab.crop) {
+        if (mounted) {
+          setState(() {
+            _previewBytes = null;
+            _isProcessingPreview = false;
+          });
+        }
         return;
       }
 
@@ -137,9 +139,12 @@ class _EditPageScreenState extends State<EditPageScreen> {
       try {
         final bytes = await file.readAsBytes();
         final decoded = img.decodeImage(bytes);
-        if (decoded == null || !mounted) return;
+        if (decoded == null || !mounted) {
+          if (mounted) setState(() => _isProcessingPreview = false);
+          return;
+        }
 
-        // Downsample for responsive preview performance
+        // Downsample for responsive preview performance (~600px)
         img.Image previewSource = decoded;
         const maxPreviewDim = 600;
         if (previewSource.width > maxPreviewDim ||
@@ -156,10 +161,10 @@ class _EditPageScreenState extends State<EditPageScreen> {
 
         final processed = ImageProcessingService.applyEditRecipe(
           previewSource,
-          _buildCurrentRecipe(),
+          currentRecipe,
         );
         final encoded = Uint8List.fromList(
-          img.encodeJpg(processed, quality: 80),
+          img.encodeJpg(processed, quality: 85),
         );
 
         if (mounted) {
@@ -217,7 +222,7 @@ class _EditPageScreenState extends State<EditPageScreen> {
   }
 
   void _applyAndClose() {
-    widget.onApply(_buildCurrentRecipe());
+    widget.onApply(_buildCurrentRecipe(forCropTab: false));
     Navigator.pop(context);
   }
 
@@ -721,7 +726,11 @@ class _EditPageScreenState extends State<EditPageScreen> {
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
       onSelected: (_) {
+        final wasCrop = _currentTab == EditTab.crop;
         setState(() => _currentTab = tab);
+        if (wasCrop || tab == EditTab.crop) {
+          _schedulePreviewUpdate();
+        }
       },
     );
   }
@@ -735,7 +744,12 @@ class _EditPageScreenState extends State<EditPageScreen> {
         avatar: Icon(icon, size: 16),
         label: Text(label),
         onSelected: (_) {
-          setState(() => _filter = filter);
+          setState(() {
+            _filter = filter;
+            if (filter == PageFilter.original) {
+              _binarization = BinarizationMode.none;
+            }
+          });
           _schedulePreviewUpdate();
         },
       ),

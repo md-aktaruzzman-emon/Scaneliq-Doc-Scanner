@@ -8,6 +8,7 @@ import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/features/ocr/data/ocr_service.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 
 /// Container for background isolate image processing input
 class _PageProcessingInput {
@@ -194,6 +195,18 @@ class PdfService {
         final scaledW = (box.width / out.width) * renderedW;
         final scaledH = (box.height / out.height) * renderedH;
 
+        // Sanitize invisible search text for standard Helvetica (Latin-1) font
+        // Normalizes Indic/Bengali digits to 0-9 and maps non-Latin chars safely
+        final sanitizedText = box.text.runes.map((r) {
+          if (r <= 255) return String.fromCharCode(r);
+          if (r >= 0x09E6 && r <= 0x09EF) {
+            return String.fromCharCode(48 + (r - 0x09E6));
+          }
+          return ' ';
+        }).join();
+
+        if (sanitizedText.trim().isEmpty) continue;
+
         textOverlays.add(
           pw.Positioned(
             left: scaledX.clamp(0.0, pageWidth),
@@ -204,7 +217,7 @@ class PdfService {
               child: pw.Opacity(
                 opacity: 0.0,
                 child: pw.Text(
-                  box.text,
+                  sanitizedText,
                   softWrap: false,
                   style: pw.TextStyle(
                     fontSize: (scaledH * 0.75).clamp(4.0, 48.0),
@@ -248,8 +261,16 @@ class PdfService {
     final pdfBytes = await pdf.save();
 
     // Verify non-empty before committing
-    if (pdfBytes.isEmpty) {
+    if (pdfBytes.isEmpty || pdfBytes.length < 50) {
       throw Exception('PDF generation resulted in empty output.');
+    }
+
+    // Independent validation using Syncfusion parser to guarantee PDF integrity
+    try {
+      final sfDoc = sf.PdfDocument(inputBytes: pdfBytes);
+      sfDoc.dispose();
+    } catch (e) {
+      throw Exception('Generated PDF validation failed: $e');
     }
 
     await tempFile.writeAsBytes(pdfBytes, flush: true);

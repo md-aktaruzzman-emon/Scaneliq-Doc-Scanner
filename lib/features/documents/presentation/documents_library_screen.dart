@@ -12,6 +12,7 @@ import 'package:scaneliq/features/documents/data/batch_merge_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/documents/presentation/trash_screen.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
+import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 
 enum DocumentSortOption { newest, oldest, nameAsc, nameDesc }
@@ -697,11 +698,41 @@ class _DocumentsLibraryScreenState
   }
 
   Future<void> _shareDocument(ScannedDocument doc) async {
-    final hasExport =
-        doc.exportPath != null && File(doc.exportPath!).existsSync();
-    if (hasExport) {
+    String? path = doc.exportPath;
+    if (path == null || !File(path).existsSync()) {
+      final fullDoc = await AppDatabaseService.instance.getDocument(doc.id);
+      if (fullDoc != null && fullDoc.pages.isNotEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Preparing PDF for sharing...')),
+          );
+        }
+        try {
+          final generated = await PdfService.generatePdf(
+            document: fullDoc,
+            pages: fullDoc.pages,
+            customTitle: fullDoc.title,
+          );
+          path = generated.path;
+          final updated = fullDoc.copyWith(exportPath: path, isDraft: false);
+          await AppDatabaseService.instance.saveDocument(updated);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to generate PDF: $e')),
+            );
+          }
+          return;
+        }
+      }
+    }
+
+    if (path != null && File(path).existsSync()) {
       SharePlus.instance.share(
-        ShareParams(text: doc.title, files: [XFile(doc.exportPath!)]),
+        ShareParams(
+          text: doc.title,
+          files: [XFile(path, mimeType: 'application/pdf')],
+        ),
       );
     } else {
       if (mounted) {
@@ -1471,7 +1502,7 @@ class _DocumentsLibraryScreenState
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert),
                     onSelected: (val) {
-                      if (val == 'view') {
+                      if (val == 'view' || val == 'edit_pages') {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1494,6 +1525,10 @@ class _DocumentsLibraryScreenState
                       PopupMenuItem(
                         value: 'view',
                         child: Text('View Document'),
+                      ),
+                      PopupMenuItem(
+                        value: 'edit_pages',
+                        child: Text('Edit Pages & Filters'),
                       ),
                       PopupMenuItem(value: 'share', child: Text('Share PDF')),
                       PopupMenuItem(

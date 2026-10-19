@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:uuid/uuid.dart';
@@ -263,6 +264,9 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
   /// Updates a page's edit recipe (rotation, filter) and pre-renders processed cache
   Future<void> updatePageRecipe(String pageId, EditRecipe recipe) async {
     String? newProcessedPath;
+    final targetPath =
+        '${AppStorageService.instance.processedDir.path}/${pageId}_proc.jpg';
+
     if (!recipe.isDefault) {
       final pageIndex = state.pages.indexWhere((p) => p.id == pageId);
       if (pageIndex != -1) {
@@ -270,8 +274,6 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
         final origFile = File(page.originalPath);
         if (await origFile.exists()) {
           try {
-            final targetPath =
-                '${AppStorageService.instance.processedDir.path}/${pageId}_proc.jpg';
             final tempPath = '$targetPath.tmp';
             final processedBytes =
                 await ImageProcessingService.processImageFileToBytes(
@@ -283,6 +285,8 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
             await tempFile.writeAsBytes(processedBytes, flush: true);
             final finalFile = await tempFile.rename(targetPath);
             newProcessedPath = finalFile.path;
+            // Evict file from Flutter image cache so thumbnails update immediately
+            PaintingBinding.instance.imageCache.evict(FileImage(finalFile));
           } catch (_) {
             // Fallback gracefully without throwing
           }
@@ -290,11 +294,10 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
       }
     } else {
       // Recipe was reset to default, clean up processed cache if it exists
-      final targetPath =
-          '${AppStorageService.instance.processedDir.path}/${pageId}_proc.jpg';
       final file = File(targetPath);
       if (await file.exists()) {
         try {
+          PaintingBinding.instance.imageCache.evict(FileImage(file));
           await file.delete();
         } catch (_) {}
       }
@@ -310,6 +313,19 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
 
     state = state.copyWith(pages: updated);
     await _persistDraft();
+  }
+
+  /// Applies a filter preset across all pages in the current session
+  Future<void> applyFilterToAllPages(PageFilter filter) async {
+    for (final page in state.pages) {
+      final newRecipe = page.editRecipe.copyWith(
+        filter: filter,
+        binarization: filter == PageFilter.original
+            ? BinarizationMode.none
+            : page.editRecipe.binarization,
+      );
+      await updatePageRecipe(page.id, newRecipe);
+    }
   }
 
   /// Removes a page from the active session

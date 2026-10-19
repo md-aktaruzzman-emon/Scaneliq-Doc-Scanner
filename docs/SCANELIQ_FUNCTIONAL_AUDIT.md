@@ -333,13 +333,16 @@ Every enumerated feature from the Master Blueprint (`docs/Scaneliq_Master_Bluepr
 
 1. **Automated Unit & Widget Tests:**
    - Command: `flutter test`
-   - Outcome: **99 passed, 0 failed, 0 skipped** (including 5 newly authored verification tests in `test/phase2_audit_and_repair_test.dart`).
+   - Outcome: **118 passed, 0 failed, 0 skipped** across all test suites, including 7 newly added regression tests in `test/phase4_filter_and_pdf_repair_test.dart` and 17 Phase 5 tests in `test/phase5_advanced_pdf_test.dart`.
 2. **Dart Static Analysis:**
    - Command: `flutter analyze`
    - Outcome: **No issues found!** (0 errors, 0 warnings, 0 lints).
-3. **Android Debug APK Compilation:**
+3. **Dart Code Formatting:**
+   - Command: `dart format .`
+   - Outcome: Cleanly formatted across all 55 source files.
+4. **Android Debug APK Compilation:**
    - Command: `flutter build apk --debug`
-   - Outcome: Successful.
+   - Outcome: Successful compilation and packaging.
 
 ---
 
@@ -348,5 +351,14 @@ Every enumerated feature from the Master Blueprint (`docs/Scaneliq_Master_Bluepr
 1. **Book Dual-Page Scan (`F-07`):** Implemented `splitBookSpread` and `splitBookSpreadFile` in `ImageProcessingService` and connected to `continuous_camera_screen.dart`. Capturing or importing book spreads automatically separates them into Left and Right pages with inner gutter margins.
 2. **ID Card 2-in-1 Auto-Stitching (`F-06`):** Updated `continuous_camera_screen.dart` so capturing the back side of an ID card automatically invokes `PdfService.stitchIdCard2In1` via background compute and advances with the single composite A4 page.
 3. **Question Set / Exam Paper Optimization (`F-09`):** Updated `continuous_camera_screen.dart` to apply `PageFilter.blackAndWhite` and `BinarizationMode.otsu` by default when in Question Set mode.
-4. **Edit Recipe Pre-Rendering (`F-12`):** Updated `ScanSessionNotifier.updatePageRecipe` to render the processed preview to `processedDir` and set `processedPath`, ensuring review screen thumbnails and previews reflect edits immediately.
+4. **Edit Recipe Pre-Rendering & Cache Eviction (`F-12`, `F-13`, `F-14`):**
+   - Fixed `EditPageScreen._schedulePreviewUpdate`: Previously bypassed image processing when `hasAdvancedFilters` was false, preventing live preview of blackAndWhite, enhancedText, grayscale, and slider adjustments. Now downsampled previews run reliably.
+   - Updated `ScanSessionNotifier.updatePageRecipe` to evict `PaintingBinding.instance.imageCache` whenever a processed page is updated or reset, preventing stale thumbnail cache on Android.
+   - Added `applyFilterToAllPages(PageFilter filter)` to enable one-tap batch filtering across all pages in a document.
 5. **PDF Tools Database Persistence (`F-22` & `F-23`):** Added `AppDatabaseService.saveDocument` and updated `_showSuccessDialog` in `PdfToolsScreen` to query true page counts and save merged, split, compressed, or watermarked PDFs directly into the user's SQLite document library.
+6. **PDF Generation, Unicode Safety & Error Recovery (`F-17`, `F-21`, `F-41`):**
+   - Fixed Unicode / Indic font crashes in `PdfService.generatePdf`: Invisible text layer now normalizes Bengali/Indic numerals and codepoints, preventing stream dictionary corruption while retaining searchable text.
+   - Added pre-save validation via `sf.PdfDocument` before writing files to disk.
+   - Enhanced `DocumentViewerScreen`: Added automatic on-demand PDF generation if a document has no exported PDF on disk yet, fallback raw image viewer (`PageView`), and interactive error banner with "Regenerate" and "View Images" actions.
+   - Fixed file and database desynchronization during document rename: `AppDatabaseService.renameDocument` now renames the PDF file on disk and synchronizes `export_path` in SQLite.
+   - Fixed system share sheet MIME type: Explicitly passed `mimeType: 'application/pdf'` to `ShareParams` across all screens, ensuring external viewers (Adobe Acrobat, Google Drive, WhatsApp) recognize the file.

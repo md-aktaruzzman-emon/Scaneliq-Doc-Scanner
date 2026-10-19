@@ -158,7 +158,10 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                 onPressed: () {
                   Navigator.pop(ctx);
                   SharePlus.instance.share(
-                    ShareParams(text: doc.title, files: [XFile(pdfFile.path)]),
+                    ShareParams(
+                      text: doc.title,
+                      files: [XFile(pdfFile.path, mimeType: 'application/pdf')],
+                    ),
                   );
                 },
                 child: const Text('Share PDF'),
@@ -523,6 +526,49 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
     );
   }
 
+  void _openPageEditor(DocumentPage page) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditPageScreen(
+          page: page,
+          onApply: (recipe) {
+            ref
+                .read(scanSessionProvider.notifier)
+                .updatePageRecipe(page.id, recipe);
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyBatchFilter(PageFilter filter) async {
+    setState(() => _isExporting = true);
+    await ref.read(scanSessionProvider.notifier).applyFilterToAllPages(filter);
+    if (mounted) {
+      setState(() => _isExporting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Applied ${filter.name.toUpperCase()} filter to all pages.',
+          ),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  Widget _buildQuickFilterChip(String label, PageFilter filter, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ActionChip(
+        avatar: Icon(icon, size: 14, color: AppColors.brandPrimary),
+        label: Text(label, style: const TextStyle(fontSize: 12)),
+        onPressed: _isExporting ? null : () => _applyBatchFilter(filter),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(scanSessionProvider);
@@ -637,6 +683,73 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                       ),
                     ),
                   ),
+                // Quick Batch Filter Preset Bar (F-11, F-12)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(
+                            Icons.auto_awesome,
+                            size: 14,
+                            color: AppColors.brandPrimary,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Apply Filter to All Pages:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildQuickFilterChip(
+                              'Original',
+                              PageFilter.original,
+                              Icons.photo_outlined,
+                            ),
+                            _buildQuickFilterChip(
+                              'Color Boost',
+                              PageFilter.colorBoost,
+                              Icons.palette,
+                            ),
+                            _buildQuickFilterChip(
+                              'B&W High-Contrast',
+                              PageFilter.blackAndWhite,
+                              Icons.contrast,
+                            ),
+                            _buildQuickFilterChip(
+                              'Whiteboard',
+                              PageFilter.whiteboard,
+                              Icons.co_present,
+                            ),
+                            _buildQuickFilterChip(
+                              'Grayscale',
+                              PageFilter.grayscale,
+                              Icons.filter_b_and_w,
+                            ),
+                            _buildQuickFilterChip(
+                              'Enhanced Text',
+                              PageFilter.enhancedText,
+                              Icons.auto_fix_high,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -646,7 +759,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${session.pages.length} Pages (Drag to reorder)',
+                        '${session.pages.length} Pages (Drag to reorder · Tap to edit)',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: isDark
@@ -683,177 +796,191 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                       return Card(
                         key: ValueKey(page.id),
                         margin: const EdgeInsets.only(bottom: 12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Row(
-                            children: [
-                              GestureDetector(
-                                onTap: file.existsSync()
-                                    ? () => _showImagePreviewDialog(file, index)
-                                    : null,
-                                child: Container(
-                                  width: 64,
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? AppColors.surface2Dark
-                                        : Colors.grey.shade200,
-                                    borderRadius: BorderRadius.circular(8),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () => _openPageEditor(page),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () => _openPageEditor(page),
+                                  child: Container(
+                                    width: 64,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? AppColors.surface2Dark
+                                          : Colors.grey.shade200,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: file.existsSync()
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            child: Image.file(
+                                              file,
+                                              key: ValueKey(
+                                                '${file.path}_${page.editRecipe.filter.name}_${page.editRecipe.rotationDegrees}',
+                                              ),
+                                              fit: BoxFit.cover,
+                                            ),
+                                          )
+                                        : const Icon(Icons.image_not_supported),
                                   ),
-                                  child: file.existsSync()
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          child: Image.file(
-                                            file,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        )
-                                      : const Icon(Icons.image_not_supported),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Page ${index + 1}',
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Page ${index + 1}',
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Filter: ${page.editRecipe.filter.name.toUpperCase()}'
+                                        '${page.editRecipe.rotationDegrees != 0 ? ' · ${page.editRecipe.rotationDegrees}°' : ''}'
+                                        '${page.editRecipe.hasCrop ? ' · Cropped' : ''}'
+                                        '${page.editRecipe.hasPerspective ? ' · Warped' : ''}'
+                                        '${page.editRecipe.binarization != BinarizationMode.none ? ' · ${page.editRecipe.binarization.name.toUpperCase()}' : ''}'
+                                        '${page.editRecipe.shadowCorrection ? ' · Shadows' : ''}'
+                                        '${page.editRecipe.hasCleanup ? ' · Cleaned' : ''}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark
+                                              ? AppColors.textSecondaryDark
+                                              : AppColors.textSecondaryLight,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                FilledButton.tonalIcon(
+                                  icon: const Icon(
+                                    Icons.auto_fix_high,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    page.editRecipe.filter ==
+                                            PageFilter.original
+                                        ? 'Filters'
+                                        : page.editRecipe.filter.name,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  onPressed: () => _openPageEditor(page),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.cameraswitch_outlined),
+                                  tooltip: 'Retake Page',
+                                  onPressed: () => _showRetakeOptions(page),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: AppColors.error,
+                                  ),
+                                  tooltip: 'Delete Page',
+                                  onPressed: () =>
+                                      _confirmDeletePage(page, index),
+                                ),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 20),
+                                  tooltip: 'Page Options',
+                                  onSelected: (val) async {
+                                    if (val == 'preview_fullscreen') {
+                                      if (file.existsSync()) {
+                                        _showImagePreviewDialog(file, index);
+                                      }
+                                    } else if (val == 'export_jpeg') {
+                                      try {
+                                        final jpegFile =
+                                            await PdfService.exportPageAsJpeg(
+                                              page: page,
+                                              baseName:
+                                                  _titleController.text
+                                                      .trim()
+                                                      .isEmpty
+                                                  ? 'Page_${index + 1}'
+                                                  : _titleController.text
+                                                        .trim(),
+                                            );
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'JPEG saved: ${jpegFile.path.split(Platform.pathSeparator).last}',
+                                              ),
+                                              action: SnackBarAction(
+                                                label: 'Share',
+                                                onPressed: () {
+                                                  SharePlus.instance.share(
+                                                    ShareParams(
+                                                      text:
+                                                          'Scaneliq Page ${index + 1}',
+                                                      files: [
+                                                        XFile(jpegFile.path),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'JPEG export failed: $e',
+                                              ),
+                                              backgroundColor: AppColors.error,
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    }
+                                  },
+                                  itemBuilder: (ctx) => const [
+                                    PopupMenuItem(
+                                      value: 'preview_fullscreen',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.fullscreen, size: 20),
+                                          SizedBox(width: 8),
+                                          Text('View Fullscreen'),
+                                        ],
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Filter: ${page.editRecipe.filter.name.toUpperCase()}'
-                                      '${page.editRecipe.rotationDegrees != 0 ? ' · ${page.editRecipe.rotationDegrees}°' : ''}'
-                                      '${page.editRecipe.hasCrop ? ' · Cropped' : ''}'
-                                      '${page.editRecipe.hasPerspective ? ' · Warped' : ''}'
-                                      '${page.editRecipe.binarization != BinarizationMode.none ? ' · ${page.editRecipe.binarization.name.toUpperCase()}' : ''}'
-                                      '${page.editRecipe.shadowCorrection ? ' · Shadows' : ''}'
-                                      '${page.editRecipe.hasCleanup ? ' · Cleaned' : ''}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isDark
-                                            ? AppColors.textSecondaryDark
-                                            : AppColors.textSecondaryLight,
+                                    PopupMenuItem(
+                                      value: 'export_jpeg',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.image_outlined, size: 20),
+                                          SizedBox(width: 8),
+                                          Text('Export as JPEG'),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.tune),
-                                tooltip: 'Edit Page',
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => EditPageScreen(
-                                        page: page,
-                                        onApply: (recipe) {
-                                          ref
-                                              .read(
-                                                scanSessionProvider.notifier,
-                                              )
-                                              .updatePageRecipe(
-                                                page.id,
-                                                recipe,
-                                              );
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.cameraswitch_outlined),
-                                tooltip: 'Retake Page',
-                                onPressed: () => _showRetakeOptions(page),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: AppColors.error,
+                                const Icon(
+                                  Icons.drag_handle,
+                                  color: Colors.grey,
                                 ),
-                                tooltip: 'Delete Page',
-                                onPressed: () =>
-                                    _confirmDeletePage(page, index),
-                              ),
-                              PopupMenuButton<String>(
-                                icon: const Icon(Icons.more_vert, size: 20),
-                                tooltip: 'Page Options',
-                                onSelected: (val) async {
-                                  if (val == 'export_jpeg') {
-                                    try {
-                                      final jpegFile =
-                                          await PdfService.exportPageAsJpeg(
-                                            page: page,
-                                            baseName:
-                                                _titleController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? 'Page_${index + 1}'
-                                                : _titleController.text.trim(),
-                                          );
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'JPEG saved: ${jpegFile.path.split(Platform.pathSeparator).last}',
-                                            ),
-                                            action: SnackBarAction(
-                                              label: 'Share',
-                                              onPressed: () {
-                                                SharePlus.instance.share(
-                                                  ShareParams(
-                                                    text:
-                                                        'Scaneliq Page ${index + 1}',
-                                                    files: [
-                                                      XFile(jpegFile.path),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'JPEG export failed: $e',
-                                            ),
-                                            backgroundColor: AppColors.error,
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  }
-                                },
-                                itemBuilder: (ctx) => const [
-                                  PopupMenuItem(
-                                    value: 'export_jpeg',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.image_outlined, size: 20),
-                                        SizedBox(width: 8),
-                                        Text('Export as JPEG'),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const Icon(Icons.drag_handle, color: Colors.grey),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );

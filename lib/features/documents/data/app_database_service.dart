@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
@@ -986,17 +987,45 @@ class AppDatabaseService {
     );
   }
 
-  /// Renames a document
+  /// Renames a document and synchronizes the exported PDF file on disk
   Future<void> renameDocument(String id, String newTitle) async {
     final trimmed = newTitle.trim();
     if (trimmed.isEmpty) return;
     final db = await database;
-    await db.update(
+
+    final docRows = await db.query(
       'documents',
-      {'title': trimmed, 'modified_at': DateTime.now().millisecondsSinceEpoch},
+      columns: ['export_path'],
       where: 'id = ?',
       whereArgs: [id],
+      limit: 1,
     );
+
+    String? updatedExportPath;
+    if (docRows.isNotEmpty && docRows.first['export_path'] != null) {
+      final oldPath = docRows.first['export_path'] as String;
+      final oldFile = File(oldPath);
+      if (await oldFile.exists()) {
+        try {
+          final newPath = AppStorageService.instance.getExportPdfPath(trimmed);
+          final newFile = await oldFile.rename(newPath);
+          updatedExportPath = newFile.path;
+        } catch (_) {
+          // If filesystem rename fails, preserve original path
+          updatedExportPath = oldPath;
+        }
+      }
+    }
+
+    final updateMap = <String, dynamic>{
+      'title': trimmed,
+      'modified_at': DateTime.now().millisecondsSinceEpoch,
+    };
+    if (updatedExportPath != null) {
+      updateMap['export_path'] = updatedExportPath;
+    }
+
+    await db.update('documents', updateMap, where: 'id = ?', whereArgs: [id]);
   }
 
   /// Saves or updates the OCR text for a document

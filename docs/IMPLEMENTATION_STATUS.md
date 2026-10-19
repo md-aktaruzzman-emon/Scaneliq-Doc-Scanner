@@ -6,7 +6,7 @@
 - [FEATURE_TRACEABILITY_MATRIX.md](file:///c:/Scaneliq/docs/FEATURE_TRACEABILITY_MATRIX.md)
 - [SCANELIQ_COMPETITOR_RESEARCH.md](file:///c:/Scaneliq/docs/SCANELIQ_COMPETITOR_RESEARCH.md)
 
-**Status Document Version:** 14.0.0  
+**Status Document Version:** 15.0.0  
 **Verification Date:** 2026-10-19  
 **Repository:** [https://github.com/md-aktaruzzman-emon/Scaneliq-Doc-Scanner](https://github.com/md-aktaruzzman-emon/Scaneliq-Doc-Scanner)  
 **Toolchain:** Flutter 3.47.7 · Dart 3.13.5 · Android SDK 36 (build-tools 36.0.0 / 28.0.3) · Temurin OpenJDK 17.0.20.1  
@@ -19,9 +19,9 @@ Scaneliq has completed all planned development milestones, achieving **100% oper
 
 1. **Design System & Navigation Overhaul (Phase 1):** Semantic tokens, 4-tab shell with elevated shutter, responsive screens.
 2. **Advanced Scanning & Workflows (Phase 2):** Continuous batch scanning, draft session recovery, 2-in-1 ID card capture, multi-image import.
-3. **Image Processing & Document Enhancement (Phase 3):** Homography warp, Otsu/Sauvola binarization, Whiteboard mode, cleanup patches.
-4. **Document Organization & Management (Phase 4):** Hierarchical folders, tags, smart filenames, trash retention, batch management.
-5. **PDF Productivity Suite (Phase 5):** Merge, range-split, compression engine, AES-256 encryption, watermarks, in-app viewer.
+3. **Image Processing & Document Enhancement (Phase 3 & 4):** Homography warp, Otsu/Sauvola binarization, Whiteboard mode, cleanup patches, live high-fidelity filter preview pipeline, instant batch filter presets bar.
+4. **Document Organization & Management (Phase 4):** Hierarchical folders, tags, smart filenames, trash retention, batch management, synchronized rename across database and filesystem.
+5. **PDF Productivity Suite (Phase 5):** Merge, range-split, compression engine, AES-256 encryption, watermarks, in-app viewer with automatic on-demand generation and error recovery fallback.
 6. **Advanced Intelligence & Security (Phase 3A–3I):**
    - **Phase 3A (F-31):** Bangla & Indic OCR Script Normalization with numeral conversions (`০..৯` <-> `0..9`).
    - **Phase 3B (F-26):** PDF Interactive Annotations, Stamps, and Digital Signatures via Syncfusion PDF.
@@ -34,9 +34,10 @@ Scaneliq has completed all planned development milestones, achieving **100% oper
    - **Phase 3I (F-43):** Encrypted Multi-Device Sync Architecture with PBKDF2/SHA-256 and Last-Write-Wins (LWW) conflict resolution.
 
 7. **Automated Verification & Quality:**
-   - All **111 automated tests** pass across 16 test suites (100% pass rate).
+   - All **118 automated tests** pass across 17 test suites (100% pass rate).
    - `flutter analyze` reports **0 issues** (no warnings, no errors).
-   - `flutter build apk --debug` cleanly compiles in 93.4s -> `build\app\outputs\flutter-apk\app-debug.apk`.
+   - `dart format .` cleanly formatted across all 55 source files.
+   - `flutter build apk --debug` cleanly compiles in 44.1s -> `build\app\outputs\flutter-apk\app-debug.apk` (324,982,249 bytes).
 
 ---
 
