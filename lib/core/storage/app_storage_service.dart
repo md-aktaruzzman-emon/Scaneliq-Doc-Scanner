@@ -48,12 +48,49 @@ class AppStorageService {
   Directory get tempDir =>
       Directory(p.join(_baseDir?.path ?? Directory.systemTemp.path, 'temp'));
 
+  /// Validates magic bytes for JPEG, PNG, or WebP image formats
+  static bool isValidImageBytes(List<int> bytes) {
+    if (bytes.length < 8) return false;
+    // JPEG magic bytes: FF D8 FF
+    if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return true;
+    // PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
+    if (bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return true;
+    }
+    // WebP magic bytes: 'RIFF' at 0..3 and 'WEBP' at 8..11
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return true;
+    }
+    return false;
+  }
+
   /// Safely writes an original page image into the app-private originals directory
   Future<File> saveOriginalPage(
     String pageId,
     List<int> bytes, {
     String extension = 'jpg',
+    bool validateHeader = false,
   }) async {
+    if (bytes.isEmpty) {
+      throw Exception('Cannot save empty image bytes for page: $pageId');
+    }
+    if (validateHeader && !isValidImageBytes(bytes)) {
+      throw Exception(
+        'Corrupted or invalid image byte header for page: $pageId',
+      );
+    }
+
     final targetPath = p.join(originalsDir.path, '$pageId.$extension');
     final tempPath = p.join(tempDir.path, '${pageId}_tmp.$extension');
 
@@ -65,14 +102,27 @@ class AppStorageService {
     return await tempFile.rename(targetPath);
   }
 
-  /// Copies an external file safely to originals
+  /// Copies an external file safely to originals with atomic write and existence check
   Future<File> copyToOriginals(
     String pageId,
     File sourceFile, {
     String extension = 'jpg',
   }) async {
+    if (!await sourceFile.exists()) {
+      throw Exception('Source image file does not exist: ${sourceFile.path}');
+    }
+    final fileSize = await sourceFile.length();
+    if (fileSize == 0) {
+      throw Exception(
+        'Source image file is empty (0 bytes): ${sourceFile.path}',
+      );
+    }
+
     final targetPath = p.join(originalsDir.path, '$pageId.$extension');
-    return await sourceFile.copy(targetPath);
+    final tempPath = p.join(tempDir.path, '${pageId}_copy_tmp.$extension');
+
+    final tempFile = await sourceFile.copy(tempPath);
+    return await tempFile.rename(targetPath);
   }
 
   /// Creates a safe unique path for a PDF export

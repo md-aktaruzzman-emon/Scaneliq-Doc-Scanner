@@ -73,7 +73,7 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
     );
   }
 
-  /// Retakes/replaces a specific page image
+  /// Retakes/replaces a specific page image via document scanner
   Future<bool> retakePage(String pageId) async {
     try {
       final scanner = DocumentScanner(
@@ -90,23 +90,57 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
       if (images == null || images.isEmpty) return false;
 
       final sourceFile = File(images.first);
-      if (!await sourceFile.exists()) return false;
+      return await retakePageWithFile(pageId, sourceFile);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Retakes/replaces a specific page with an existing or newly captured image file
+  Future<bool> retakePageWithFile(String pageId, File newImageFile) async {
+    try {
+      if (!await newImageFile.exists()) return false;
 
       final savedOriginal = await AppStorageService.instance.copyToOriginals(
         pageId,
-        sourceFile,
+        newImageFile,
       );
       final updated = state.pages.map((p) {
         if (p.id == pageId) {
           return p.copyWith(
             originalPath: savedOriginal.path,
             processedPath: null,
+            editRecipe: const EditRecipe(), // Reset recipe on retake
           );
         }
         return p;
       }).toList();
 
       state = state.copyWith(pages: updated);
+      await _persistDraft();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Directly adds a single captured page with optional custom preset recipe
+  Future<bool> addCapturedPage(File file, {EditRecipe? recipe}) async {
+    try {
+      if (!await file.exists()) return false;
+      final pageId = const Uuid().v4();
+      final savedOriginal = await AppStorageService.instance.copyToOriginals(
+        pageId,
+        file,
+      );
+      final newPage = DocumentPage(
+        id: pageId,
+        documentId: state.documentId,
+        pageOrder: state.pages.length,
+        originalPath: savedOriginal.path,
+        editRecipe: recipe ?? const EditRecipe(),
+      );
+      state = state.copyWith(pages: [...state.pages, newPage]);
       await _persistDraft();
       return true;
     } catch (_) {
@@ -175,7 +209,7 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
   }
 
   /// Adds multiple pages from imported files with format/existence validation
-  Future<int> importFiles(List<File> files) async {
+  Future<int> importFiles(List<File> files, {EditRecipe? defaultRecipe}) async {
     final validImages = <DocumentPage>[];
     for (final file in files) {
       if (!await file.exists()) continue;
@@ -194,6 +228,7 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
           documentId: state.documentId,
           pageOrder: state.pages.length + validImages.length,
           originalPath: savedOriginal.path,
+          editRecipe: defaultRecipe ?? const EditRecipe(),
         ),
       );
     }

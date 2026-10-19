@@ -323,9 +323,35 @@ class PdfService {
     return await tempFile.rename(targetPath);
   }
 
-  /// Helper to apply EditRecipe modifications (rotation, filter, brightness, contrast)
+  /// Helper to apply EditRecipe modifications (crop, rotation, filter, brightness, contrast)
   static img.Image applyEditRecipe(img.Image image, EditRecipe recipe) {
     img.Image workingImage = image;
+
+    // 1. Non-destructive crop if customized
+    if (recipe.hasCrop) {
+      final x = (recipe.cropLeft * workingImage.width).round().clamp(
+        0,
+        workingImage.width - 1,
+      );
+      final y = (recipe.cropTop * workingImage.height).round().clamp(
+        0,
+        workingImage.height - 1,
+      );
+      final w = ((recipe.cropRight - recipe.cropLeft) * workingImage.width)
+          .round()
+          .clamp(10, workingImage.width - x);
+      final h = ((recipe.cropBottom - recipe.cropTop) * workingImage.height)
+          .round()
+          .clamp(10, workingImage.height - y);
+      workingImage = img.copyCrop(
+        workingImage,
+        x: x,
+        y: y,
+        width: w,
+        height: h,
+      );
+    }
+
     if (recipe.rotationDegrees != 0) {
       workingImage = img.copyRotate(
         workingImage,

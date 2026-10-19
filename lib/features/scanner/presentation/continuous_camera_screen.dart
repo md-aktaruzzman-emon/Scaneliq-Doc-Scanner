@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
@@ -131,7 +133,13 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
       final File imageFile = File(picture.path);
 
       if (await imageFile.exists()) {
-        await ref.read(scanSessionProvider.notifier).importFiles([imageFile]);
+        final recipe = widget.mode == ScanMode.whiteboard
+            ? const EditRecipe(filter: PageFilter.whiteboard)
+            : const EditRecipe();
+
+        await ref.read(scanSessionProvider.notifier).importFiles([
+          imageFile,
+        ], defaultRecipe: recipe);
 
         if (widget.mode == ScanMode.idCard) {
           if (_idCardStep == 0) {
@@ -158,7 +166,7 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
                   duration: Duration(seconds: 1),
                 ),
               );
-              Future.delayed(const Duration(milliseconds: 600), () {
+              Future.delayed(const Duration(milliseconds: 500), () {
                 if (mounted) {
                   _finishScan();
                 }
@@ -181,6 +189,52 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
         setState(() {
           _isCapturing = false;
         });
+      }
+    }
+  }
+
+  Future<void> _importFromGallery() async {
+    try {
+      final pickedFiles = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+      );
+
+      if (pickedFiles.isNotEmpty) {
+        final files = pickedFiles
+            .where((p) => p.path != null)
+            .map((p) => File(p.path!))
+            .toList();
+
+        if (files.isNotEmpty) {
+          final recipe = widget.mode == ScanMode.whiteboard
+              ? const EditRecipe(filter: PageFilter.whiteboard)
+              : const EditRecipe();
+
+          final count = await ref
+              .read(scanSessionProvider.notifier)
+              .importFiles(files, defaultRecipe: recipe);
+
+          if (count > 0 && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Imported $count ${count == 1 ? 'image' : 'images'} successfully.',
+                ),
+                duration: const Duration(seconds: 1),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
@@ -284,9 +338,25 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _initCameras,
-                      child: const Text('Retry Camera'),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _initCameras,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry Camera'),
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.white54),
+                          ),
+                          onPressed: _importFromGallery,
+                          icon: const Icon(Icons.photo_library),
+                          label: const Text('Pick Images'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -323,6 +393,101 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
               ),
             ),
 
+          // Book Mode Guide Overlay
+          if (widget.mode == ScanMode.book)
+            Center(
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.92,
+                height: MediaQuery.of(context).size.width * 0.92 * 0.75,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.tealAccent, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 2,
+                        height: double.infinity,
+                        color: Colors.tealAccent.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    const Positioned(
+                      top: 10,
+                      left: 12,
+                      child: Text(
+                        'Left Page',
+                        style: TextStyle(
+                          color: Colors.white,
+                          backgroundColor: Colors.black45,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const Positioned(
+                      top: 10,
+                      right: 12,
+                      child: Text(
+                        'Right Page',
+                        style: TextStyle(
+                          color: Colors.white,
+                          backgroundColor: Colors.black45,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: 6.0),
+                        child: Text(
+                          'Align book spine with center line',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            backgroundColor: Colors.black54,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // Whiteboard Guide Overlay
+          if (widget.mode == ScanMode.whiteboard)
+            Center(
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.92,
+                height: MediaQuery.of(context).size.width * 0.92 * 0.65,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.deepPurpleAccent,
+                    width: 2.5,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Text(
+                      'Frame whiteboard inside border · Auto contrast active',
+                      style: TextStyle(
+                        color: Colors.white,
+                        backgroundColor: Colors.black54,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           // Bottom Shutter Controls Bar
           Positioned(
             left: 0,
@@ -335,32 +500,63 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Recent Thumbnail Preview
+                    // Recent Thumbnail Preview with badge
                     GestureDetector(
                       onTap: pageCount > 0 ? _finishScan : null,
-                      child: Container(
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade900,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.white30, width: 1.5),
-                        ),
-                        child: pageCount > 0
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.file(
-                                  File(
-                                    session.pages.last.processedPath ??
-                                        session.pages.last.originalPath,
-                                  ),
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : const Icon(
-                                Icons.photo_library,
-                                color: Colors.white54,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade900,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white30,
+                                width: 1.5,
                               ),
+                            ),
+                            child: pageCount > 0
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: Image.file(
+                                      File(
+                                        session.pages.last.processedPath ??
+                                            session.pages.last.originalPath,
+                                      ),
+                                      fit: BoxFit.cover,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.photo_library,
+                                    color: Colors.white54,
+                                  ),
+                          ),
+                          if (pageCount > 0)
+                            Positioned(
+                              top: -4,
+                              right: -4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.brandPrimary,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$pageCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
 
@@ -405,29 +601,36 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
                       ),
                     ),
 
-                    // Page Count Badge
-                    Container(
-                      width: 54,
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '$pageCount',
-                            style: const TextStyle(
+                    // Gallery Import Action
+                    GestureDetector(
+                      onTap: _importFromGallery,
+                      child: Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white30, width: 1.5),
+                        ),
+                        child: const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.photo_library_outlined,
                               color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                              size: 22,
                             ),
-                          ),
-                          const Text(
-                            'pages',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11,
+                            SizedBox(height: 2),
+                            Text(
+                              'Import',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
