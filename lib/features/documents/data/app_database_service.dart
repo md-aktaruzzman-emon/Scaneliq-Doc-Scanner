@@ -788,6 +788,16 @@ class AppDatabaseService {
   // DOCUMENT SAVING & RETRIEVAL WITH FILTERS
   // ===========================================================================
 
+  /// Inserts or updates a document record directly (e.g. for PDF tools exports or imports)
+  Future<void> saveDocument(ScannedDocument doc) async {
+    final db = await database;
+    await db.insert(
+      'documents',
+      doc.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   /// Inserts or updates a document and its pages atomically in a transaction
   Future<void> saveDocumentWithPages(
     ScannedDocument doc,
@@ -797,7 +807,11 @@ class AppDatabaseService {
     await db.transaction((txn) async {
       await txn.insert(
         'documents',
-        doc.copyWith(pageCount: pages.length).toMap(),
+        doc
+            .copyWith(
+              pageCount: pages.isNotEmpty ? pages.length : doc.pageCount,
+            )
+            .toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 

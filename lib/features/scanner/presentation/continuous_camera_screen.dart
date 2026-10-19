@@ -4,10 +4,14 @@ import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
+import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
+import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
+import 'package:uuid/uuid.dart';
 
 enum ScanMode { document, batch, idCard, questionSet, book, whiteboard }
 
@@ -133,44 +137,98 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
       final File imageFile = File(picture.path);
 
       if (await imageFile.exists()) {
-        final recipe = widget.mode == ScanMode.whiteboard
-            ? const EditRecipe(filter: PageFilter.whiteboard)
-            : const EditRecipe();
+        if (widget.mode == ScanMode.book) {
+          // F-07: Split open book spread down center spine into Left and Right pages
+          final splitPages = await ImageProcessingService.splitBookSpreadFile(
+            spreadFile: imageFile,
+            outputDir: AppStorageService.instance.originalsDir,
+            baseId: const Uuid().v4(),
+          );
+          await ref.read(scanSessionProvider.notifier).importFiles(splitPages);
 
-        await ref.read(scanSessionProvider.notifier).importFiles([
-          imageFile,
-        ], defaultRecipe: recipe);
-
-        if (widget.mode == ScanMode.idCard) {
-          if (_idCardStep == 0) {
-            setState(() {
-              _idCardStep = 1;
-            });
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Front side captured! Now flip the card and scan Back side.',
-                  ),
-                  duration: Duration(seconds: 2),
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Book spread split into Left & Right pages (2 pages added)!',
                 ),
-              );
-            }
+                backgroundColor: AppColors.success,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          final EditRecipe recipe;
+          if (widget.mode == ScanMode.whiteboard) {
+            recipe = const EditRecipe(filter: PageFilter.whiteboard);
+          } else if (widget.mode == ScanMode.questionSet) {
+            recipe = const EditRecipe(
+              filter: PageFilter.blackAndWhite,
+              binarization: BinarizationMode.otsu,
+            );
           } else {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Both ID card sides captured! Advancing to review...',
-                  ),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (mounted) {
-                  _finishScan();
-                }
+            recipe = const EditRecipe();
+          }
+
+          await ref.read(scanSessionProvider.notifier).importFiles([
+            imageFile,
+          ], defaultRecipe: recipe);
+
+          if (widget.mode == ScanMode.idCard) {
+            if (_idCardStep == 0) {
+              setState(() {
+                _idCardStep = 1;
               });
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Front side captured! Now flip the card and scan Back side.',
+                    ),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            } else {
+              // F-06: Both sides captured: execute 2-in-1 card stitching automatically
+              final session = ref.read(scanSessionProvider);
+              if (session.pages.length >= 2) {
+                final frontPage = session.pages[session.pages.length - 2];
+                final backPage = session.pages[session.pages.length - 1];
+                final frontFile = File(
+                  frontPage.processedPath ?? frontPage.originalPath,
+                );
+                final backFile = File(
+                  backPage.processedPath ?? backPage.originalPath,
+                );
+
+                final stitchedJpg = await PdfService.stitchIdCard2In1(
+                  frontImage: frontFile,
+                  backImage: backFile,
+                  baseTitle: '${session.title}_2in1',
+                );
+
+                await ref
+                    .read(scanSessionProvider.notifier)
+                    .replaceWithSinglePage(stitchedJpg);
+              }
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Combined Front & Back into 2-in-1 ID Card Sheet!',
+                    ),
+                    backgroundColor: AppColors.success,
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+                Future.delayed(const Duration(milliseconds: 600), () {
+                  if (mounted) {
+                    _finishScan();
+                  }
+                });
+              }
             }
           }
         }
@@ -207,23 +265,57 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
             .toList();
 
         if (files.isNotEmpty) {
-          final recipe = widget.mode == ScanMode.whiteboard
-              ? const EditRecipe(filter: PageFilter.whiteboard)
-              : const EditRecipe();
-
-          final count = await ref
-              .read(scanSessionProvider.notifier)
-              .importFiles(files, defaultRecipe: recipe);
-
-          if (count > 0 && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Imported $count ${count == 1 ? 'image' : 'images'} successfully.',
+          if (widget.mode == ScanMode.book) {
+            // Split imported book spreads
+            int totalPages = 0;
+            for (final f in files) {
+              final splitPages =
+                  await ImageProcessingService.splitBookSpreadFile(
+                    spreadFile: f,
+                    outputDir: AppStorageService.instance.originalsDir,
+                    baseId: const Uuid().v4(),
+                  );
+              totalPages += await ref
+                  .read(scanSessionProvider.notifier)
+                  .importFiles(splitPages);
+            }
+            if (totalPages > 0 && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Imported and split spreads into $totalPages book pages.',
+                  ),
+                  duration: const Duration(seconds: 2),
                 ),
-                duration: const Duration(seconds: 1),
-              ),
-            );
+              );
+            }
+          } else {
+            final EditRecipe recipe;
+            if (widget.mode == ScanMode.whiteboard) {
+              recipe = const EditRecipe(filter: PageFilter.whiteboard);
+            } else if (widget.mode == ScanMode.questionSet) {
+              recipe = const EditRecipe(
+                filter: PageFilter.blackAndWhite,
+                binarization: BinarizationMode.otsu,
+              );
+            } else {
+              recipe = const EditRecipe();
+            }
+
+            final count = await ref
+                .read(scanSessionProvider.notifier)
+                .importFiles(files, defaultRecipe: recipe);
+
+            if (count > 0 && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Imported $count ${count == 1 ? 'image' : 'images'} successfully.',
+                  ),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            }
           }
         }
       }

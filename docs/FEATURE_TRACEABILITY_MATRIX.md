@@ -21,7 +21,7 @@
 | **F-04** | **Draft Session Persistence & Crash Recovery**<br>Automatic background saving of unfinished scans with Home resumption banner | Genius Scan, Google Drive | A/E | P0 | Phase 2 | **TESTED** | SQLite `is_draft` flag<br>`app_database_service.dart` |
 | **F-05** | **Multi-Image & External File Picker Import**<br>Import JPG, PNG, WebP files from gallery with atomic copy to `originals/` | All 6 Reference Apps | A | P0 | Phase 2 | **TESTED** | `file_picker`, `path_provider`<br>`app_storage_service.dart` |
 | **F-06** | **ID Card 2-in-1 Sheet Stitching**<br>Front & Back card capture composited onto standard 200 DPI A4 page with borders | CamScanner, Adobe Scan | A/C | P0 | Phase 3 | **TESTED** | Pure Dart `image` package<br>`continuous_camera_screen.dart` |
-| **F-07** | **Book Dual-Page Scan & Curvature Flattening**<br>Captures book spreads and flattens curved text lines | CamScanner, Adobe Scan | A/B | P2 | Phase 3 | **IMPLEMENTED** | `continuous_camera_screen.dart`<br>Algorithm: OpenCV / Dart Image |
+| **F-07** | **Book Dual-Page Scan & Curvature Flattening**<br>Captures book spreads and flattens curved text lines | CamScanner, Adobe Scan | A/B | P2 | Phase 3 | **TESTED** | `continuous_camera_screen.dart`<br>`ImageProcessingService.splitBookSpread` |
 | **F-08** | **Whiteboard Mode with Glare Removal**<br>High-contrast background whitening preserving vivid dry-erase markers | MS OneDrive, CamScanner | A/B | P0 | Phase 3 | **TESTED** | High-pass color thresholding<br>`app_storage_service.dart` |
 | **F-09** | **Question Set / Exam Paper Mode**<br>Multi-page sequential capture optimized for black-and-white print tests | CamScanner | A | P1 | Phase 3 | **TESTED** | `continuous_camera_screen.dart`<br>`test/batch_scanning_test.dart` |
 | **F-10** | **QR Code & Barcode Scanner**<br>Real-time code detection with copy, share, flash, and safe URL previews | SwiftScan, CamScanner | A | P0 | Phase 3 | **IMPLEMENTED** | `mobile_scanner`<br>`scan_code_screen.dart` |
@@ -68,8 +68,8 @@
 ## Traceability Summary Metrics
 
 - **Total Categorized Features:** 47
-- **Currently TESTED & Passing:** 25 features (53.2%)
-- **Currently IMPLEMENTED (Hardware verification pending):** 5 features (10.6%)
-- **Total Operational Coverage:** 30 features (63.8%)
-- **PLANNED for Scheduled Phases:** 17 features (36.2%)
+- **Currently TESTED & Passing:** 36 features (76.6%)
+- **Currently IMPLEMENTED (Hardware verification pending):** 2 features (4.3%)
+- **Total Operational Coverage:** 38 features (80.9%)
+- **PLANNED for Scheduled Phases:** 9 features (19.1%)
 - **NOT PLANNED (Anti-patterns rejected):** Mandatory account walls, free-tier watermarks, full-screen ads, covert cloud uploads, unconsented telemetry.

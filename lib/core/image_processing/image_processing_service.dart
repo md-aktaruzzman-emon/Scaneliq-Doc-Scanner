@@ -661,4 +661,64 @@ class ImageProcessingService {
     final processed = await processImageFile(file, recipe);
     return Uint8List.fromList(img.encodeJpg(processed, quality: quality));
   }
+
+  /// Splits an open book spread into Left and Right pages down the vertical center spine
+  /// with a 2% inner gutter margin overlap to preserve text near the binding.
+  static List<img.Image> splitBookSpread(img.Image spread) {
+    final int w = spread.width;
+    final int h = spread.height;
+
+    // Gutter overlap: ~2% of width
+    final int overlap = (w * 0.02).round();
+    final int halfW = w ~/ 2;
+
+    // Left page: from 0 to halfW + overlap
+    final int leftW = math.min(w, halfW + overlap);
+    final leftPage = img.copyCrop(spread, x: 0, y: 0, width: leftW, height: h);
+
+    // Right page: from halfW - overlap to w
+    final int rightX = math.max(0, halfW - overlap);
+    final int rightW = w - rightX;
+    final rightPage = img.copyCrop(
+      spread,
+      x: rightX,
+      y: 0,
+      width: rightW,
+      height: h,
+    );
+
+    return [leftPage, rightPage];
+  }
+
+  /// Splits a book spread image file on disk into two discrete JPEG files (left and right page)
+  static Future<List<File>> splitBookSpreadFile({
+    required File spreadFile,
+    required Directory outputDir,
+    required String baseId,
+  }) async {
+    final bytes = await spreadFile.readAsBytes();
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) {
+      throw Exception('Failed to decode book spread image: ${spreadFile.path}');
+    }
+
+    final pages = splitBookSpread(decoded);
+
+    final leftPath = '${outputDir.path}/${baseId}_left.jpg';
+    final rightPath = '${outputDir.path}/${baseId}_right.jpg';
+
+    final leftFile = File(leftPath);
+    final rightFile = File(rightPath);
+
+    await leftFile.writeAsBytes(
+      img.encodeJpg(pages[0], quality: 90),
+      flush: true,
+    );
+    await rightFile.writeAsBytes(
+      img.encodeJpg(pages[1], quality: 90),
+      flush: true,
+    );
+
+    return [leftFile, rightFile];
+  }
 }

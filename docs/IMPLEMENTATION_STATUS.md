@@ -98,13 +98,20 @@ Scaneliq has completed **Phase 5: Advanced PDF Productivity Suite & Professional
 - `test/storage_service_test.dart` (4 tests: directory structure, atomic copies, temporary cleanup)
 - `test/widget_test.dart` (1 test: full app render, actions, and smart modes)
 - `test/document_models_test.dart` (6 tests: model serialization, edit recipes, bookmark models)
+- `test/phase2_audit_and_repair_test.dart` (5 tests: book spread splitting, spread file persistence, ID card 2-in-1 composite, recipe default detection, PDF tools library persistence)
 
 ---
 
 ## 4. Release Checklist
 
+- [x] **Functionality Audit & Repair:** Comprehensive audit completed and documented in [SCANELIQ_FUNCTIONAL_AUDIT.md](file:///c:/Scaneliq/docs/SCANELIQ_FUNCTIONAL_AUDIT.md).
 - [x] **Code Quality:** `flutter analyze` reports 0 issues.
-- [x] **Automated Tests:** 94/94 tests passing across 14 test suites (100%).
+- [x] **Automated Tests:** 99/99 tests passing across 15 test suites (100%).
+- [x] **Book Dual-Page Scan (`F-07`):** Splits open spreads down center spine into discrete left/right pages with gutter overlap.
+- [x] **ID Card 2-in-1 Auto-Stitching (`F-06`):** Automatically composites front & back sides onto A4 200 DPI sheet.
+- [x] **Exam Question Set Preset (`F-09`):** Automatically applies Otsu binarization and high-contrast B&W preset.
+- [x] **Review Pre-Rendering (`F-12`):** Pre-renders processed image cache on recipe modifications so review thumbnails match edits.
+- [x] **PDF Tools Library Persistence (`F-22`–`F-25`):** Saves merged, split, compressed, or watermarked PDFs directly into SQLite library with true page count.
 - [x] **Code Formatting:** `dart format .` cleanly applied across all files.
 - [x] **Page Organizer:** Drag-and-drop reorder, 90° rotation, deletion, duplication, extraction, insertion.
 - [x] **PDF Merge & Split:** Multi-PDF merge, single page splitting, custom range splitting (`1-2, 3-5`).

@@ -5,10 +5,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/pdf/data/advanced_pdf_service.dart';
 import 'package:scaneliq/features/pdf/presentation/pdf_page_organizer_screen.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
 
 class PdfToolsScreen extends StatefulWidget {
   const PdfToolsScreen({super.key});
@@ -909,29 +911,52 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
     );
   }
 
-  void _showSuccessDialog(String title, File file) {
+  Future<void> _showSuccessDialog(String title, File file) async {
+    int pageCount = 1;
+    try {
+      pageCount = await AdvancedPdfService.instance.getPageCount(file);
+    } catch (_) {}
+
+    final doc = ScannedDocument(
+      id: const Uuid().v4(),
+      title: file.path
+          .split(Platform.pathSeparator)
+          .last
+          .replaceAll('.pdf', ''),
+      createdAt: DateTime.now(),
+      modifiedAt: DateTime.now(),
+      pageCount: pageCount,
+      exportPath: file.path,
+    );
+
+    try {
+      await AppDatabaseService.instance.saveDocument(doc);
+    } catch (_) {}
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
-        content: Text('File created:\n${file.path}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Saved to Documents library:\n${file.path}'),
+            const SizedBox(height: 8),
+            Text(
+              'Total Pages: $pageCount',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ],
+        ),
         actions: [
           TextButton.icon(
             icon: const Icon(Icons.visibility),
             label: const Text('View'),
             onPressed: () {
               Navigator.pop(ctx);
-              final doc = ScannedDocument(
-                id: 'pdf_tool_${DateTime.now().millisecondsSinceEpoch}',
-                title: file.path
-                    .split(Platform.pathSeparator)
-                    .last
-                    .replaceAll('.pdf', ''),
-                createdAt: DateTime.now(),
-                modifiedAt: DateTime.now(),
-                pageCount: 1,
-                exportPath: file.path,
-              );
               Navigator.push(
                 context,
                 MaterialPageRoute(

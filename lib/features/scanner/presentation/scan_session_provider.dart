@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:uuid/uuid.dart';
+import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
@@ -259,11 +260,50 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
     await _persistDraft();
   }
 
-  /// Updates a page's edit recipe (rotation, filter)
+  /// Updates a page's edit recipe (rotation, filter) and pre-renders processed cache
   Future<void> updatePageRecipe(String pageId, EditRecipe recipe) async {
+    String? newProcessedPath;
+    if (!recipe.isDefault) {
+      final pageIndex = state.pages.indexWhere((p) => p.id == pageId);
+      if (pageIndex != -1) {
+        final page = state.pages[pageIndex];
+        final origFile = File(page.originalPath);
+        if (await origFile.exists()) {
+          try {
+            final targetPath =
+                '${AppStorageService.instance.processedDir.path}/${pageId}_proc.jpg';
+            final tempPath = '$targetPath.tmp';
+            final processedBytes =
+                await ImageProcessingService.processImageFileToBytes(
+                  origFile,
+                  recipe,
+                  quality: 85,
+                );
+            final tempFile = File(tempPath);
+            await tempFile.writeAsBytes(processedBytes, flush: true);
+            final finalFile = await tempFile.rename(targetPath);
+            newProcessedPath = finalFile.path;
+          } catch (_) {
+            // Fallback gracefully without throwing
+          }
+        }
+      }
+    } else {
+      // Recipe was reset to default, clean up processed cache if it exists
+      final targetPath =
+          '${AppStorageService.instance.processedDir.path}/${pageId}_proc.jpg';
+      final file = File(targetPath);
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+      newProcessedPath = null;
+    }
+
     final updated = state.pages.map((p) {
       if (p.id == pageId) {
-        return p.copyWith(editRecipe: recipe);
+        return p.copyWith(editRecipe: recipe, processedPath: newProcessedPath);
       }
       return p;
     }).toList();

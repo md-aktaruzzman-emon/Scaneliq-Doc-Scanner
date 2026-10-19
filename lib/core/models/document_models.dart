@@ -509,6 +509,17 @@ class EditRecipe {
 
   bool get hasCleanup => cleanupPatches.isNotEmpty;
 
+  bool get isDefault =>
+      rotationDegrees == 0 &&
+      filter == PageFilter.original &&
+      brightness == 0.0 &&
+      contrast == 1.0 &&
+      !hasCrop &&
+      !hasPerspective &&
+      binarization == BinarizationMode.none &&
+      !shadowCorrection &&
+      !hasCleanup;
+
   EditRecipe copyWith({
     int? rotationDegrees,
     PageFilter? filter,
