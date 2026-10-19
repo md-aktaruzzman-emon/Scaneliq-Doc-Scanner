@@ -23,7 +23,7 @@ void main() {
       // Tap Documents tab
       await tester.tap(find.text('Documents'));
       await tester.pumpAndSettle();
-      expect(find.text('Search files...'), findsOneWidget);
+      expect(find.text('Search documents...'), findsOneWidget);
 
       // Tap Tools tab
       await tester.tap(find.text('Tools'));

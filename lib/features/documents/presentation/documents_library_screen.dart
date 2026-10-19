@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -10,6 +11,7 @@ import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/data/batch_merge_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/documents/presentation/trash_screen.dart';
+import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 
 enum DocumentSortOption { newest, oldest, nameAsc, nameDesc }
@@ -30,6 +32,7 @@ class _DocumentsLibraryScreenState
   String _searchQuery = '';
   DocumentSortOption _sortOption = DocumentSortOption.newest;
   FileCategoryFilter _selectedCategory = FileCategoryFilter.all;
+  bool _isGridView = false;
 
   // Hierarchical Folder Navigation
   String? _currentFolderId;
@@ -95,6 +98,57 @@ class _DocumentsLibraryScreenState
       _selectedDocIds.clear();
       _selectedDocIds.addAll(docs.map((d) => d.id));
     });
+  }
+
+  void _startNewScan() async {
+    ref.read(scanSessionProvider.notifier).resetSession();
+    final success = await ref
+        .read(scanSessionProvider.notifier)
+        .startScannerCapture();
+    if (success && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ReviewPagesScreen()),
+      );
+    }
+  }
+
+  void _importFiles() async {
+    try {
+      final pickedFiles = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+      );
+
+      if (pickedFiles.isNotEmpty) {
+        final files = pickedFiles
+            .where((p) => p.path != null)
+            .map((p) => File(p.path!))
+            .toList();
+
+        if (files.isNotEmpty) {
+          ref.read(scanSessionProvider.notifier).resetSession();
+          final count = await ref
+              .read(scanSessionProvider.notifier)
+              .importFiles(files);
+          if (count > 0 && mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ReviewPagesScreen()),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not import files: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   // ===========================================================================
@@ -675,7 +729,7 @@ class _DocumentsLibraryScreenState
                 style: const TextStyle(fontWeight: FontWeight.bold),
               )
             : const Text(
-                'Files',
+                'Documents',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
               ),
         leading: _isSelectionMode
@@ -701,6 +755,19 @@ class _DocumentsLibraryScreenState
                   : null),
         actions: [
           if (!_isSelectionMode) ...[
+            IconButton(
+              icon: Icon(
+                _isGridView
+                    ? Icons.view_agenda_outlined
+                    : Icons.grid_view_outlined,
+              ),
+              tooltip: _isGridView ? 'Switch to List' : 'Switch to Grid',
+              onPressed: () {
+                setState(() {
+                  _isGridView = !_isGridView;
+                });
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.create_new_folder_outlined),
               tooltip: 'New Folder',
@@ -789,7 +856,7 @@ class _DocumentsLibraryScreenState
                         ),
                         SizedBox(width: 4),
                         Text(
-                          'Files',
+                          'Documents',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: AppColors.brandPrimary,
@@ -848,7 +915,7 @@ class _DocumentsLibraryScreenState
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search files...',
+                hintText: 'Search documents...',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
@@ -910,29 +977,39 @@ class _DocumentsLibraryScreenState
             data: (tags) {
               if (tags.isEmpty) return const SizedBox.shrink();
               return SizedBox(
-                height: 38,
+                height: 44,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 2,
+                    vertical: 4,
                   ),
-                  itemCount: tags.length,
+                  itemCount: tags.length + 1,
                   itemBuilder: (context, index) {
-                    final t = tags[index];
+                    if (index == 0) {
+                      final isAllSelected = _selectedTagIds.isEmpty;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          selected: isAllSelected,
+                          label: const Text('All'),
+                          onSelected: (_) {
+                            setState(() => _selectedTagIds.clear());
+                          },
+                        ),
+                      );
+                    }
+                    final t = tags[index - 1];
                     final isSelected = _selectedTagIds.contains(t.id);
                     return Padding(
-                      padding: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
                         selected: isSelected,
                         avatar: CircleAvatar(
                           backgroundColor: Color(t.colorValue),
                           radius: 5,
                         ),
-                        label: Text(
-                          t.name,
-                          style: const TextStyle(fontSize: 12),
-                        ),
+                        label: Text(t.name),
                         onSelected: (val) {
                           setState(() {
                             if (val) {
@@ -1016,38 +1093,119 @@ class _DocumentsLibraryScreenState
 
                 if (filtered.isEmpty) {
                   return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.folder_open,
-                          size: 64,
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No documents in this view',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 32,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 76,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.surface2Dark
+                                  : AppColors.brandLight,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _searchQuery.isNotEmpty ||
+                                      _selectedTagIds.isNotEmpty ||
+                                      _selectedCategory !=
+                                          FileCategoryFilter.all
+                                  ? Icons.search_off_rounded
+                                  : Icons.folder_open_rounded,
+                              size: 38,
+                              color: AppColors.brandPrimary,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _searchQuery.isNotEmpty
-                              ? 'Try clearing your search query'
-                              : 'Scan or import pages to add files',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : AppColors.textSecondaryLight,
+                          const SizedBox(height: 18),
+                          Text(
+                            _searchQuery.isNotEmpty
+                                ? 'No matching documents'
+                                : (_currentFolder != null
+                                    ? 'Folder is empty'
+                                    : 'No documents yet'),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 8),
+                          Text(
+                            _searchQuery.isNotEmpty
+                                ? 'Try clearing your search query or removing filters.'
+                                : 'Scan receipts, contracts, IDs, or import files from your device.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                ),
+                            textAlign: TextAlign.center,
+                          ),
+                          if (_searchQuery.isEmpty) ...[
+                            const SizedBox(height: 22),
+                            ElevatedButton.icon(
+                              onPressed: _startNewScan,
+                              icon: const Icon(
+                                Icons.document_scanner_rounded,
+                                size: 18,
+                              ),
+                              label: const Text('Scan document'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.brandPrimary,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(180, 46),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: _importFiles,
+                              icon: const Icon(
+                                Icons.file_upload_outlined,
+                                size: 18,
+                              ),
+                              label: const Text('Import files'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.brandPrimary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
+                  );
+                }
+
+                if (_isGridView) {
+                  return GridView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 0.74,
+                        ),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final doc = filtered[index];
+                      final isSelected = _selectedDocIds.contains(doc.id);
+                      return _buildGridDocumentCard(doc, isDark, isSelected);
+                    },
                   );
                 }
 
@@ -1060,220 +1218,7 @@ class _DocumentsLibraryScreenState
                   itemBuilder: (context, index) {
                     final doc = filtered[index];
                     final isSelected = _selectedDocIds.contains(doc.id);
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: isSelected
-                            ? const BorderSide(
-                                color: AppColors.brandPrimary,
-                                width: 2,
-                              )
-                            : BorderSide.none,
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onLongPress: () {
-                          setState(() {
-                            _isSelectionMode = true;
-                            _selectedDocIds.add(doc.id);
-                          });
-                        },
-                        onTap: () {
-                          if (_isSelectionMode) {
-                            _toggleSelection(doc.id);
-                          } else {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    DocumentViewerScreen(document: doc),
-                              ),
-                            );
-                          }
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              if (_isSelectionMode) ...[
-                                Checkbox(
-                                  value: isSelected,
-                                  onChanged: (_) => _toggleSelection(doc.id),
-                                ),
-                                const SizedBox(width: 4),
-                              ],
-                              // Thumbnail
-                              Container(
-                                width: 56,
-                                height: 70,
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? AppColors.surface2Dark
-                                      : Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child:
-                                    (doc.pages.isNotEmpty &&
-                                        File(doc.pages.first.originalPath)
-                                            .existsSync())
-                                    ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.file(
-                                          File(doc.pages.first.originalPath),
-                                          fit: BoxFit.cover,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.picture_as_pdf,
-                                        color: Colors.grey,
-                                      ),
-                              ),
-                              const SizedBox(width: 12),
-                              // Content
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      doc.title,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${doc.pageCount} page${doc.pageCount > 1 ? 's' : ''}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark
-                                            ? AppColors.textSecondaryDark
-                                            : AppColors.textSecondaryLight,
-                                      ),
-                                    ),
-                                    // Tags Pills
-                                    if (doc.tags.isNotEmpty) ...[
-                                      const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 4,
-                                        runSpacing: 4,
-                                        children: [
-                                          for (final tag in doc.tags)
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Color(tag.colorValue)
-                                                    .withAlpha(30),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                border: Border.all(
-                                                  color: Color(tag.colorValue),
-                                                  width: 0.8,
-                                                ),
-                                              ),
-                                              child: Text(
-                                                tag.name,
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(tag.colorValue),
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              // Trailing options
-                              if (!_isSelectionMode) ...[
-                                IconButton(
-                                  icon: Icon(
-                                    doc.isFavorite
-                                        ? Icons.star_rounded
-                                        : Icons.star_outline_rounded,
-                                    color: doc.isFavorite ? Colors.amber : null,
-                                  ),
-                                  onPressed: () async {
-                                    await AppDatabaseService.instance
-                                        .toggleFavorite(
-                                          doc.id,
-                                          !doc.isFavorite,
-                                        );
-                                    _invalidateAll();
-                                  },
-                                ),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert),
-                                  onSelected: (val) {
-                                    if (val == 'view') {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => DocumentViewerScreen(
-                                            document: doc,
-                                          ),
-                                        ),
-                                      );
-                                    } else if (val == 'share') {
-                                      _shareDocument(doc);
-                                    } else if (val == 'rename') {
-                                      _renameDocumentWithSmartNaming(doc);
-                                    } else if (val == 'move') {
-                                      _showMoveFolderSheet([doc.id]);
-                                    } else if (val == 'tag') {
-                                      _showAssignTagsSheet([doc.id]);
-                                    } else if (val == 'trash') {
-                                      _moveToTrash(doc);
-                                    }
-                                  },
-                                  itemBuilder: (ctx) => const [
-                                    PopupMenuItem(
-                                      value: 'view',
-                                      child: Text('View Document'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'share',
-                                      child: Text('Share PDF'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'rename',
-                                      child: Text('Rename (Smart Name)'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'move',
-                                      child: Text('Move to Folder'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'tag',
-                                      child: Text('Assign Tags'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'trash',
-                                      child: Text(
-                                        'Move to Trash',
-                                        style: TextStyle(
-                                          color: AppColors.error,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
+                    return _buildListDocumentCard(doc, isDark, isSelected);
                   },
                 );
               },
@@ -1366,6 +1311,371 @@ class _DocumentsLibraryScreenState
               ),
             )
           : null,
+    );
+  }
+
+  Widget _buildListDocumentCard(
+    ScannedDocument doc,
+    bool isDark,
+    bool isSelected,
+  ) {
+    final thumbPath = doc.pages.isNotEmpty
+        ? (doc.pages.first.processedPath ?? doc.pages.first.originalPath)
+        : null;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surface1Dark : AppColors.surface0Light,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isSelected
+              ? AppColors.brandPrimary
+              : (isDark ? AppColors.borderDark : AppColors.borderLight),
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onLongPress: () {
+            setState(() {
+              _isSelectionMode = true;
+              _selectedDocIds.add(doc.id);
+            });
+          },
+          onTap: () {
+            if (_isSelectionMode) {
+              _toggleSelection(doc.id);
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DocumentViewerScreen(document: doc),
+                ),
+              );
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                if (_isSelectionMode) ...[
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleSelection(doc.id),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                // Thumbnail
+                Container(
+                  width: 56,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppColors.surface2Dark
+                        : AppColors.brandLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: (thumbPath != null && File(thumbPath).existsSync())
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            File(thumbPath),
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : const Center(
+                          child: Icon(
+                            Icons.picture_as_pdf_rounded,
+                            color: AppColors.brandPrimary,
+                            size: 24,
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 12),
+                // Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        doc.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${doc.pageCount} page${doc.pageCount > 1 ? 's' : ''}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                        ),
+                      ),
+                      // Tags Pills
+                      if (doc.tags.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: [
+                            for (final tag in doc.tags)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Color(tag.colorValue).withValues(
+                                    alpha: 0.12,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: Color(tag.colorValue).withValues(
+                                      alpha: 0.35,
+                                    ),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  tag.name,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(tag.colorValue),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                // Trailing options
+                if (!_isSelectionMode) ...[
+                  IconButton(
+                    icon: Icon(
+                      doc.isFavorite
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: doc.isFavorite ? Colors.amber : null,
+                    ),
+                    onPressed: () async {
+                      await AppDatabaseService.instance.toggleFavorite(
+                        doc.id,
+                        !doc.isFavorite,
+                      );
+                      _invalidateAll();
+                    },
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (val) {
+                      if (val == 'view') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                DocumentViewerScreen(document: doc),
+                          ),
+                        );
+                      } else if (val == 'share') {
+                        _shareDocument(doc);
+                      } else if (val == 'rename') {
+                        _renameDocumentWithSmartNaming(doc);
+                      } else if (val == 'move') {
+                        _showMoveFolderSheet([doc.id]);
+                      } else if (val == 'tag') {
+                        _showAssignTagsSheet([doc.id]);
+                      } else if (val == 'trash') {
+                        _moveToTrash(doc);
+                      }
+                    },
+                    itemBuilder: (ctx) => const [
+                      PopupMenuItem(
+                        value: 'view',
+                        child: Text('View Document'),
+                      ),
+                      PopupMenuItem(
+                        value: 'share',
+                        child: Text('Share PDF'),
+                      ),
+                      PopupMenuItem(
+                        value: 'rename',
+                        child: Text('Rename (Smart Name)'),
+                      ),
+                      PopupMenuItem(
+                        value: 'move',
+                        child: Text('Move to Folder'),
+                      ),
+                      PopupMenuItem(
+                        value: 'tag',
+                        child: Text('Assign Tags'),
+                      ),
+                      PopupMenuItem(
+                        value: 'trash',
+                        child: Text(
+                          'Move to Trash',
+                          style: TextStyle(
+                            color: AppColors.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridDocumentCard(
+    ScannedDocument doc,
+    bool isDark,
+    bool isSelected,
+  ) {
+    final thumbPath = doc.pages.isNotEmpty
+        ? (doc.pages.first.processedPath ?? doc.pages.first.originalPath)
+        : null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surface1Dark : AppColors.surface0Light,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isSelected
+              ? AppColors.brandPrimary
+              : (isDark ? AppColors.borderDark : AppColors.borderLight),
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onLongPress: () {
+            setState(() {
+              _isSelectionMode = true;
+              _selectedDocIds.add(doc.id);
+            });
+          },
+          onTap: () {
+            if (_isSelectionMode) {
+              _toggleSelection(doc.id);
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DocumentViewerScreen(document: doc),
+                ),
+              );
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.surface2Dark
+                              : AppColors.brandLight,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child:
+                            (thumbPath != null && File(thumbPath).existsSync())
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.file(
+                                      File(thumbPath),
+                                      fit: BoxFit.cover,
+                                      width: double.infinity,
+                                    ),
+                                  )
+                                : const Center(
+                                    child: Icon(
+                                      Icons.picture_as_pdf_rounded,
+                                      color: AppColors.brandPrimary,
+                                      size: 32,
+                                    ),
+                                  ),
+                      ),
+                      if (_isSelectionMode)
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isSelected
+                                  ? Icons.check_circle_rounded
+                                  : Icons.radio_button_unchecked_rounded,
+                              color: isSelected
+                                  ? AppColors.brandPrimary
+                                  : Colors.grey,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      if (!_isSelectionMode && doc.isFavorite)
+                        const Positioned(
+                          top: 4,
+                          right: 4,
+                          child: Icon(
+                            Icons.star_rounded,
+                            color: Colors.amber,
+                            size: 20,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  doc.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${doc.pageCount} page${doc.pageCount > 1 ? 's' : ''}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
