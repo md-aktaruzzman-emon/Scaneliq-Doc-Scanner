@@ -7,14 +7,7 @@ import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 
-enum ScanMode {
-  document,
-  batch,
-  idCard,
-  questionSet,
-  book,
-  whiteboard,
-}
+enum ScanMode { document, batch, idCard, questionSet, book, whiteboard }
 
 class ContinuousCameraScreen extends ConsumerStatefulWidget {
   final ScanMode mode;
@@ -31,8 +24,7 @@ class ContinuousCameraScreen extends ConsumerStatefulWidget {
       _ContinuousCameraScreenState();
 }
 
-class _ContinuousCameraScreenState
-    extends ConsumerState<ContinuousCameraScreen>
+class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
   List<CameraDescription> _cameras = [];
@@ -149,7 +141,9 @@ class _ContinuousCameraScreenState
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Front side captured! Now flip the card and scan Back side.'),
+                  content: Text(
+                    'Front side captured! Now flip the card and scan Back side.',
+                  ),
                   duration: Duration(seconds: 2),
                 ),
               );
@@ -158,7 +152,9 @@ class _ContinuousCameraScreenState
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Both ID card sides captured! Advancing to review...'),
+                  content: Text(
+                    'Both ID card sides captured! Advancing to review...',
+                  ),
                   duration: Duration(seconds: 1),
                 ),
               );
@@ -193,7 +189,9 @@ class _ContinuousCameraScreenState
     final session = ref.read(scanSessionProvider);
     if (session.pages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please capture at least one page before finishing.')),
+        const SnackBar(
+          content: Text('Please capture at least one page before finishing.'),
+        ),
       );
       return;
     }
@@ -266,9 +264,7 @@ class _ContinuousCameraScreenState
         children: [
           // Camera Preview
           if (_isCameraInitialized && _cameraController != null)
-            Center(
-              child: CameraPreview(_cameraController!),
-            )
+            Center(child: CameraPreview(_cameraController!))
           else if (_errorMessage != null)
             Center(
               child: Padding(
@@ -276,7 +272,11 @@ class _ContinuousCameraScreenState
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.camera_alt_outlined, size: 64, color: Colors.grey),
+                    const Icon(
+                      Icons.camera_alt_outlined,
+                      size: 64,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       _errorMessage!,
@@ -300,7 +300,10 @@ class _ContinuousCameraScreenState
             Center(
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.88,
-                height: MediaQuery.of(context).size.width * 0.88 * 0.63, // Standard ID-1 aspect ratio
+                height:
+                    MediaQuery.of(context).size.width *
+                    0.88 *
+                    0.63, // Standard ID-1 aspect ratio
                 decoration: BoxDecoration(
                   border: Border.all(color: AppColors.brandLight, width: 2.5),
                   borderRadius: BorderRadius.circular(16),
@@ -347,12 +350,17 @@ class _ContinuousCameraScreenState
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
                                 child: Image.file(
-                                  File(session.pages.last.processedPath ??
-                                      session.pages.last.originalPath),
+                                  File(
+                                    session.pages.last.processedPath ??
+                                        session.pages.last.originalPath,
+                                  ),
                                   fit: BoxFit.cover,
                                 ),
                               )
-                            : const Icon(Icons.photo_library, color: Colors.white54),
+                            : const Icon(
+                                Icons.photo_library,
+                                color: Colors.white54,
+                              ),
                       ),
                     ),
 
@@ -371,7 +379,9 @@ class _ContinuousCameraScreenState
                             width: 60,
                             height: 60,
                             decoration: BoxDecoration(
-                              color: _isCapturing ? Colors.grey : AppColors.brandPrimary,
+                              color: _isCapturing
+                                  ? Colors.grey
+                                  : AppColors.brandPrimary,
                               shape: BoxShape.circle,
                             ),
                             child: _isCapturing
@@ -385,7 +395,11 @@ class _ContinuousCameraScreenState
                                       ),
                                     ),
                                   )
-                                : const Icon(Icons.camera_alt, color: Colors.white, size: 30),
+                                : const Icon(
+                                    Icons.camera_alt,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
                           ),
                         ),
                       ),
@@ -408,7 +422,10 @@ class _ContinuousCameraScreenState
                           ),
                           const Text(
                             'pages',
-                            style: TextStyle(color: Colors.white70, fontSize: 11),
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
                           ),
                         ],
                       ),

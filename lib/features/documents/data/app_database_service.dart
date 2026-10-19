@@ -115,11 +115,10 @@ class AppDatabaseService {
   Future<void> saveDocumentOcr(String documentId, String fullText) async {
     if (fullText.trim().isEmpty) return;
     final db = await database;
-    await db.insert(
-      'document_ocr',
-      {'document_id': documentId, 'full_text': fullText.trim()},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('document_ocr', {
+      'document_id': documentId,
+      'full_text': fullText.trim(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Retrieves the OCR text for a document if available
@@ -169,12 +168,15 @@ class AppDatabaseService {
 
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       final term = '%${searchQuery.trim()}%';
-      docRows = await db.rawQuery('''
+      docRows = await db.rawQuery(
+        '''
         SELECT DISTINCT d.* FROM documents d
         LEFT JOIN document_ocr o ON d.id = o.document_id
         WHERE d.title LIKE ? OR o.full_text LIKE ?
         ORDER BY d.modified_at DESC
-      ''', [term, term]);
+      ''',
+        [term, term],
+      );
     } else {
       docRows = await db.query('documents', orderBy: 'modified_at DESC');
     }
@@ -247,7 +249,11 @@ class AppDatabaseService {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('pages', where: 'document_id = ?', whereArgs: [id]);
-      await txn.delete('document_ocr', where: 'document_id = ?', whereArgs: [id]);
+      await txn.delete(
+        'document_ocr',
+        where: 'document_id = ?',
+        whereArgs: [id],
+      );
       await txn.delete('documents', where: 'id = ?', whereArgs: [id]);
     });
   }

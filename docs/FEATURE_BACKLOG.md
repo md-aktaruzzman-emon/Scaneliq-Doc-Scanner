@@ -15,6 +15,7 @@
 
 | ID | Feature Name | Description | Priority | Phase | Status | Primary Source Files | Verification Tests |
 |---|---|---|:---:|:---:|:---:|---|---|
+| **F-00** | **Design System & Navigation Overhaul** | Centralized semantic tokens (`surface0–3`, `#021642`, `#2563EB`, `#00F0FF`), 4-tab shell with elevated shutter, modern Home, Files, Tools, and Settings screens | P0 | 1 | **TESTED** | `lib/core/theme/app_theme.dart`, `lib/app/main_navigation_shell.dart`, `lib/features/documents/presentation/home_screen.dart`, `lib/features/documents/presentation/documents_library_screen.dart`, `lib/features/settings/presentation/tools_screen.dart`, `lib/features/settings/presentation/settings_screen.dart` | `test/navigation_and_screens_test.dart`, `test/widget_test.dart` |
 | **F-01** | **Camera Edge & Batch Scanner** | Google ML Kit document scanner with auto/manual edge detection & multi-page capture | P0 | A/B | **IMPLEMENTED** | `lib/features/scanner/presentation/scan_session_provider.dart` | Blocked on physical camera hardware; APK bundled & badging verified |
 | **F-02** | **Multi-Image & File Picker** | Multi-file import (JPG, PNG, WebP) with atomic copy to `originals/` | P0 | A/B | **TESTED** | `lib/core/storage/app_storage_service.dart` | `test/storage_service_test.dart` |
 | **F-03** | **Draft Session Recovery** | Persistent recovery of unfinished scan sessions with Home banner | P0 | A/B | **TESTED** | `lib/features/documents/data/app_database_service.dart` | `test/database_persistence_test.dart` |

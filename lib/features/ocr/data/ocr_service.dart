@@ -24,10 +24,7 @@ class PageOcrResult {
   final String fullText;
   final List<OcrBoundingBox> boxes;
 
-  const PageOcrResult({
-    required this.fullText,
-    required this.boxes,
-  });
+  const PageOcrResult({required this.fullText, required this.boxes});
 
   String get text => fullText;
 }
@@ -77,10 +74,7 @@ class OcrService {
         }
       }
 
-      return PageOcrResult(
-        fullText: recognizedText.text,
-        boxes: boxes,
-      );
+      return PageOcrResult(fullText: recognizedText.text, boxes: boxes);
     } catch (_) {
       return const PageOcrResult(fullText: '', boxes: []);
     }
@@ -90,4 +84,3 @@ class OcrService {
     _recognizer.close();
   }
 }
-

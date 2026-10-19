@@ -35,7 +35,8 @@ class _ScanCodeScreenState extends State<ScanCodeScreen> {
   }
 
   void _showResultSheet(String value) {
-    final isUrl = Uri.tryParse(value)?.hasScheme == true &&
+    final isUrl =
+        Uri.tryParse(value)?.hasScheme == true &&
         (value.startsWith('http://') || value.startsWith('https://'));
 
     showModalBottomSheet(
@@ -175,10 +176,7 @@ class _ScanCodeScreenState extends State<ScanCodeScreen> {
       ),
       body: Stack(
         children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-          ),
+          MobileScanner(controller: _controller, onDetect: _onDetect),
           Center(
             child: Container(
               width: 250,

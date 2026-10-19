@@ -7,7 +7,8 @@ import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 /// Advanced PDF processing engine for merging, splitting, encrypting, and watermarking PDFs.
 class AdvancedPdfService {
   static AdvancedPdfService? _instance;
-  static AdvancedPdfService get instance => _instance ??= AdvancedPdfService._();
+  static AdvancedPdfService get instance =>
+      _instance ??= AdvancedPdfService._();
   AdvancedPdfService._();
 
   /// Merges multiple existing PDF files into a single consolidated PDF file.
@@ -24,7 +25,9 @@ class AdvancedPdfService {
     try {
       for (final file in sourcePdfs) {
         if (!await file.exists()) {
-          throw FileNotFoundException('Source PDF file does not exist: ${file.path}');
+          throw FileNotFoundException(
+            'Source PDF file does not exist: ${file.path}',
+          );
         }
         final bytes = await file.readAsBytes();
         final sf.PdfDocument sourceDoc = sf.PdfDocument(inputBytes: bytes);
@@ -67,7 +70,9 @@ class AdvancedPdfService {
     required String baseOutputName,
   }) async {
     if (!await sourcePdf.exists()) {
-      throw FileNotFoundException('Source PDF does not exist: ${sourcePdf.path}');
+      throw FileNotFoundException(
+        'Source PDF does not exist: ${sourcePdf.path}',
+      );
     }
 
     final bytes = await sourcePdf.readAsBytes();
@@ -76,7 +81,10 @@ class AdvancedPdfService {
 
     try {
       final int count = sourceDoc.pages.count;
-      final sanitizedBase = baseOutputName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final sanitizedBase = baseOutputName.replaceAll(
+        RegExp(r'[\\/:*?"<>|]'),
+        '_',
+      );
 
       for (int i = 0; i < count; i++) {
         final sf.PdfDocument singleDoc = sf.PdfDocument();
@@ -91,7 +99,9 @@ class AdvancedPdfService {
 
           final List<int> singleBytes = singleDoc.saveSync();
           final outName = '${sanitizedBase}_page_${i + 1}';
-          final exportPath = AppStorageService.instance.getExportPdfPath(outName);
+          final exportPath = AppStorageService.instance.getExportPdfPath(
+            outName,
+          );
           final tempPath = '$exportPath.tmp';
 
           final tempFile = File(tempPath);
@@ -115,7 +125,9 @@ class AdvancedPdfService {
     required String outputFileName,
   }) async {
     if (!await sourcePdf.exists()) {
-      throw FileNotFoundException('Source PDF does not exist: ${sourcePdf.path}');
+      throw FileNotFoundException(
+        'Source PDF does not exist: ${sourcePdf.path}',
+      );
     }
     if (pageNumbers.isEmpty) {
       throw ArgumentError('At least one page number must be specified.');
@@ -129,9 +141,12 @@ class AdvancedPdfService {
       final int totalPages = sourceDoc.pages.count;
       for (final pNum in pageNumbers) {
         if (pNum < 1 || pNum > totalPages) {
-          throw RangeError('Page number $pNum is out of bounds (1 to $totalPages).');
+          throw RangeError(
+            'Page number $pNum is out of bounds (1 to $totalPages).',
+          );
         }
-        final sf.PdfTemplate template = sourceDoc.pages[pNum - 1].createTemplate();
+        final sf.PdfTemplate template = sourceDoc.pages[pNum - 1]
+            .createTemplate();
         final sf.PdfPage newPage = extractedDoc.pages.add();
         newPage.graphics.drawPdfTemplate(
           template,
@@ -162,7 +177,9 @@ class AdvancedPdfService {
     required String outputFileName,
   }) async {
     if (!await sourcePdf.exists()) {
-      throw FileNotFoundException('Source PDF does not exist: ${sourcePdf.path}');
+      throw FileNotFoundException(
+        'Source PDF does not exist: ${sourcePdf.path}',
+      );
     }
     if (userPassword.trim().isEmpty) {
       throw ArgumentError('User password cannot be empty.');
@@ -201,7 +218,9 @@ class AdvancedPdfService {
     required String outputFileName,
   }) async {
     if (!await sourcePdf.exists()) {
-      throw FileNotFoundException('Source PDF does not exist: ${sourcePdf.path}');
+      throw FileNotFoundException(
+        'Source PDF does not exist: ${sourcePdf.path}',
+      );
     }
     if (watermarkText.trim().isEmpty) {
       throw ArgumentError('Watermark text cannot be empty.');
@@ -216,7 +235,9 @@ class AdvancedPdfService {
         36,
         style: sf.PdfFontStyle.bold,
       );
-      final sf.PdfBrush brush = sf.PdfSolidBrush(sf.PdfColor(180, 180, 180, 100));
+      final sf.PdfBrush brush = sf.PdfSolidBrush(
+        sf.PdfColor(180, 180, 180, 100),
+      );
 
       for (int i = 0; i < sourceDoc.pages.count; i++) {
         final page = sourceDoc.pages[i];

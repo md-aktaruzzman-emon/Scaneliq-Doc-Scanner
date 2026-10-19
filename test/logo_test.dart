@@ -40,9 +40,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: ScaneliqLogo(size: 80, borderRadius: 16),
-          ),
+          home: Scaffold(body: ScaneliqLogo(size: 80, borderRadius: 16)),
         ),
       );
 

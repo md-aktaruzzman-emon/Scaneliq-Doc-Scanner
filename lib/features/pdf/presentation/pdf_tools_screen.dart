@@ -27,7 +27,9 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       if (picked.length < 2) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select at least 2 PDF files to merge.')),
+            const SnackBar(
+              content: Text('Please select at least 2 PDF files to merge.'),
+            ),
           );
         }
         return;
@@ -65,7 +67,10 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Merge failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Merge failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -101,7 +106,9 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Split Completed'),
-            content: Text('Generated ${splitFiles.length} single-page PDF files in exports.'),
+            content: Text(
+              'Generated ${splitFiles.length} single-page PDF files in exports.',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -118,7 +125,10 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Split failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Split failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -154,7 +164,8 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, passwordController.text.trim()),
+              onPressed: () =>
+                  Navigator.pop(ctx, passwordController.text.trim()),
               child: const Text('Protect'),
             ),
           ],
@@ -189,7 +200,10 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Encryption failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Encryption failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -224,7 +238,8 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, watermarkController.text.trim()),
+              onPressed: () =>
+                  Navigator.pop(ctx, watermarkController.text.trim()),
               child: const Text('Apply'),
             ),
           ],
@@ -259,7 +274,10 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Watermark failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Watermark failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -278,10 +296,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
             onPressed: () {
               Navigator.pop(ctx);
               SharePlus.instance.share(
-                ShareParams(
-                  text: title,
-                  files: [XFile(file.path)],
-                ),
+                ShareParams(text: title, files: [XFile(file.path)]),
               );
             },
           ),
@@ -298,7 +313,10 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Advanced PDF Tools', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Advanced PDF Tools',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: Stack(
         children: [
@@ -334,7 +352,8 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
                 icon: Icons.lock,
                 color: Colors.green,
                 title: 'Password Encryption',
-                subtitle: 'Protect sensitive documents with AES-256 bit encryption',
+                subtitle:
+                    'Protect sensitive documents with AES-256 bit encryption',
                 onTap: _isProcessing ? null : _encryptPdf,
               ),
               const SizedBox(height: 12),

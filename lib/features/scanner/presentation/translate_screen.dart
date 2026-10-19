@@ -18,7 +18,8 @@ class TranslateScreen extends StatefulWidget {
 class _TranslateScreenState extends State<TranslateScreen> {
   final GoogleTranslator _translator = GoogleTranslator();
   final TextEditingController _sourceTextController = TextEditingController();
-  final TextEditingController _translatedTextController = TextEditingController();
+  final TextEditingController _translatedTextController =
+      TextEditingController();
 
   String _sourceLang = 'auto';
   String _targetLang = 'bn'; // Default to Bengali
@@ -75,7 +76,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('OCR extraction failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('OCR extraction failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -140,7 +144,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Translation error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Translation error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } finally {
@@ -169,7 +176,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Document & OCR Translator', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Document & OCR Translator',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.document_scanner),
@@ -192,7 +202,12 @@ class _TranslateScreenState extends State<TranslateScreen> {
                     value: _sourceLang,
                     underline: const SizedBox(),
                     items: _languages.entries
-                        .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.value),
+                          ),
+                        )
                         .toList(),
                     onChanged: (val) {
                       if (val != null) setState(() => _sourceLang = val);
@@ -207,7 +222,12 @@ class _TranslateScreenState extends State<TranslateScreen> {
                     underline: const SizedBox(),
                     items: _languages.entries
                         .where((e) => e.key != 'auto')
-                        .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.value),
+                          ),
+                        )
                         .toList(),
                     onChanged: (val) {
                       if (val != null) setState(() => _targetLang = val);
@@ -229,7 +249,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Original Text', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text(
+                        'Original Text',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       if (_isOcrExtracting)
                         const SizedBox(
                           width: 16,
@@ -239,7 +262,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
                       else
                         TextButton.icon(
                           icon: const Icon(Icons.photo_library, size: 16),
-                          label: const Text('Import Image', style: TextStyle(fontSize: 12)),
+                          label: const Text(
+                            'Import Image',
+                            style: TextStyle(fontSize: 12),
+                          ),
                           onPressed: _pickImageAndExtractOcr,
                         ),
                     ],
@@ -249,7 +275,8 @@ class _TranslateScreenState extends State<TranslateScreen> {
                     controller: _sourceTextController,
                     maxLines: 5,
                     decoration: const InputDecoration(
-                      hintText: 'Type or import an image to extract text via OCR...',
+                      hintText:
+                          'Type or import an image to extract text via OCR...',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -262,7 +289,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : const Icon(Icons.translate),
                       label: const Text('Translate'),
@@ -287,7 +317,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
                       children: [
                         Text(
                           'Translated Text (${_languages[_targetLang]})',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandPrimary),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.brandPrimary,
+                          ),
                         ),
                         Row(
                           children: [
@@ -295,9 +328,15 @@ class _TranslateScreenState extends State<TranslateScreen> {
                               icon: const Icon(Icons.copy, size: 18),
                               tooltip: 'Copy',
                               onPressed: () {
-                                Clipboard.setData(ClipboardData(text: _translatedTextController.text));
+                                Clipboard.setData(
+                                  ClipboardData(
+                                    text: _translatedTextController.text,
+                                  ),
+                                );
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Copied translation!')),
+                                  const SnackBar(
+                                    content: Text('Copied translation!'),
+                                  ),
                                 );
                               },
                             ),
@@ -305,7 +344,11 @@ class _TranslateScreenState extends State<TranslateScreen> {
                               icon: const Icon(Icons.share, size: 18),
                               tooltip: 'Share',
                               onPressed: () {
-                                SharePlus.instance.share(ShareParams(text: _translatedTextController.text));
+                                SharePlus.instance.share(
+                                  ShareParams(
+                                    text: _translatedTextController.text,
+                                  ),
+                                );
                               },
                             ),
                           ],

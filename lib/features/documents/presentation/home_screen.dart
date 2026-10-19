@@ -4,11 +4,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
+import 'package:scaneliq/features/pdf/presentation/pdf_tools_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/count_cam_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_code_screen.dart';
@@ -25,6 +27,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _isGridView = false;
 
   @override
   void dispose() {
@@ -83,204 +86,145 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  Future<void> _toggleFavorite(ScannedDocument doc) async {
+    await AppDatabaseService.instance.toggleFavorite(doc.id, !doc.isFavorite);
+    ref.invalidate(documentsListProvider);
+  }
+
+  Future<void> _shareDocument(ScannedDocument doc) async {
+    final hasExport =
+        doc.exportPath != null && File(doc.exportPath!).existsSync();
+    if (hasExport) {
+      SharePlus.instance.share(
+        ShareParams(text: doc.title, files: [XFile(doc.exportPath!)]),
+      );
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No PDF export found for this scan.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteDocument(ScannedDocument doc) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Document?'),
+        content: Text('Are you sure you want to delete "${doc.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await AppDatabaseService.instance.deleteDocument(doc.id);
+      ref.invalidate(documentsListProvider);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final docsAsync = ref.watch(documentsListProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           children: [
-            const ScaneliqLogo(size: 32, borderRadius: 8),
-            const SizedBox(width: 10),
-            const Text(
+            ScaneliqLogo(size: 28, borderRadius: 6),
+            SizedBox(width: 10),
+            Text(
               'Scaneliq',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19),
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'PDF Tools',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PdfToolsScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(documentsListProvider);
+          ref.invalidate(latestDraftProvider);
         },
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
-                      child: Column(
-                        children: [
-                          const ScaneliqLogo(size: 96),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Scaneliq',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Scan documents. Keep everything organized.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondaryLight,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    // Primary Action: Scan Document
-                    ElevatedButton.icon(
-                      onPressed: _startNewScan,
-                      icon: const Icon(
-                        Icons.document_scanner_outlined,
-                        size: 22,
-                      ),
-                      label: const Text('Scan document'),
-                    ),
-                    const SizedBox(height: 12),
-                    // Secondary Action: Import
-                    OutlinedButton.icon(
-                      onPressed: _importFiles,
-                      icon: const Icon(Icons.file_upload_outlined, size: 22),
-                      label: const Text('Import'),
-                    ),
-                    const SizedBox(height: 18),
-                    // New Scanner Features Grid
-                    const Text(
-                      'Smart Scanning Modes',
+                    // Subtitle / tagline
+                    Text(
+                      'Scan documents. Keep everything organized.',
                       style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimaryLight,
+                        fontSize: 13,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    GridView.count(
-                      crossAxisCount: 4,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 10,
-                      childAspectRatio: 0.85,
+                    const SizedBox(height: 14),
+
+                    // Primary scan & import actions
+                    Row(
                       children: [
-                        _buildModeItem(
-                          icon: Icons.burst_mode,
-                          label: 'Batch',
-                          color: Colors.blue,
-                          onTap: () {
-                            ref.read(scanSessionProvider.notifier).resetSession('Batch_Scan');
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.batch),
-                              ),
-                            );
-                          },
+                        Expanded(
+                          flex: 3,
+                          child: ElevatedButton.icon(
+                            onPressed: _startNewScan,
+                            icon: const Icon(
+                              Icons.document_scanner_rounded,
+                              size: 20,
+                            ),
+                            label: const Text('Scan document'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                            ),
+                          ),
                         ),
-                        _buildModeItem(
-                          icon: Icons.badge,
-                          label: 'ID Card',
-                          color: Colors.indigo,
-                          onTap: () {
-                            ref.read(scanSessionProvider.notifier).resetSession('ID_Card');
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.idCard),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildModeItem(
-                          icon: Icons.quiz,
-                          label: 'Questions',
-                          color: Colors.orange,
-                          onTap: () {
-                            ref.read(scanSessionProvider.notifier).resetSession('Question_Set');
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.questionSet),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildModeItem(
-                          icon: Icons.menu_book,
-                          label: 'Book',
-                          color: Colors.teal,
-                          onTap: () {
-                            ref.read(scanSessionProvider.notifier).resetSession('Book_Scan');
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.book),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildModeItem(
-                          icon: Icons.co_present,
-                          label: 'Board',
-                          color: Colors.deepPurple,
-                          onTap: () {
-                            ref.read(scanSessionProvider.notifier).resetSession('Whiteboard');
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ContinuousCameraScreen(mode: ScanMode.whiteboard),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildModeItem(
-                          icon: Icons.qr_code_scanner,
-                          label: 'Scan Code',
-                          color: Colors.green,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const ScanCodeScreen()),
-                            );
-                          },
-                        ),
-                        _buildModeItem(
-                          icon: Icons.calculate,
-                          label: 'CountCam',
-                          color: Colors.amber.shade800,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const CountCamScreen()),
-                            );
-                          },
-                        ),
-                        _buildModeItem(
-                          icon: Icons.translate,
-                          label: 'Translate',
-                          color: Colors.redAccent,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const TranslateScreen()),
-                            );
-                          },
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: OutlinedButton.icon(
+                            onPressed: _importFiles,
+                            icon: const Icon(
+                              Icons.file_upload_outlined,
+                              size: 20,
+                            ),
+                            label: const Text('Import'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+
                     // Draft recovery card if active draft exists
                     ref
                         .watch(latestDraftProvider)
@@ -290,20 +234,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               return const SizedBox.shrink();
                             }
                             return Container(
-                              margin: const EdgeInsets.only(bottom: 16),
+                              margin: const EdgeInsets.only(top: 14),
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.amber.shade50,
-                                borderRadius: BorderRadius.circular(12),
+                                color: isDark
+                                    ? AppColors.surface2Dark
+                                    : const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: Colors.amber.shade300,
+                                  color: isDark
+                                      ? AppColors.warning.withValues(alpha: 0.4)
+                                      : const Color(0xFFFDE68A),
                                 ),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(
-                                    Icons.history_toggle_off,
-                                    color: Colors.orange,
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.warning.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.history_toggle_off,
+                                      color: AppColors.warning,
+                                      size: 20,
+                                    ),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -315,25 +273,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                           'Unfinished Scan Draft',
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
-                                            fontSize: 14,
+                                            fontSize: 13,
                                           ),
                                         ),
                                         Text(
                                           '${draft.title} · ${draft.pages.length} pages',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 12,
-                                            color: Colors.black87,
+                                            color: isDark
+                                                ? AppColors.textSecondaryDark
+                                                : AppColors.textSecondaryLight,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      minimumSize: const Size(80, 36),
+                                  FilledButton.tonal(
+                                    style: FilledButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 12,
+                                        vertical: 6,
                                       ),
+                                      minimumSize: const Size(64, 34),
                                     ),
                                     onPressed: () {
                                       ref
@@ -358,16 +319,182 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           },
                           orElse: () => const SizedBox.shrink(),
                         ),
-                    const SizedBox(height: 4),
-                    // Search bar
+
+                    const SizedBox(height: 18),
+
+                    // Smart Scanning Modes Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Smart Scanning Modes',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Quick capture',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Horizontal scrolling pill carousel of smart modes
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildCarouselItem(
+                            icon: Icons.burst_mode,
+                            label: 'Batch',
+                            accentColor: const Color(0xFF2563EB),
+                            onTap: () {
+                              ref
+                                  .read(scanSessionProvider.notifier)
+                                  .resetSession('Batch_Scan');
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ContinuousCameraScreen(
+                                    mode: ScanMode.batch,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildCarouselItem(
+                            icon: Icons.badge,
+                            label: 'ID Card',
+                            accentColor: const Color(0xFF4F46E5),
+                            onTap: () {
+                              ref
+                                  .read(scanSessionProvider.notifier)
+                                  .resetSession('ID_Card');
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ContinuousCameraScreen(
+                                    mode: ScanMode.idCard,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildCarouselItem(
+                            icon: Icons.quiz,
+                            label: 'Questions',
+                            accentColor: const Color(0xFFEA580C),
+                            onTap: () {
+                              ref
+                                  .read(scanSessionProvider.notifier)
+                                  .resetSession('Question_Set');
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ContinuousCameraScreen(
+                                    mode: ScanMode.questionSet,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildCarouselItem(
+                            icon: Icons.menu_book,
+                            label: 'Book',
+                            accentColor: const Color(0xFF0D9488),
+                            onTap: () {
+                              ref
+                                  .read(scanSessionProvider.notifier)
+                                  .resetSession('Book_Scan');
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ContinuousCameraScreen(
+                                    mode: ScanMode.book,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildCarouselItem(
+                            icon: Icons.co_present,
+                            label: 'Board',
+                            accentColor: const Color(0xFF7C3AED),
+                            onTap: () {
+                              ref
+                                  .read(scanSessionProvider.notifier)
+                                  .resetSession('Whiteboard');
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ContinuousCameraScreen(
+                                    mode: ScanMode.whiteboard,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildCarouselItem(
+                            icon: Icons.qr_code_scanner,
+                            label: 'Scan Code',
+                            accentColor: const Color(0xFF059669),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ScanCodeScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildCarouselItem(
+                            icon: Icons.calculate,
+                            label: 'CountCam',
+                            accentColor: const Color(0xFFD97706),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const CountCamScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildCarouselItem(
+                            icon: Icons.translate,
+                            label: 'Translate',
+                            accentColor: const Color(0xFFE11D48),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const TranslateScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // Search Pill
                     TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
                         hintText: 'Search documents by name...',
-                        prefixIcon: const Icon(Icons.search),
+                        prefixIcon: const Icon(Icons.search, size: 20),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(Icons.clear),
+                                icon: const Icon(Icons.clear, size: 18),
                                 onPressed: () {
                                   setState(() {
                                     _searchController.clear();
@@ -376,13 +503,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 },
                               )
                             : null,
-                        filled: true,
-                        fillColor: Theme.of(context).cardColor,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                            color: Theme.of(context).dividerColor,
-                          ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
                       ),
                       onChanged: (val) {
@@ -391,13 +514,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         });
                       },
                     ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Recent Documents',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+
+                    const SizedBox(height: 18),
+
+                    // Recent Documents Section Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Recent Documents',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            _isGridView
+                                ? Icons.view_agenda_outlined
+                                : Icons.grid_view_outlined,
+                            size: 20,
+                          ),
+                          tooltip: _isGridView
+                              ? 'Switch to List'
+                              : 'Switch to Grid',
+                          onPressed: () {
+                            setState(() {
+                              _isGridView = !_isGridView;
+                            });
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -420,176 +567,86 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   return SliverFillRemaining(
                     hasScrollBody: false,
                     child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.folder_open,
-                            size: 64,
-                            color: AppColors.textSecondaryLight,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _searchQuery.isEmpty
-                                ? 'No documents scanned yet.'
-                                : 'No matching documents.',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: AppColors.textSecondaryLight,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          if (_searchQuery.isEmpty)
-                            const Text(
-                              'Tap "Scan document" above to get started.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondaryLight,
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.surface2Dark
+                                    : AppColors.surface2Light,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.folder_open_rounded,
+                                size: 48,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
                               ),
                             ),
-                        ],
+                            const SizedBox(height: 14),
+                            Text(
+                              _searchQuery.isEmpty
+                                  ? 'No documents scanned yet.'
+                                  : 'No matching documents.',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            if (_searchQuery.isEmpty)
+                              Text(
+                                'Tap "Scan document" above to get started.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
+                    ),
+                  );
+                }
+
+                if (_isGridView) {
+                  return SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 0.76,
+                          ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final doc = filtered[index];
+                        return _buildGridDocumentCard(doc, isDark);
+                      }, childCount: filtered.length),
                     ),
                   );
                 }
 
                 return SliverPadding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 8,
+                    horizontal: 16,
+                    vertical: 6,
                   ),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final doc = filtered[index];
-                      final hasExport =
-                          doc.exportPath != null &&
-                          File(doc.exportPath!).existsSync();
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(12),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    DocumentViewerScreen(document: doc),
-                              ),
-                            );
-                          },
-                          leading: Container(
-                            width: 48,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              color: AppColors.brandLight,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.picture_as_pdf,
-                              color: AppColors.brandPrimary,
-                            ),
-                          ),
-                          title: Text(
-                            doc.title,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            '${doc.pageCount} ${doc.pageCount == 1 ? 'page' : 'pages'} · ${doc.createdAt.year}-${doc.createdAt.month.toString().padLeft(2, '0')}-${doc.createdAt.day.toString().padLeft(2, '0')}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondaryLight,
-                            ),
-                          ),
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (val) async {
-                              if (val == 'share') {
-                                if (hasExport) {
-                                  SharePlus.instance.share(
-                                    ShareParams(
-                                      text: doc.title,
-                                      files: [XFile(doc.exportPath!)],
-                                    ),
-                                  );
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'No PDF export found for this scan.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              } else if (val == 'delete') {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Delete Document?'),
-                                    content: Text(
-                                      'Are you sure you want to delete "${doc.title}"?',
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, false),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, true),
-                                        child: const Text(
-                                          'Delete',
-                                          style: TextStyle(
-                                            color: AppColors.error,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-
-                                if (confirm == true) {
-                                  await AppDatabaseService.instance
-                                      .deleteDocument(doc.id);
-                                  ref.invalidate(documentsListProvider);
-                                }
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              if (hasExport)
-                                const PopupMenuItem(
-                                  value: 'share',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.share, size: 20),
-                                      SizedBox(width: 8),
-                                      Text('Share PDF'),
-                                    ],
-                                  ),
-                                ),
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.delete_outline,
-                                      size: 20,
-                                      color: AppColors.error,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Delete',
-                                      style: TextStyle(color: AppColors.error),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
+                      return _buildListDocumentCard(doc, isDark);
                     }, childCount: filtered.length),
                   ),
                 );
@@ -601,35 +658,290 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildModeItem({
+  Widget _buildCarouselItem({
     required IconData icon,
     required String label,
-    required Color color,
+    required Color accentColor,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.only(right: 10),
+      child: Material(
+        color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: 76,
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark
+                    ? AppColors.surface3Dark
+                    : AppColors.surface3Light,
+              ),
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: accentColor, size: 20),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildThumbnailWidget(ScannedDocument doc, double height) {
+    if (doc.pages.isNotEmpty) {
+      final thumbPath =
+          doc.pages.first.processedPath ?? doc.pages.first.originalPath;
+      if (File(thumbPath).existsSync()) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(
+            File(thumbPath),
+            height: height,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => _buildFallbackThumbnail(height),
+          ),
+        );
+      }
+    }
+    return _buildFallbackThumbnail(height);
+  }
+
+  Widget _buildFallbackThumbnail(double height) {
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.brandPrimary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Center(
+        child: Icon(
+          Icons.picture_as_pdf_rounded,
+          color: AppColors.brandPrimary,
+          size: 28,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridDocumentCard(ScannedDocument doc, bool isDark) {
+    return Material(
+      color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DocumentViewerScreen(document: doc),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? AppColors.surface3Dark : AppColors.surface3Light,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: _buildThumbnailWidget(doc, double.infinity),
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: InkWell(
+                        onTap: () => _toggleFavorite(doc),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            doc.isFavorite ? Icons.star : Icons.star_border,
+                            color: doc.isFavorite ? Colors.amber : Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                doc.title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${doc.pageCount} ${doc.pageCount == 1 ? 'page' : 'pages'}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  _buildCardMenu(doc),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListDocumentCard(ScannedDocument doc, bool isDark) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DocumentViewerScreen(document: doc),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 48,
+                height: 58,
+                child: _buildThumbnailWidget(doc, 58),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      doc.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${doc.pageCount} ${doc.pageCount == 1 ? 'page' : 'pages'} · ${doc.createdAt.year}-${doc.createdAt.month.toString().padLeft(2, '0')}-${doc.createdAt.day.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  doc.isFavorite ? Icons.star : Icons.star_border,
+                  color: doc.isFavorite ? Colors.amber : null,
+                  size: 20,
+                ),
+                tooltip: doc.isFavorite ? 'Unfavorite' : 'Favorite',
+                onPressed: () => _toggleFavorite(doc),
+              ),
+              _buildCardMenu(doc),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardMenu(ScannedDocument doc) {
+    final hasExport =
+        doc.exportPath != null && File(doc.exportPath!).existsSync();
+
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 20),
+      padding: EdgeInsets.zero,
+      onSelected: (val) {
+        if (val == 'share') {
+          _shareDocument(doc);
+        } else if (val == 'delete') {
+          _deleteDocument(doc);
+        }
+      },
+      itemBuilder: (context) => [
+        if (hasExport)
+          const PopupMenuItem(
+            value: 'share',
+            child: Row(
+              children: [
+                Icon(Icons.share_outlined, size: 18),
+                SizedBox(width: 8),
+                Text('Share PDF'),
+              ],
+            ),
+          ),
+        const PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline, size: 18, color: AppColors.error),
+              SizedBox(width: 8),
+              Text('Delete', style: TextStyle(color: AppColors.error)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

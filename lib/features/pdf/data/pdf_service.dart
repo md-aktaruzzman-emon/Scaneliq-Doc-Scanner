@@ -224,9 +224,7 @@ class PdfService {
             return pw.Stack(
               fit: pw.StackFit.expand,
               children: [
-                pw.Center(
-                  child: pw.Image(pdfImage, fit: pw.BoxFit.contain),
-                ),
+                pw.Center(child: pw.Image(pdfImage, fit: pw.BoxFit.contain)),
                 ...textOverlays,
               ],
             );
@@ -276,10 +274,10 @@ class PdfService {
     final frontBytes = await frontImage.readAsBytes();
     final backBytes = await backImage.readAsBytes();
 
-    final stitchedBytes = await compute(
-      _stitchIdCardWorker,
-      [frontBytes, backBytes],
-    );
+    final stitchedBytes = await compute(_stitchIdCardWorker, [
+      frontBytes,
+      backBytes,
+    ]);
 
     final sanitized = baseTitle.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final targetPath =

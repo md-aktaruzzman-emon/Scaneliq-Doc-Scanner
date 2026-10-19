@@ -219,9 +219,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Combined Front & Back into 2-in-1 ID Card Sheet!',
-            ),
+            content: Text('Combined Front & Back into 2-in-1 ID Card Sheet!'),
             backgroundColor: AppColors.success,
           ),
         );
@@ -260,7 +258,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Exported ${exportedFiles.length} JPEGs to exports folder.'),
+            content: Text(
+              'Exported ${exportedFiles.length} JPEGs to exports folder.',
+            ),
             action: SnackBarAction(
               label: 'Share All',
               onPressed: () {

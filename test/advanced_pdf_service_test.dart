@@ -48,35 +48,43 @@ void main() {
   });
 
   group('AdvancedPdfService Tests', () {
-    test('mergePdfs combines multiple PDFs into one with exact page count', () async {
-      final merged = await AdvancedPdfService.instance.mergePdfs(
-        sourcePdfs: [samplePdf1, samplePdf2],
-        outputFileName: 'merged_test',
-      );
+    test(
+      'mergePdfs combines multiple PDFs into one with exact page count',
+      () async {
+        final merged = await AdvancedPdfService.instance.mergePdfs(
+          sourcePdfs: [samplePdf1, samplePdf2],
+          outputFileName: 'merged_test',
+        );
 
-      expect(merged.existsSync(), isTrue);
-      final count = await AdvancedPdfService.instance.getPageCount(merged);
-      expect(count, equals(3)); // 2 from doc1 + 1 from doc2
+        expect(merged.existsSync(), isTrue);
+        final count = await AdvancedPdfService.instance.getPageCount(merged);
+        expect(count, equals(3)); // 2 from doc1 + 1 from doc2
 
-      // Verify header
-      final bytes = await merged.readAsBytes();
-      final header = String.fromCharCodes(bytes.sublist(0, 5));
-      expect(header, equals('%PDF-'));
-    });
+        // Verify header
+        final bytes = await merged.readAsBytes();
+        final header = String.fromCharCodes(bytes.sublist(0, 5));
+        expect(header, equals('%PDF-'));
+      },
+    );
 
-    test('splitPdfIntoPages splits multi-page PDF into single page files', () async {
-      final splitPages = await AdvancedPdfService.instance.splitPdfIntoPages(
-        sourcePdf: samplePdf1,
-        baseOutputName: 'split_doc1',
-      );
+    test(
+      'splitPdfIntoPages splits multi-page PDF into single page files',
+      () async {
+        final splitPages = await AdvancedPdfService.instance.splitPdfIntoPages(
+          sourcePdf: samplePdf1,
+          baseOutputName: 'split_doc1',
+        );
 
-      expect(splitPages.length, equals(2));
-      for (final pageFile in splitPages) {
-        expect(pageFile.existsSync(), isTrue);
-        final count = await AdvancedPdfService.instance.getPageCount(pageFile);
-        expect(count, equals(1));
-      }
-    });
+        expect(splitPages.length, equals(2));
+        for (final pageFile in splitPages) {
+          expect(pageFile.existsSync(), isTrue);
+          final count = await AdvancedPdfService.instance.getPageCount(
+            pageFile,
+          );
+          expect(count, equals(1));
+        }
+      },
+    );
 
     test('extractPages extracts selected pages into new PDF', () async {
       final extracted = await AdvancedPdfService.instance.extractPages(
@@ -101,10 +109,7 @@ void main() {
       final bytes = await encrypted.readAsBytes();
 
       // Trying to open without password throws ArgumentError
-      expect(
-        () => sf.PdfDocument(inputBytes: bytes),
-        throwsA(anything),
-      );
+      expect(() => sf.PdfDocument(inputBytes: bytes), throwsA(anything));
 
       // Opening with correct password succeeds
       final openDoc = sf.PdfDocument(
@@ -115,16 +120,21 @@ void main() {
       openDoc.dispose();
     });
 
-    test('addWatermark successfully writes watermark onto document pages', () async {
-      final watermarked = await AdvancedPdfService.instance.addWatermark(
-        sourcePdf: samplePdf1,
-        watermarkText: 'CONFIDENTIAL',
-        outputFileName: 'watermarked_test',
-      );
+    test(
+      'addWatermark successfully writes watermark onto document pages',
+      () async {
+        final watermarked = await AdvancedPdfService.instance.addWatermark(
+          sourcePdf: samplePdf1,
+          watermarkText: 'CONFIDENTIAL',
+          outputFileName: 'watermarked_test',
+        );
 
-      expect(watermarked.existsSync(), isTrue);
-      final count = await AdvancedPdfService.instance.getPageCount(watermarked);
-      expect(count, equals(2));
-    });
+        expect(watermarked.existsSync(), isTrue);
+        final count = await AdvancedPdfService.instance.getPageCount(
+          watermarked,
+        );
+        expect(count, equals(2));
+      },
+    );
   });
 }

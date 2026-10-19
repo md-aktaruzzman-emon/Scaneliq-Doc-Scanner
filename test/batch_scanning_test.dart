@@ -122,23 +122,26 @@ void main() {
       }
     });
 
-    test('Whiteboard and enhancedText filters transform image pixels cleanly', () {
-      final testImg = img.Image(width: 50, height: 50);
-      img.fill(testImg, color: img.ColorRgb8(120, 150, 180));
+    test(
+      'Whiteboard and enhancedText filters transform image pixels cleanly',
+      () {
+        final testImg = img.Image(width: 50, height: 50);
+        img.fill(testImg, color: img.ColorRgb8(120, 150, 180));
 
-      final wbResult = PdfService.applyEditRecipe(
-        testImg,
-        const EditRecipe(filter: PageFilter.whiteboard),
-      );
-      expect(wbResult.width, equals(50));
-      expect(wbResult.height, equals(50));
+        final wbResult = PdfService.applyEditRecipe(
+          testImg,
+          const EditRecipe(filter: PageFilter.whiteboard),
+        );
+        expect(wbResult.width, equals(50));
+        expect(wbResult.height, equals(50));
 
-      final textResult = PdfService.applyEditRecipe(
-        testImg,
-        const EditRecipe(filter: PageFilter.enhancedText),
-      );
-      expect(textResult.width, equals(50));
-      expect(textResult.height, equals(50));
-    });
+        final textResult = PdfService.applyEditRecipe(
+          testImg,
+          const EditRecipe(filter: PageFilter.enhancedText),
+        );
+        expect(textResult.width, equals(50));
+        expect(textResult.height, equals(50));
+      },
+    );
   });
 }

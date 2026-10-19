@@ -353,9 +353,8 @@ void main() {
       expect(resultsWatson.first.id, equals('doc_ocr_1'));
 
       // Search by OCR content: 'penicillin' matches doc2, not doc1
-      final resultsPenicillin = await AppDatabaseService.instance.getAllDocuments(
-        searchQuery: 'penicillin',
-      );
+      final resultsPenicillin = await AppDatabaseService.instance
+          .getAllDocuments(searchQuery: 'penicillin');
       expect(resultsPenicillin.length, equals(1));
       expect(resultsPenicillin.first.id, equals('doc_ocr_2'));
 
@@ -368,7 +367,9 @@ void main() {
 
       // Deleting doc1 removes OCR record
       await AppDatabaseService.instance.deleteDocument('doc_ocr_1');
-      final ocrRecord = await AppDatabaseService.instance.getDocumentOcr('doc_ocr_1');
+      final ocrRecord = await AppDatabaseService.instance.getDocumentOcr(
+        'doc_ocr_1',
+      );
       expect(ocrRecord, isNull);
     });
   });

@@ -76,7 +76,10 @@ class _CountCamScreenState extends State<CountCamScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Capture failed: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Capture failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } finally {
@@ -151,7 +154,10 @@ class _CountCamScreenState extends State<CountCamScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('CountCam — Object Counter', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'CountCam — Object Counter',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           if (_capturedImage != null)
             IconButton(
@@ -164,9 +170,7 @@ class _CountCamScreenState extends State<CountCamScreen> {
       body: Stack(
         children: [
           if (_capturedImage != null)
-            Center(
-              child: Image.file(_capturedImage!, fit: BoxFit.contain),
-            )
+            Center(child: Image.file(_capturedImage!, fit: BoxFit.contain))
           else if (_isCameraReady && _cameraController != null)
             Center(child: CameraPreview(_cameraController!))
           else
@@ -186,7 +190,11 @@ class _CountCamScreenState extends State<CountCamScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.category, color: AppColors.brandPrimary, size: 20),
+                  const Icon(
+                    Icons.category,
+                    color: AppColors.brandPrimary,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: DropdownButtonHideUnderline(
@@ -194,11 +202,23 @@ class _CountCamScreenState extends State<CountCamScreen> {
                         dropdownColor: Colors.grey.shade900,
                         value: _selectedCategory,
                         isDense: true,
-                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                        items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                        icon: const Icon(
+                          Icons.arrow_drop_down,
+                          color: Colors.white,
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        items: _categories
+                            .map(
+                              (c) => DropdownMenuItem(value: c, child: Text(c)),
+                            )
+                            .toList(),
                         onChanged: (val) {
-                          if (val != null) setState(() => _selectedCategory = val);
+                          if (val != null)
+                            setState(() => _selectedCategory = val);
                         },
                       ),
                     ),
@@ -244,7 +264,10 @@ class _CountCamScreenState extends State<CountCamScreen> {
                               ),
                               const Text(
                                 'Estimated Count (Review & adjust)',
-                                style: TextStyle(color: Colors.white70, fontSize: 12),
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
                               ),
                             ],
                           ),
@@ -262,7 +285,8 @@ class _CountCamScreenState extends State<CountCamScreen> {
                         onPressed: () {
                           SharePlus.instance.share(
                             ShareParams(
-                              text: 'CountCam Estimate: $_estimatedCount $_selectedCategory counted via Scaneliq.',
+                              text:
+                                  'CountCam Estimate: $_estimatedCount $_selectedCategory counted via Scaneliq.',
                               files: [XFile(_capturedImage!.path)],
                             ),
                           );
@@ -278,9 +302,14 @@ class _CountCamScreenState extends State<CountCamScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
                           IconButton.outlined(
-                            icon: const Icon(Icons.photo_library, color: Colors.white),
+                            icon: const Icon(
+                              Icons.photo_library,
+                              color: Colors.white,
+                            ),
                             tooltip: 'Count from Gallery image',
-                            onPressed: _isProcessing ? null : _pickImageAndCount,
+                            onPressed: _isProcessing
+                                ? null
+                                : _pickImageAndCount,
                           ),
                           GestureDetector(
                             onTap: _isProcessing ? null : _captureAndCount,
@@ -289,7 +318,10 @@ class _CountCamScreenState extends State<CountCamScreen> {
                               height: 72,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 3.5),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 3.5,
+                                ),
                               ),
                               child: Center(
                                 child: Container(
@@ -304,10 +336,17 @@ class _CountCamScreenState extends State<CountCamScreen> {
                                           child: SizedBox(
                                             width: 22,
                                             height: 22,
-                                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2,
+                                            ),
                                           ),
                                         )
-                                      : const Icon(Icons.camera, color: Colors.white, size: 28),
+                                      : const Icon(
+                                          Icons.camera,
+                                          color: Colors.white,
+                                          size: 28,
+                                        ),
                                 ),
                               ),
                             ),
