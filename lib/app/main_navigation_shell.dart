@@ -100,12 +100,12 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell> {
                   onTap: () => _onTabSelected(0),
                 ),
               ),
-              // Tab 1: Files / Documents
+              // Tab 1: Documents
               Expanded(
                 child: _NavBarItem(
                   icon: Icons.folder_outlined,
-                  selectedIcon: Icons.folder,
-                  label: 'Files',
+                  selectedIcon: Icons.folder_rounded,
+                  label: 'Documents',
                   isSelected: _currentIndex == 1,
                   onTap: () => _onTabSelected(1),
                 ),

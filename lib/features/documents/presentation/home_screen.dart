@@ -10,7 +10,6 @@ import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
-import 'package:scaneliq/features/pdf/presentation/pdf_tools_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/count_cam_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_code_screen.dart';
@@ -144,18 +143,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-            tooltip: 'PDF Tools',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PdfToolsScreen()),
-              );
-            },
-          ),
-        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -173,14 +160,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     // Subtitle / tagline
                     Text(
                       'Scan documents. Keep everything organized.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
 
                     // Primary scan & import actions
                     Row(
@@ -195,22 +177,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                             label: const Text('Scan document'),
                             style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              backgroundColor: AppColors.brandPrimary,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(0, 50),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           flex: 2,
-                          child: OutlinedButton.icon(
+                          child: FilledButton.tonalIcon(
                             onPressed: _importFiles,
                             icon: const Icon(
                               Icons.file_upload_outlined,
                               size: 20,
                             ),
                             label: const Text('Import'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 13),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: isDark
+                                  ? AppColors.surface2Dark
+                                  : AppColors.surface2Light,
+                              foregroundColor: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
+                              minimumSize: const Size(0, 50),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
                         ),
@@ -344,9 +341,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       child: Row(
                         children: [
                           _buildCarouselItem(
-                            icon: Icons.burst_mode,
+                            icon: Icons.burst_mode_rounded,
                             label: 'Batch',
-                            accentColor: const Color(0xFF2563EB),
                             onTap: () {
                               ref
                                   .read(scanSessionProvider.notifier)
@@ -362,9 +358,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             },
                           ),
                           _buildCarouselItem(
-                            icon: Icons.badge,
+                            icon: Icons.badge_outlined,
                             label: 'ID Card',
-                            accentColor: const Color(0xFF4F46E5),
                             onTap: () {
                               ref
                                   .read(scanSessionProvider.notifier)
@@ -380,9 +375,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             },
                           ),
                           _buildCarouselItem(
-                            icon: Icons.quiz,
-                            label: 'Questions',
-                            accentColor: const Color(0xFFEA580C),
+                            icon: Icons.quiz_outlined,
+                            label: 'Q&A / Exam',
                             onTap: () {
                               ref
                                   .read(scanSessionProvider.notifier)
@@ -398,9 +392,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             },
                           ),
                           _buildCarouselItem(
-                            icon: Icons.menu_book,
+                            icon: Icons.menu_book_outlined,
                             label: 'Book',
-                            accentColor: const Color(0xFF0D9488),
                             onTap: () {
                               ref
                                   .read(scanSessionProvider.notifier)
@@ -416,9 +409,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             },
                           ),
                           _buildCarouselItem(
-                            icon: Icons.co_present,
-                            label: 'Board',
-                            accentColor: const Color(0xFF7C3AED),
+                            icon: Icons.co_present_outlined,
+                            label: 'Whiteboard',
                             onTap: () {
                               ref
                                   .read(scanSessionProvider.notifier)
@@ -434,9 +426,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             },
                           ),
                           _buildCarouselItem(
-                            icon: Icons.qr_code_scanner,
-                            label: 'Scan Code',
-                            accentColor: const Color(0xFF059669),
+                            icon: Icons.qr_code_scanner_rounded,
+                            label: 'QR / Code',
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -447,9 +438,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             },
                           ),
                           _buildCarouselItem(
-                            icon: Icons.calculate,
+                            icon: Icons.calculate_outlined,
                             label: 'CountCam',
-                            accentColor: const Color(0xFFD97706),
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -460,9 +450,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             },
                           ),
                           _buildCarouselItem(
-                            icon: Icons.translate,
+                            icon: Icons.translate_rounded,
                             label: 'Translate',
-                            accentColor: const Color(0xFFE11D48),
                             onTap: () {
                               Navigator.push(
                                 context,
@@ -560,47 +549,84 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     hasScrollBody: false,
                     child: Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(24.0),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 28.0,
+                          vertical: 32.0,
+                        ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(16),
+                              width: 76,
+                              height: 76,
                               decoration: BoxDecoration(
                                 color: isDark
                                     ? AppColors.surface2Dark
-                                    : AppColors.surface2Light,
+                                    : AppColors.brandLight,
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
-                                Icons.folder_open_rounded,
-                                size: 48,
-                                color: isDark
-                                    ? AppColors.textSecondaryDark
-                                    : AppColors.textSecondaryLight,
+                                _searchQuery.isEmpty
+                                    ? Icons.document_scanner_outlined
+                                    : Icons.search_off_rounded,
+                                size: 38,
+                                color: AppColors.brandPrimary,
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 18),
                             Text(
                               _searchQuery.isEmpty
-                                  ? 'No documents scanned yet.'
-                                  : 'No matching documents.',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                                  ? 'No scans yet'
+                                  : 'No matching documents',
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                              textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 6),
-                            if (_searchQuery.isEmpty)
-                              Text(
-                                'Tap "Scan document" above to get started.',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: isDark
-                                      ? AppColors.textSecondaryDark
-                                      : AppColors.textSecondaryLight,
+                            const SizedBox(height: 8),
+                            Text(
+                              _searchQuery.isEmpty
+                                  ? 'Digitize receipts, notes, IDs, and multi-page documents in seconds.'
+                                  : 'Try adjusting your search terms to find what you are looking for.',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
+                                  ),
+                              textAlign: TextAlign.center,
+                            ),
+                            if (_searchQuery.isEmpty) ...[
+                              const SizedBox(height: 22),
+                              ElevatedButton.icon(
+                                onPressed: _startNewScan,
+                                icon: const Icon(
+                                  Icons.document_scanner_rounded,
+                                  size: 18,
+                                ),
+                                label: const Text('Scan document'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.brandPrimary,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(180, 46),
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: _importFiles,
+                                icon: const Icon(
+                                  Icons.file_upload_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('Import a photo instead'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.brandPrimary,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -653,7 +679,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildCarouselItem({
     required IconData icon,
     required String label,
-    required Color accentColor,
     required VoidCallback onTap,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -661,32 +686,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Container(
       margin: const EdgeInsets.only(right: 10),
       child: Material(
-        color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
+        color: isDark ? AppColors.surface1Dark : AppColors.surface0Light,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(14),
           child: Container(
-            width: 76,
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+            width: 86,
+            height: 94,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isDark
-                    ? AppColors.surface3Dark
-                    : AppColors.surface3Light,
+                color: isDark ? AppColors.borderDark : AppColors.borderLight,
               ),
             ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.12),
+                    color: isDark
+                        ? AppColors.surface2Dark
+                        : AppColors.brandLight,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(icon, color: accentColor, size: 20),
+                  child: Icon(
+                    icon,
+                    color: isDark ? AppColors.brandLight : AppColors.brandPrimary,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -694,8 +724,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
+                    height: 1.15,
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                 ),

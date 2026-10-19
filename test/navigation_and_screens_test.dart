@@ -16,12 +16,12 @@ void main() {
 
       // Verify bottom navigation items
       expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Files'), findsOneWidget);
+      expect(find.text('Documents'), findsOneWidget);
       expect(find.text('Tools'), findsOneWidget);
       expect(find.text('Settings'), findsOneWidget);
 
-      // Tap Files tab
-      await tester.tap(find.text('Files'));
+      // Tap Documents tab
+      await tester.tap(find.text('Documents'));
       await tester.pumpAndSettle();
       expect(find.text('Search files...'), findsOneWidget);
 

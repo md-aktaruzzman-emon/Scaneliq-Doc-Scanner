@@ -9,45 +9,31 @@ class AppColors {
   static const Color primary = brandPrimary;
   static const Color brandPrimaryPressed = Color(0xFF1D4ED8);
   static const Color brandDeep = Color(0xFF021642); // Deep Navy
-  static const Color brandAccent = Color(0xFF00F0FF); // Neon Cyan
+  static const Color brandAccent = Color(0xFF00F0FF); // Electric Cyan
   static const Color brandLight = Color(0xFFEFF6FF); // Soft Blue Tint
 
-  // Layered Light Theme Surfaces
-  static const Color surface0Light = Color(
-    0xFFF8FAFC,
-  ); // Canvas Background (Slate 50)
+  // Layered Light Theme Surfaces (Material 3 Tonal Rhythm)
+  static const Color surface0Light = Color(0xFFF7F9FC); // Canvas Background
   static const Color appBackgroundLight = surface0Light;
-  static const Color surface1Light = Color(
-    0xFFFFFFFF,
-  ); // Card & Sheet Surface (Pure White)
+  static const Color surface1Light = Color(0xFFFFFFFF); // Cards & Sheets
   static const Color surfaceLight = surface1Light;
-  static const Color surface2Light = Color(
-    0xFFF1F5F9,
-  ); // Input & Filter Pill (Slate 100)
-  static const Color surface3Light = Color(
-    0xFFE2E8F0,
-  ); // Dividers & Active Borders (Slate 200)
+  static const Color surface2Light = Color(0xFFF1F5F9); // Inputs, Pills & Secondary
+  static const Color surface3Light = Color(0xFFE4E7EC); // Dividers & Borders
 
   // Light Theme Typography
-  static const Color textPrimaryLight = Color(0xFF0F172A); // Slate 900
-  static const Color textSecondaryLight = Color(0xFF64748B); // Slate 500
-  static const Color textTertiaryLight = Color(0xFF94A3B8); // Slate 400
-  static const Color borderLight = Color(0xFFE2E8F0);
-  static const Color borderSubtleLight = Color(0xFFE2E8F0);
+  static const Color textPrimaryLight = Color(0xFF101828); // Slate 900
+  static const Color textSecondaryLight = Color(0xFF667085); // Slate 500
+  static const Color textTertiaryLight = Color(0xFF98A2B3); // Slate 400
+  static const Color borderLight = Color(0xFFE4E7EC);
+  static const Color borderSubtleLight = Color(0xFFE4E7EC);
 
   // Layered Dark Theme Surfaces
   static const Color surface0Dark = Color(0xFF090D16); // Deep Midnight Canvas
   static const Color appBackgroundDark = surface0Dark;
-  static const Color surface1Dark = Color(
-    0xFF131B2E,
-  ); // Navy Slate Cards & Sheets
+  static const Color surface1Dark = Color(0xFF131B2E); // Navy Slate Cards & Sheets
   static const Color surfaceDark = surface1Dark;
-  static const Color surface2Dark = Color(
-    0xFF1E293B,
-  ); // Slate 800 Inputs & Pills
-  static const Color surface3Dark = Color(
-    0xFF293548,
-  ); // Slate 700 Borders & Dividers
+  static const Color surface2Dark = Color(0xFF1E293B); // Slate 800 Inputs & Pills
+  static const Color surface3Dark = Color(0xFF293548); // Slate 700 Borders & Dividers
 
   // Dark Theme Typography
   static const Color textPrimaryDark = Color(0xFFF8FAFC); // Slate 50
@@ -56,24 +42,140 @@ class AppColors {
   static const Color borderDark = Color(0xFF1E293B);
   static const Color borderSubtleDark = Color(0xFF1E293B);
 
-  // Status tokens
-  static const Color success = Color(0xFF10B981); // Emerald 500
-  static const Color warning = Color(0xFFF59E0B); // Amber 500
-  static const Color error = Color(0xFFEF4444); // Red 500
-  static const Color focus = Color(0xFF0EA5E9); // Sky 500
+  // Semantic Status Tokens (Accessible & Strict)
+  static const Color success = Color(0xFF16803C); // Green check ONLY
+  static const Color warning = Color(0xFFB54708); // Amber alert
+  static const Color error = Color(0xFFB42318); // Destructive / Irreversible action ONLY
+  static const Color focus = Color(0xFF0EA5E9); // Focus Sky Blue
+
+  // Strict 4-Color Categorical Palette (Tags & Folders ONLY - Never for Status)
+  static const Color tagBlue = Color(0xFF2563EB); // General / Study
+  static const Color tagGreen = Color(0xFF16803C); // Finance / Receipts
+  static const Color tagAmber = Color(0xFFB54708); // Work / Priority
+  static const Color tagPurple = Color(0xFF7C3AED); // Legal / Personal
 }
 
 /// Consolidated Material 3 Application Theme for Scaneliq
 class AppTheme {
+  static final String? _interFont = GoogleFonts.inter().fontFamily;
+  static final String? _bengaliFont = GoogleFonts.notoSansBengali().fontFamily;
+  static final List<String> _fontFallbacks = [
+    ?_bengaliFont,
+    'Roboto',
+    'sans-serif',
+  ];
+
+  static TextTheme _buildTextTheme(Color primaryText, Color secondaryText) {
+    return TextTheme(
+      // Display / Screen Title (24-28sp, Medium/SemiBold)
+      headlineLarge: TextStyle(
+        fontSize: 26,
+        fontWeight: FontWeight.w600,
+        color: primaryText,
+        letterSpacing: -0.4,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      headlineMedium: TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w600,
+        color: primaryText,
+        letterSpacing: -0.2,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      // Section Header (18-20sp, SemiBold)
+      titleLarge: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: primaryText,
+        letterSpacing: -0.1,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      titleMedium: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: primaryText,
+        letterSpacing: 0.0,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      titleSmall: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: secondaryText,
+        letterSpacing: 0.1,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      // Body (14-16sp, Regular)
+      bodyLarge: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w400,
+        color: primaryText,
+        height: 1.45,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      bodyMedium: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w400,
+        color: secondaryText,
+        height: 1.4,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      bodySmall: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+        color: secondaryText,
+        height: 1.35,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      // Buttons / Labels (14-16sp, SemiBold)
+      labelLarge: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: primaryText,
+        letterSpacing: 0.1,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      labelMedium: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: secondaryText,
+        letterSpacing: 0.1,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+      labelSmall: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w500,
+        color: secondaryText,
+        letterSpacing: 0.2,
+        fontFamily: _interFont,
+        fontFamilyFallback: _fontFallbacks,
+      ),
+    );
+  }
+
   static ThemeData get lightTheme {
-    final baseFont = GoogleFonts.inter();
+    final textTheme = _buildTextTheme(
+      AppColors.textPrimaryLight,
+      AppColors.textSecondaryLight,
+    );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      fontFamily: baseFont.fontFamily,
+      fontFamily: _interFont,
+      fontFamilyFallback: _fontFallbacks,
       primaryColor: AppColors.brandPrimary,
       scaffoldBackgroundColor: AppColors.surface0Light,
+      textTheme: textTheme,
       colorScheme: const ColorScheme.light(
         primary: AppColors.brandPrimary,
         onPrimary: Colors.white,
@@ -88,23 +190,18 @@ class AppTheme {
         error: AppColors.error,
         onError: Colors.white,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.surface0Light,
         foregroundColor: AppColors.textPrimaryLight,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimaryLight,
-          letterSpacing: -0.2,
-        ),
+        titleTextStyle: textTheme.titleLarge?.copyWith(fontSize: 20),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surface1Light,
-        elevation: 3,
-        shadowColor: Colors.black.withValues(alpha: 0.06),
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.05),
         height: 68,
         indicatorColor: AppColors.brandLight,
         iconTheme: WidgetStateProperty.resolveWith((states) {
@@ -144,7 +241,7 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.brandPrimary,
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 52),
+          minimumSize: const Size(double.infinity, 50),
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -152,30 +249,30 @@ class AppTheme {
           textStyle: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
+            letterSpacing: 0.1,
           ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.brandPrimary,
-          minimumSize: const Size(double.infinity, 52),
-          side: const BorderSide(color: AppColors.brandPrimary, width: 1.5),
+          minimumSize: const Size(double.infinity, 50),
+          side: const BorderSide(color: AppColors.borderSubtleLight, width: 1.5),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           textStyle: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
+            letterSpacing: 0.1,
           ),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: AppColors.brandPrimary,
         foregroundColor: Colors.white,
-        elevation: 4,
-        highlightElevation: 6,
+        elevation: 3,
+        highlightElevation: 5,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -231,13 +328,9 @@ class AppTheme {
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surface1Light,
-        elevation: 6,
+        elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        titleTextStyle: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimaryLight,
-        ),
+        titleTextStyle: textTheme.titleLarge,
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.surface1Light,
@@ -256,14 +349,19 @@ class AppTheme {
   }
 
   static ThemeData get darkTheme {
-    final baseFont = GoogleFonts.inter();
+    final textTheme = _buildTextTheme(
+      AppColors.textPrimaryDark,
+      AppColors.textSecondaryDark,
+    );
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      fontFamily: baseFont.fontFamily,
+      fontFamily: _interFont,
+      fontFamilyFallback: _fontFallbacks,
       primaryColor: AppColors.brandPrimary,
       scaffoldBackgroundColor: AppColors.surface0Dark,
+      textTheme: textTheme,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.brandPrimary,
         onPrimary: Colors.white,
@@ -277,23 +375,18 @@ class AppTheme {
         error: AppColors.error,
         onError: Colors.white,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.surface0Dark,
         foregroundColor: AppColors.textPrimaryDark,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimaryDark,
-          letterSpacing: -0.2,
-        ),
+        titleTextStyle: textTheme.titleLarge?.copyWith(fontSize: 20),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surface1Dark,
-        elevation: 3,
-        shadowColor: Colors.black.withValues(alpha: 0.4),
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         height: 68,
         indicatorColor: AppColors.surface2Dark,
         iconTheme: WidgetStateProperty.resolveWith((states) {
@@ -333,7 +426,7 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.brandPrimary,
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 52),
+          minimumSize: const Size(double.infinity, 50),
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -341,30 +434,30 @@ class AppTheme {
           textStyle: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
+            letterSpacing: 0.1,
           ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.brandAccent,
-          minimumSize: const Size(double.infinity, 52),
-          side: const BorderSide(color: AppColors.brandPrimary, width: 1.5),
+          minimumSize: const Size(double.infinity, 50),
+          side: const BorderSide(color: AppColors.borderSubtleDark, width: 1.5),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           textStyle: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.2,
+            letterSpacing: 0.1,
           ),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: AppColors.brandPrimary,
         foregroundColor: Colors.white,
-        elevation: 4,
-        highlightElevation: 6,
+        elevation: 3,
+        highlightElevation: 5,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -420,13 +513,9 @@ class AppTheme {
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surface1Dark,
-        elevation: 6,
+        elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        titleTextStyle: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimaryDark,
-        ),
+        titleTextStyle: textTheme.titleLarge,
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.surface1Dark,

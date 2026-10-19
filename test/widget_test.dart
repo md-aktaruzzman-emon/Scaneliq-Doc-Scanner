@@ -19,10 +19,10 @@ void main() {
     expect(find.text('Smart Scanning Modes'), findsOneWidget);
     expect(find.text('Batch'), findsOneWidget);
     expect(find.text('ID Card'), findsOneWidget);
-    expect(find.text('Questions'), findsOneWidget);
+    expect(find.text('Q&A / Exam'), findsOneWidget);
     expect(find.text('Book'), findsOneWidget);
-    expect(find.text('Board'), findsOneWidget);
-    expect(find.text('Scan Code'), findsOneWidget);
+    expect(find.text('Whiteboard'), findsOneWidget);
+    expect(find.text('QR / Code'), findsOneWidget);
     expect(find.text('CountCam'), findsOneWidget);
     expect(find.text('Translate'), findsOneWidget);
   });
