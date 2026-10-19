@@ -41,7 +41,7 @@ class AppDatabaseService {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON;');
       },
@@ -122,6 +122,18 @@ class AppDatabaseService {
           )
         ''');
 
+        // 6. Bookmarks table
+        await db.execute('''
+          CREATE TABLE document_bookmarks (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            page_number INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
+          )
+        ''');
+
         // Indexes
         await db.execute(
           'CREATE INDEX idx_pages_doc_order ON pages (document_id, page_order)',
@@ -146,6 +158,9 @@ class AppDatabaseService {
         );
         await db.execute(
           'CREATE INDEX idx_ocr_doc ON document_ocr (document_id)',
+        );
+        await db.execute(
+          'CREATE INDEX idx_bookmarks_doc ON document_bookmarks (document_id)',
         );
 
         // Seed default starter categories
@@ -232,6 +247,21 @@ class AppDatabaseService {
           );
 
           await _seedStarterTags(db);
+        }
+        if (oldVersion < 5) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS document_bookmarks (
+              id TEXT PRIMARY KEY,
+              document_id TEXT NOT NULL,
+              page_number INTEGER NOT NULL,
+              title TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
+            )
+          ''');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_bookmarks_doc ON document_bookmarks (document_id)',
+          );
         }
       },
     );
@@ -977,5 +1007,79 @@ class AppDatabaseService {
     );
     if (rows.isEmpty) return null;
     return rows.first['full_text'] as String?;
+  }
+
+  // ===========================================================================
+  // DOCUMENT BOOKMARKS
+  // ===========================================================================
+
+  Future<void> _ensureBookmarksTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS document_bookmarks (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL,
+        page_number INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_bookmarks_doc ON document_bookmarks (document_id)',
+    );
+  }
+
+  /// Adds a bookmark for a document page
+  Future<DocumentBookmark> addBookmark({
+    required String documentId,
+    required int pageNumber,
+    required String title,
+  }) async {
+    final db = await database;
+    await _ensureBookmarksTable(db);
+    final id = const Uuid().v4();
+    final bookmark = DocumentBookmark(
+      id: id,
+      documentId: documentId,
+      pageNumber: pageNumber,
+      title: title.trim().isEmpty ? 'Page $pageNumber' : title.trim(),
+      createdAt: DateTime.now(),
+    );
+    await db.insert('document_bookmarks', bookmark.toMap());
+    return bookmark;
+  }
+
+  /// Retrieves all bookmarks for a document, ordered by page number
+  Future<List<DocumentBookmark>> getBookmarks(String documentId) async {
+    final db = await database;
+    await _ensureBookmarksTable(db);
+    final rows = await db.query(
+      'document_bookmarks',
+      where: 'document_id = ?',
+      whereArgs: [documentId],
+      orderBy: 'page_number ASC',
+    );
+    return rows.map((r) => DocumentBookmark.fromMap(r)).toList();
+  }
+
+  /// Deletes a bookmark by ID
+  Future<void> deleteBookmark(String id) async {
+    final db = await database;
+    await _ensureBookmarksTable(db);
+    await db.delete('document_bookmarks', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Updates a bookmark's title
+  Future<void> updateBookmarkTitle(String id, String newTitle) async {
+    final trimmed = newTitle.trim();
+    if (trimmed.isEmpty) return;
+    final db = await database;
+    await _ensureBookmarksTable(db);
+    await db.update(
+      'document_bookmarks',
+      {'title': trimmed},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 }

@@ -602,3 +602,56 @@ class EditRecipe {
     );
   }
 }
+
+/// Model for an in-app page bookmark on a document
+class DocumentBookmark {
+  final String id;
+  final String documentId;
+  final int pageNumber; // 1-indexed
+  final String title;
+  final DateTime createdAt;
+
+  const DocumentBookmark({
+    required this.id,
+    required this.documentId,
+    required this.pageNumber,
+    required this.title,
+    required this.createdAt,
+  });
+
+  DocumentBookmark copyWith({
+    String? id,
+    String? documentId,
+    int? pageNumber,
+    String? title,
+    DateTime? createdAt,
+  }) {
+    return DocumentBookmark(
+      id: id ?? this.id,
+      documentId: documentId ?? this.documentId,
+      pageNumber: pageNumber ?? this.pageNumber,
+      title: title ?? this.title,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'document_id': documentId,
+      'page_number': pageNumber,
+      'title': title,
+      'created_at': createdAt.millisecondsSinceEpoch,
+    };
+  }
+
+  factory DocumentBookmark.fromMap(Map<String, dynamic> map) {
+    return DocumentBookmark(
+      id: map['id'] as String,
+      documentId: map['document_id'] as String,
+      pageNumber: map['page_number'] as int,
+      title: map['title'] as String,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+    );
+  }
+}
