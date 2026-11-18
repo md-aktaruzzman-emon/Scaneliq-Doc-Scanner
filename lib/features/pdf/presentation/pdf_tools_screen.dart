@@ -3,7 +3,10 @@ import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
+import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
@@ -411,6 +414,76 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Split failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _stitchLongImage() async {
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+    );
+
+    if (picked.isEmpty) return;
+
+    if (picked.length < 2) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please select at least 2 images to stitch'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final imageFiles = picked
+        .where((f) => f.path != null)
+        .map((f) => File(f.path!))
+        .toList();
+
+    setState(() {
+      _isProcessing = true;
+      _statusMessage =
+          'Stitching ${imageFiles.length} pages into a long image...';
+    });
+
+    try {
+      final outDir = AppStorageService.instance.exportsDir;
+      final outName =
+          'Stitched_LongImage_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final targetFile = File(p.join(outDir.path, outName));
+
+      await ImageProcessingService.stitchImageFilesVertically(
+        imageFiles: imageFiles,
+        targetFile: targetFile,
+        spacing: 12,
+        quality: 90,
+      );
+
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = null;
+      });
+
+      if (mounted) {
+        _showSuccessDialog(
+          'Long Image Created (${imageFiles.length} Pages)',
+          targetFile,
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = null;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Long Image stitching failed: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1323,6 +1396,14 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
                 title: 'Split by Custom Ranges',
                 subtitle: 'Partition document into multiple separate parts (e.g. 1-2, 3-6)',
                 onTap: _isProcessing ? null : _splitByRanges,
+              ),
+              const SizedBox(height: 10),
+              _buildToolCard(
+                icon: Icons.view_stream_outlined,
+                color: Colors.cyan,
+                title: 'Stitch to Long Image',
+                subtitle: 'Merge multiple receipt/document pages into a continuous vertical image',
+                onTap: _isProcessing ? null : _stitchLongImage,
               ),
 
               const SizedBox(height: 20),

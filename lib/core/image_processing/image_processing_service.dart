@@ -52,6 +52,9 @@ class ImageProcessingService {
       case PageFilter.grayscale:
         working = img.grayscale(working);
         break;
+      case PageFilter.magicColor:
+        working = applyMagicColor(working);
+        break;
       case PageFilter.blackAndWhite:
         // Default high-contrast document mode
         working = applyOtsuBinarization(working);
@@ -509,6 +512,55 @@ class ImageProcessingService {
     return boosted;
   }
 
+  /// CamScanner-style signature "Magic Color" (SilverBullet) algorithm:
+  /// 1. Whiten paper background while removing shadows and preserving light textures.
+  /// 2. Deepen dark text ink for maximum high-contrast readability.
+  /// 3. Preserve and boost colored ink, stamps, seals, and signatures (blue/red/green).
+  static img.Image applyMagicColor(img.Image src) {
+    final dst = img.Image(width: src.width, height: src.height);
+
+    for (int y = 0; y < src.height; y++) {
+      for (int x = 0; x < src.width; x++) {
+        final p = src.getPixel(x, y);
+        final double r = p.r.toDouble();
+        final double g = p.g.toDouble();
+        final double b = p.b.toDouble();
+
+        // Standard luminance
+        final double lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        final double maxC = math.max(r, math.max(g, b));
+        final double minC = math.min(r, math.min(g, b));
+        final double chroma = maxC - minC;
+
+        if (lum > 135 && chroma < 40) {
+          // Paper background region -> smoothly whiten to 255
+          final double t = ((lum - 135) / 120.0).clamp(0.0, 1.0);
+          final int nr = (r + (255 - r) * t).round().clamp(0, 255);
+          final int ng = (g + (255 - g) * t).round().clamp(0, 255);
+          final int nb = (b + (255 - b) * t).round().clamp(0, 255);
+          dst.setPixelRgb(x, y, nr, ng, nb);
+        } else if (chroma >= 40) {
+          // Colored ink, stamp, signature or seal -> preserve and saturate color
+          final double avg = (r + g + b) / 3.0;
+          final double satFactor = 1.35;
+          final int nr = (avg + (r - avg) * satFactor).round().clamp(0, 255);
+          final int ng = (avg + (g - avg) * satFactor).round().clamp(0, 255);
+          final int nb = (avg + (b - avg) * satFactor).round().clamp(0, 255);
+          dst.setPixelRgb(x, y, nr, ng, nb);
+        } else {
+          // Dark ink / pencil / printed text -> deepen contrast
+          final double factor = (lum / 135.0).clamp(0.2, 0.95);
+          final int nr = (r * factor * 0.85).round().clamp(0, 255);
+          final int ng = (g * factor * 0.85).round().clamp(0, 255);
+          final int nb = (b * factor * 0.85).round().clamp(0, 255);
+          dst.setPixelRgb(x, y, nr, ng, nb);
+        }
+      }
+    }
+
+    return img.adjustColor(dst, brightness: 1.04, contrast: 1.28);
+  }
+
   /// Whiteboard mode: whitens dry-erase board background while keeping markers saturated
   static img.Image applyWhiteboard(img.Image src) {
     final dst = img.Image(width: src.width, height: src.height);
@@ -785,5 +837,164 @@ class ImageProcessingService {
     final encoded = img.encodeJpg(redacted, quality: quality);
     await targetImage.writeAsBytes(encoded, flush: true);
     return targetImage;
+  }
+
+  /// Irreversibly pixelates/mosaics pixels within the specified normalized rectangular region [x, y, w, h].
+  /// Matches CamScanner's mosaic redaction mode for sensitive data, faces, and card numbers.
+  static img.Image permanentlyMosaicImage({
+    required img.Image src,
+    required double normX,
+    required double normY,
+    required double normW,
+    required double normH,
+    int blockSize = 14,
+  }) {
+    final dst = img.Image.from(src);
+    final int w = dst.width;
+    final int h = dst.height;
+
+    final int x0 = (normX * w).round().clamp(0, w - 1);
+    final int y0 = (normY * h).round().clamp(0, h - 1);
+    final int rw = (normW * w).round().clamp(1, w - x0);
+    final int rh = (normH * h).round().clamp(1, h - y0);
+
+    for (int by = y0; by < y0 + rh; by += blockSize) {
+      final int curBh = math.min(blockSize, y0 + rh - by);
+      for (int bx = x0; bx < x0 + rw; bx += blockSize) {
+        final int curBw = math.min(blockSize, x0 + rw - bx);
+
+        // Calculate average color in block
+        int sumR = 0, sumG = 0, sumB = 0, count = 0;
+        for (int py = by; py < by + curBh; py++) {
+          for (int px = bx; px < bx + curBw; px++) {
+            final p = dst.getPixel(px, py);
+            sumR += p.r.toInt();
+            sumG += p.g.toInt();
+            sumB += p.b.toInt();
+            count++;
+          }
+        }
+
+        final int avgR = (sumR / count).round().clamp(0, 255);
+        final int avgG = (sumG / count).round().clamp(0, 255);
+        final int avgB = (sumB / count).round().clamp(0, 255);
+
+        // Overwrite entire block with averaged color
+        for (int py = by; py < by + curBh; py++) {
+          for (int px = bx; px < bx + curBw; px++) {
+            dst.setPixelRgb(px, py, avgR, avgG, avgB);
+          }
+        }
+      }
+    }
+
+    return dst;
+  }
+
+  /// Permanently pixelates an image file on disk, writing the mosaic bitmap to target.
+  static Future<File> permanentlyMosaicImageFile({
+    required File sourceImage,
+    required File targetImage,
+    required double normX,
+    required double normY,
+    required double normW,
+    required double normH,
+    int blockSize = 14,
+    int quality = 90,
+  }) async {
+    final bytes = await sourceImage.readAsBytes();
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) {
+      throw Exception(
+        'Failed to decode image file for mosaic: ${sourceImage.path}',
+      );
+    }
+
+    final mosaic = permanentlyMosaicImage(
+      src: decoded,
+      normX: normX,
+      normY: normY,
+      normW: normW,
+      normH: normH,
+      blockSize: blockSize,
+    );
+
+    final encoded = img.encodeJpg(mosaic, quality: quality);
+    await targetImage.writeAsBytes(encoded, flush: true);
+    return targetImage;
+  }
+
+  // ===========================================================================
+  // 9. LONG IMAGE STITCHING (CamScanner LongImageStitch)
+  // ===========================================================================
+
+  /// Stitches a list of images vertically into a single continuous long image.
+  /// Standard CamScanner feature for receipts, multi-page document rolls, and chat captures.
+  static img.Image stitchImagesVertically(
+    List<img.Image> images, {
+    int spacing = 12,
+    img.Color? backgroundColor,
+  }) {
+    if (images.isEmpty) {
+      throw ArgumentError('Images list cannot be empty for stitching');
+    }
+    if (images.length == 1) {
+      return img.Image.from(images.first);
+    }
+
+    // Determine target canvas width (max width among all pages)
+    int maxWidth = 0;
+    for (final im in images) {
+      if (im.width > maxWidth) maxWidth = im.width;
+    }
+
+    // Determine total height with spacing
+    int totalHeight = 0;
+    for (int i = 0; i < images.length; i++) {
+      totalHeight += images[i].height;
+      if (i < images.length - 1) totalHeight += spacing;
+    }
+
+    final dst = img.Image(width: maxWidth, height: totalHeight);
+    final bg = backgroundColor ?? img.ColorRgb8(245, 245, 245);
+    img.fill(dst, color: bg);
+
+    int curY = 0;
+    for (final im in images) {
+      // Center horizontally if smaller than maxWidth
+      final int offsetX = ((maxWidth - im.width) / 2.0).round();
+      img.compositeImage(dst, im, dstX: offsetX, dstY: curY);
+      curY += im.height + spacing;
+    }
+
+    return dst;
+  }
+
+  /// Stitches multiple image files on disk into a single vertical long image file.
+  static Future<File> stitchImageFilesVertically({
+    required List<File> imageFiles,
+    required File targetFile,
+    int spacing = 12,
+    int quality = 90,
+  }) async {
+    final images = <img.Image>[];
+    for (final f in imageFiles) {
+      final bytes = await f.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded != null) {
+        images.add(decoded);
+      }
+    }
+
+    if (images.isEmpty) {
+      throw ArgumentError(
+        'No valid images could be decoded from provided files',
+      );
+    }
+
+    final stitched = stitchImagesVertically(images, spacing: spacing);
+    final encoded = img.encodeJpg(stitched, quality: quality);
+    await targetFile.writeAsBytes(encoded, flush: true);
+    return targetFile;
   }
 }

@@ -720,6 +720,11 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                               Icons.photo_outlined,
                             ),
                             _buildQuickFilterChip(
+                              'Magic Color',
+                              PageFilter.magicColor,
+                              Icons.auto_awesome,
+                            ),
+                            _buildQuickFilterChip(
                               'Color Boost',
                               PageFilter.colorBoost,
                               Icons.palette,

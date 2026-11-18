@@ -307,6 +307,7 @@ class DocumentPage {
 
 enum PageFilter {
   original,
+  magicColor,
   grayscale,
   blackAndWhite,
   whiteboard,
