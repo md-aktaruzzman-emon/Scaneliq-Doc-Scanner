@@ -1,22 +1,32 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/models/document_models.dart';
+import 'package:scaneliq/core/navigation/app_router.dart';
+import 'package:scaneliq/core/navigation/main_navigation_shell.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
-import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
+import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
+import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
+import 'package:scaneliq/core/theme/scaneliq_typography.dart';
+import 'package:scaneliq/core/widgets/scaneliq_bottom_nav.dart';
+import 'package:scaneliq/core/widgets/scaneliq_buttons.dart';
+import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
+import 'package:scaneliq/core/widgets/scaneliq_document_widgets.dart';
+import 'package:scaneliq/core/widgets/scaneliq_mark.dart';
+import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
+import 'package:scaneliq/core/widgets/scaneliq_search_field.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/documents/presentation/documents_library_screen.dart';
-import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
-import 'package:scaneliq/features/scanner/presentation/count_cam_screen.dart';
-import 'package:scaneliq/features/scanner/presentation/scan_code_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
-import 'package:scaneliq/features/scanner/presentation/translate_screen.dart';
+import 'package:scaneliq/features/scanner/presentation/scanner_studio_provider.dart';
 
+enum _HomeDocumentScope { recent, starred }
+
+/// Concept A (Editorial Gallery Minimal) Home Dashboard (`Scans` Tab).
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -27,7 +37,11 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  bool _isGridView = false;
+  _HomeDocumentScope _scope = _HomeDocumentScope.recent;
+  bool _sortNewestFirst = true;
+  bool _selectionMode = false;
+  final Set<String> _selectedDocIds = {};
+  bool _isCaptureBusy = false;
 
   @override
   void dispose() {
@@ -35,60 +49,95 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.dispose();
   }
 
-  void _startNewScan() async {
-    ref.read(scanSessionProvider.notifier).resetSession();
-    final success = await ref
-        .read(scanSessionProvider.notifier)
-        .startScannerCapture();
-    if (success && mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ReviewPagesScreen()),
+  Future<void> _startNewScan() async {
+    if (_isCaptureBusy) return;
+    setState(() => _isCaptureBusy = true);
+
+    try {
+      ref.read(scanSessionProvider.notifier).resetSession();
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const ContinuousCameraScreen(mode: ScanMode.batch),
+        ),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isCaptureBusy = false);
+      }
     }
   }
 
-  void _importFiles() async {
+  Future<void> _importFiles() async {
+    if (_isCaptureBusy) return;
+    setState(() => _isCaptureBusy = true);
+
     try {
-      final pickedFiles = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-      );
+      final result = await ref
+          .read(galleryImportServiceProvider)
+          .pickAndValidateImages();
+      if (result.cancelled) return;
 
-      if (pickedFiles.isNotEmpty) {
-        final files = pickedFiles
-            .where((p) => p.path != null)
-            .map((p) => File(p.path!))
-            .toList();
-
-        if (files.isNotEmpty) {
-          ref.read(scanSessionProvider.notifier).resetSession();
-          final count = await ref
-              .read(scanSessionProvider.notifier)
-              .importFiles(files);
-          if (count > 0 && mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ReviewPagesScreen()),
-            );
-          }
+      if (!result.hasAccepted) {
+        if (mounted) {
+          showScaneliqToast(
+            context,
+            result.rejections.isNotEmpty
+                ? result.rejections.first.reason
+                : 'No valid images selected.',
+          );
         }
+        return;
+      }
+
+      ref.read(scanSessionProvider.notifier).resetSession();
+      final count = await ref
+          .read(scanSessionProvider.notifier)
+          .importFiles(result.accepted.map((a) => a.file).toList());
+      if (count > 0 && mounted) {
+        navigateToReviewPages(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not import files: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        showScaneliqToast(context, 'Could not import files: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCaptureBusy = false);
       }
     }
+  }
+
+  void _openFoldersDestination() {
+    final shell = ScaneliqShellScope.of(context);
+    if (shell != null) {
+      shell.goToTab(1);
+      return;
+    }
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const DocumentsLibraryScreen()));
+  }
+
+  void _openDocument(ScannedDocument doc) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => DocumentViewerScreen(document: doc)),
+    );
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selectedDocIds.contains(id)) {
+        _selectedDocIds.remove(id);
+      } else {
+        _selectedDocIds.add(id);
+      }
+    });
   }
 
   Future<void> _toggleFavorite(ScannedDocument doc) async {
     await AppDatabaseService.instance.toggleFavorite(doc.id, !doc.isFavorite);
     ref.invalidate(documentsListProvider);
+    ref.invalidate(searchedDocumentsProvider);
   }
 
   Future<void> _shareDocument(ScannedDocument doc) async {
@@ -98,904 +147,689 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       SharePlus.instance.share(
         ShareParams(text: doc.title, files: [XFile(doc.exportPath!)]),
       );
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No PDF export found for this scan.')),
-        );
-      }
+      return;
+    }
+    if (mounted) {
+      showScaneliqToast(context, 'Save as PDF first to share "${doc.title}".');
     }
   }
 
-  Future<void> _deleteDocument(ScannedDocument doc) async {
+  Future<void> _trashDocument(ScannedDocument doc) async {
     await AppDatabaseService.instance.moveToTrash(doc.id);
     ref.invalidate(documentsListProvider);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Moved "${doc.title}" to Trash.'),
-          behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: 'Undo',
-            onPressed: () async {
-              await AppDatabaseService.instance.restoreFromTrash(doc.id);
-              ref.invalidate(documentsListProvider);
-            },
-          ),
-        ),
-      );
+    ref.invalidate(searchedDocumentsProvider);
+    if (!mounted) return;
+    showScaneliqToast(
+      context,
+      'Moved "${doc.title}" to 30-day Trash.',
+      actionLabel: 'Undo',
+      onAction: () async {
+        await AppDatabaseService.instance.restoreFromTrash(doc.id);
+        ref.invalidate(documentsListProvider);
+        ref.invalidate(searchedDocumentsProvider);
+      },
+    );
+  }
+
+  Future<void> _trashSelected(List<ScannedDocument> docs) async {
+    if (_selectedDocIds.isEmpty) return;
+    final confirmed = await showScaneliqConfirmDialog(
+      context: context,
+      title: 'Move to Trash?',
+      message:
+          'Move ${_selectedDocIds.length} selected documents to 30-day Trash recovery?',
+      confirmLabel: 'Move to Trash',
+      isDestructive: true,
+    );
+    if (!confirmed) return;
+
+    for (final id in _selectedDocIds.toList()) {
+      await AppDatabaseService.instance.moveToTrash(id);
     }
+    setState(() {
+      _selectedDocIds.clear();
+      _selectionMode = false;
+    });
+    ref.invalidate(documentsListProvider);
+    ref.invalidate(searchedDocumentsProvider);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final docsAsync = ref.watch(documentsListProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  void _showDocumentActionsSheet(ScannedDocument doc) {
+    final hasExport =
+        doc.exportPath != null && File(doc.exportPath!).existsSync();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Row(
-          children: [
-            ScaneliqLogo(size: 28, borderRadius: 6),
-            SizedBox(width: 10),
-            Text(
-              'Scaneliq',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19),
-            ),
-          ],
-        ),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(documentsListProvider);
-          ref.invalidate(latestDraftProvider);
-        },
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Subtitle / tagline
-                    Text(
-                      'Scan documents. Keep everything organized.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Search Pill (Elevated at top for immediate discoverability)
-                    TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search documents by name...',
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  setState(() {
-                                    _searchController.clear();
-                                    _searchQuery = '';
-                                  });
-                                },
-                              )
-                            : null,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      onChanged: (val) {
-                        setState(() {
-                          _searchQuery = val.trim().toLowerCase();
-                        });
-                      },
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // Primary scan & import actions
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: ElevatedButton.icon(
-                            onPressed: _startNewScan,
-                            icon: const Icon(
-                              Icons.document_scanner_rounded,
-                              size: 20,
-                            ),
-                            label: const Text('Scan document'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.brandPrimary,
-                              foregroundColor: Colors.white,
-                              minimumSize: const Size(0, 48),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: FilledButton.tonalIcon(
-                            onPressed: _importFiles,
-                            icon: const Icon(
-                              Icons.file_upload_outlined,
-                              size: 20,
-                            ),
-                            label: const Text('Import'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: isDark
-                                  ? AppColors.surface2Dark
-                                  : AppColors.surface2Light,
-                              foregroundColor: isDark
-                                  ? AppColors.textPrimaryDark
-                                  : AppColors.textPrimaryLight,
-                              minimumSize: const Size(0, 48),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Draft recovery card if active draft exists
-                    ref
-                        .watch(latestDraftProvider)
-                        .maybeWhen(
-                          data: (draft) {
-                            if (draft == null || draft.pages.isEmpty) {
-                              return const SizedBox.shrink();
-                            }
-                            return Container(
-                              margin: const EdgeInsets.only(top: 14),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.surface2Dark
-                                    : const Color(0xFFFFFBEB),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: isDark
-                                      ? AppColors.warning.withValues(alpha: 0.4)
-                                      : const Color(0xFFFDE68A),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.warning.withValues(
-                                        alpha: 0.15,
-                                      ),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.history_toggle_off,
-                                      color: AppColors.warning,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Unfinished Scan Draft',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        Text(
-                                          '${draft.title} · ${draft.pages.length} pages',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: isDark
-                                                ? AppColors.textSecondaryDark
-                                                : AppColors.textSecondaryLight,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  FilledButton.tonal(
-                                    style: FilledButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      minimumSize: const Size(64, 34),
-                                    ),
-                                    onPressed: () {
-                                      ref
-                                          .read(scanSessionProvider.notifier)
-                                          .loadDraftSession(draft);
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const ReviewPagesScreen(),
-                                        ),
-                                      );
-                                    },
-                                    child: const Text(
-                                      'Resume',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                          orElse: () => const SizedBox.shrink(),
-                        ),
-
-                    const SizedBox(height: 16),
-
-                    // Smart Scanning Modes Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Smart Scanning Modes',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          'Quick capture',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : AppColors.textSecondaryLight,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Horizontal scrolling pill carousel of smart modes
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _buildCarouselItem(
-                            icon: Icons.burst_mode_rounded,
-                            label: 'Batch',
-                            onTap: () {
-                              ref
-                                  .read(scanSessionProvider.notifier)
-                                  .resetSession('Batch_Scan');
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const ContinuousCameraScreen(
-                                    mode: ScanMode.batch,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildCarouselItem(
-                            icon: Icons.badge_outlined,
-                            label: 'ID Card',
-                            onTap: () {
-                              ref
-                                  .read(scanSessionProvider.notifier)
-                                  .resetSession('ID_Card');
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const ContinuousCameraScreen(
-                                    mode: ScanMode.idCard,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildCarouselItem(
-                            icon: Icons.quiz_outlined,
-                            label: 'Q&A / Exam',
-                            onTap: () {
-                              ref
-                                  .read(scanSessionProvider.notifier)
-                                  .resetSession('Question_Set');
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const ContinuousCameraScreen(
-                                    mode: ScanMode.questionSet,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildCarouselItem(
-                            icon: Icons.menu_book_outlined,
-                            label: 'Book',
-                            onTap: () {
-                              ref
-                                  .read(scanSessionProvider.notifier)
-                                  .resetSession('Book_Scan');
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const ContinuousCameraScreen(
-                                    mode: ScanMode.book,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildCarouselItem(
-                            icon: Icons.co_present_outlined,
-                            label: 'Whiteboard',
-                            onTap: () {
-                              ref
-                                  .read(scanSessionProvider.notifier)
-                                  .resetSession('Whiteboard');
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const ContinuousCameraScreen(
-                                    mode: ScanMode.whiteboard,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildCarouselItem(
-                            icon: Icons.qr_code_scanner_rounded,
-                            label: 'QR / Code',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const ScanCodeScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildCarouselItem(
-                            icon: Icons.calculate_outlined,
-                            label: 'CountCam',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const CountCamScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          _buildCarouselItem(
-                            icon: Icons.translate_rounded,
-                            label: 'Translate',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const TranslateScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Recent Documents Section Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Recent Documents',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const DocumentsLibraryScreen(),
-                                  ),
-                                );
-                              },
-                              child: const Text(
-                                'See all',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              icon: Icon(
-                                _isGridView
-                                    ? Icons.view_agenda_outlined
-                                    : Icons.grid_view_outlined,
-                                size: 20,
-                              ),
-                              tooltip: _isGridView
-                                  ? 'Switch to List'
-                                  : 'Switch to Grid',
-                              onPressed: () {
-                                setState(() {
-                                  _isGridView = !_isGridView;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            docsAsync.when(
-              loading: () => const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (err, stack) => SliverFillRemaining(
-                child: Center(child: Text('Error loading documents: $err')),
-              ),
-              data: (documents) {
-                final filtered = documents.where((d) {
-                  if (_searchQuery.isEmpty) return true;
-                  return d.title.toLowerCase().contains(_searchQuery);
-                }).toList();
-
-                if (filtered.isEmpty) {
-                  return SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 28.0,
-                          vertical: 32.0,
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 76,
-                              height: 76,
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.surface2Dark
-                                    : AppColors.brandLight,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                _searchQuery.isEmpty
-                                    ? Icons.document_scanner_outlined
-                                    : Icons.search_off_rounded,
-                                size: 38,
-                                color: AppColors.brandPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            Text(
-                              _searchQuery.isEmpty
-                                  ? 'No scans yet'
-                                  : 'No matching documents',
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _searchQuery.isEmpty
-                                  ? 'Digitize receipts, notes, IDs, and multi-page documents in seconds.'
-                                  : 'Try adjusting your search terms to find what you are looking for.',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    color: isDark
-                                        ? AppColors.textSecondaryDark
-                                        : AppColors.textSecondaryLight,
-                                  ),
-                              textAlign: TextAlign.center,
-                            ),
-                            if (_searchQuery.isEmpty) ...[
-                              const SizedBox(height: 22),
-                              ElevatedButton.icon(
-                                onPressed: _startNewScan,
-                                icon: const Icon(
-                                  Icons.document_scanner_rounded,
-                                  size: 18,
-                                ),
-                                label: const Text('Scan document'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.brandPrimary,
-                                  foregroundColor: Colors.white,
-                                  minimumSize: const Size(180, 46),
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              TextButton.icon(
-                                onPressed: _importFiles,
-                                icon: const Icon(
-                                  Icons.file_upload_outlined,
-                                  size: 18,
-                                ),
-                                label: const Text('Import a photo instead'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppColors.brandPrimary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
-
-                if (_isGridView) {
-                  return SliverPadding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    sliver: SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 0.76,
-                          ),
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final doc = filtered[index];
-                        return _buildGridDocumentCard(doc, isDark);
-                      }, childCount: filtered.length),
-                    ),
-                  );
-                }
-
-                return SliverPadding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
-                  ),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final doc = filtered[index];
-                      return _buildListDocumentCard(doc, isDark);
-                    }, childCount: filtered.length),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCarouselItem({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      child: Material(
-        color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppColors.surface2Dark
-                        : AppColors.brandLight,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: isDark
-                        ? AppColors.brandAccent
-                        : AppColors.brandPrimary,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildThumbnailWidget(ScannedDocument doc, double height) {
-    if (doc.pages.isNotEmpty) {
-      final thumbPath =
-          doc.pages.first.processedPath ?? doc.pages.first.originalPath;
-      if (File(thumbPath).existsSync()) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.file(
-            File(thumbPath),
-            height: height,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => _buildFallbackThumbnail(height),
-          ),
-        );
-      }
-    }
-    return _buildFallbackThumbnail(height);
-  }
-
-  Widget _buildFallbackThumbnail(double height) {
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        color: AppColors.brandPrimary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Center(
-        child: Icon(
-          Icons.picture_as_pdf_rounded,
-          color: AppColors.brandPrimary,
-          size: 28,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGridDocumentCard(ScannedDocument doc, bool isDark) {
-    return Material(
-      color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => DocumentViewerScreen(document: doc),
-            ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark ? AppColors.surface3Dark : AppColors.surface3Light,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    showScaneliqBottomSheet<void>(
+      context: context,
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
             children: [
-              Expanded(
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: _buildThumbnailWidget(doc, double.infinity),
-                    ),
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: InkWell(
-                        onTap: () => _toggleFavorite(doc),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            doc.isFavorite ? Icons.star : Icons.star_border,
-                            color: doc.isFavorite ? Colors.amber : Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                doc.title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${doc.pageCount} ${doc.pageCount == 1 ? 'page' : 'pages'}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                  ),
-                  _buildCardMenu(doc),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListDocumentCard(ScannedDocument doc, bool isDark) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => DocumentViewerScreen(document: doc),
-            ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 48,
-                height: 58,
-                child: _buildThumbnailWidget(doc, 58),
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       doc.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                      style: Theme.of(ctx).textTheme.titleLarge,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      '${doc.pageCount} ${doc.pageCount == 1 ? 'page' : 'pages'} · ${doc.createdAt.year}-${doc.createdAt.month.toString().padLeft(2, '0')}-${doc.createdAt.day.toString().padLeft(2, '0')}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
-                    ),
+                    ScaneliqDocumentMetadata(document: doc),
                   ],
                 ),
               ),
-              IconButton(
-                icon: Icon(
-                  doc.isFavorite ? Icons.star : Icons.star_border,
-                  color: doc.isFavorite ? Colors.amber : null,
-                  size: 20,
-                ),
-                tooltip: doc.isFavorite ? 'Unfavorite' : 'Favorite',
-                onPressed: () => _toggleFavorite(doc),
+              ScaneliqStatusLabel(
+                text: hasExport ? 'PDF READY' : 'SCAN DRAFT',
+                tone: hasExport
+                    ? ScaneliqStatusTone.accent
+                    : ScaneliqStatusTone.neutral,
               ),
-              _buildCardMenu(doc),
             ],
           ),
+          const SizedBox(height: 12),
+          ScaneliqContextMenuRow(
+            icon: Icons.open_in_new_rounded,
+            title: 'Open Document Viewer',
+            subtitle: 'View pages, run OCR, sign or annotate',
+            onTap: () {
+              Navigator.of(ctx).pop();
+              _openDocument(doc);
+            },
+          ),
+          ScaneliqContextMenuRow(
+            icon: doc.isFavorite
+                ? Icons.star_rounded
+                : Icons.star_outline_rounded,
+            title: doc.isFavorite
+                ? 'Remove from Starred'
+                : 'Add to Starred Priority',
+            trailing: ScaneliqStatusLabel(
+              text: doc.isFavorite ? 'STARRED' : 'STAR',
+              tone: doc.isFavorite
+                  ? ScaneliqStatusTone.warning
+                  : ScaneliqStatusTone.neutral,
+            ),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              _toggleFavorite(doc);
+            },
+          ),
+          ScaneliqContextMenuRow(
+            icon: Icons.ios_share_rounded,
+            title: 'Export & Share',
+            subtitle: hasExport
+                ? 'Unwatermarked PDF ready to share'
+                : 'Open Viewer to compile export PDF',
+            trailing: const ScaneliqStatusLabel(
+              text: 'SHARE',
+              tone: ScaneliqStatusTone.accent,
+            ),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              _shareDocument(doc);
+            },
+          ),
+          ScaneliqContextMenuRow(
+            icon: Icons.delete_outline_rounded,
+            title: 'Move to 30-Day Trash',
+            titleColor: ctx.tokens.danger,
+            trailing: const ScaneliqStatusLabel(
+              text: 'TRASH',
+              tone: ScaneliqStatusTone.danger,
+            ),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              _trashDocument(doc);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<ScannedDocument> _applyFiltersAndSort(List<ScannedDocument> docs) {
+    final activeDocs = docs.where((d) => !d.isDraft && !d.isTrashed).where((d) {
+      if (_scope == _HomeDocumentScope.starred && !d.isFavorite) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    activeDocs.sort((a, b) {
+      if (_sortNewestFirst) {
+        return b.modifiedAt.compareTo(a.modifiedAt);
+      }
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    });
+
+    return activeDocs;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final horizontalPad = ScaneliqSpacing.adaptiveHorizontalPadding(screenWidth);
+    final bottomNavInset = _selectionMode ? 80.0 : 92.0;
+
+    final allDocsAsync = ref.watch(documentsListProvider);
+    final docsAsync = _searchQuery.isEmpty
+        ? allDocsAsync
+        : ref.watch(searchedDocumentsProvider(_searchQuery));
+    final foldersAsync = ref.watch(foldersListProvider(null));
+    final draftAsync = ref.watch(latestDraftProvider);
+
+    final allActiveDocs = allDocsAsync.maybeWhen(
+      data: (list) => list.where((d) => !d.isDraft && !d.isTrashed).toList(),
+      orElse: () => const <ScannedDocument>[],
+    );
+    final recentCount = allActiveDocs.length;
+    final starredCount = allActiveDocs.where((d) => d.isFavorite).length;
+    final foldersCount = foldersAsync.maybeWhen(
+      data: (folders) => folders.length,
+      orElse: () => 0,
+    );
+
+    final filteredDocs = docsAsync.maybeWhen(
+      data: _applyFiltersAndSort,
+      orElse: () => const <ScannedDocument>[],
+    );
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: tokens.bg,
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            RefreshIndicator(
+              color: tokens.accent,
+              onRefresh: () async {
+                ref.invalidate(documentsListProvider);
+                ref.invalidate(searchedDocumentsProvider);
+                ref.invalidate(foldersListProvider(null));
+                ref.invalidate(latestDraftProvider);
+              },
+              child: CustomScrollView(
+                slivers: [
+                  // 1. Editorial Header
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPad,
+                        ScaneliqSpacing.headerVerticalTop,
+                        horizontalPad,
+                        ScaneliqSpacing.headerVerticalBottom,
+                      ),
+                      child: _selectionMode
+                          ? _buildSelectionHeader(
+                              textTheme,
+                              tokens,
+                              filteredDocs,
+                            )
+                          : _buildEditorialHeader(textTheme, tokens, isDark),
+                    ),
+                  ),
+
+                  // 2. Search & Scope Strip
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPad,
+                        0,
+                        horizontalPad,
+                        ScaneliqSpacing.searchZoneBottom,
+                      ),
+                      child: Column(
+                        children: [
+                          ScaneliqSearchField(
+                            controller: _searchController,
+                            query: _searchQuery,
+                            onChanged: (value) {
+                              setState(() {
+                                _searchQuery = value.trim();
+                              });
+                            },
+                            onClear: () {
+                              setState(() {
+                                _searchController.clear();
+                                _searchQuery = '';
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          ScaneliqScopeTabs(
+                            items: [
+                              ScaneliqScopeItem(
+                                label: 'Recent',
+                                count: recentCount,
+                              ),
+                              ScaneliqScopeItem(
+                                label: 'Starred',
+                                count: starredCount,
+                              ),
+                              ScaneliqScopeItem(
+                                label: 'Folders',
+                                count: foldersCount,
+                              ),
+                            ],
+                            selectedIndex: _scope == _HomeDocumentScope.recent
+                                ? 0
+                                : 1,
+                            onSelected: (index) {
+                              if (index == 2) {
+                                _openFoldersDestination();
+                                return;
+                              }
+                              setState(() {
+                                _scope = index == 0
+                                    ? _HomeDocumentScope.recent
+                                    : _HomeDocumentScope.starred;
+                              });
+                            },
+                            trailing: ScaneliqIconButton(
+                              icon: _sortNewestFirst
+                                  ? Icons.sort_rounded
+                                  : Icons.sort_by_alpha_rounded,
+                              tooltip: _sortNewestFirst
+                                  ? 'Sorted by newest'
+                                  : 'Sorted A–Z',
+                              color: tokens.textSecondary,
+                              size: 34,
+                              onPressed: () {
+                                setState(() {
+                                  _sortNewestFirst = !_sortNewestFirst;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 3. Featured Continue Working Draft Section
+                  if (_searchQuery.isEmpty &&
+                      _scope == _HomeDocumentScope.recent)
+                    draftAsync.maybeWhen(
+                      data: (draft) {
+                        if (draft == null || draft.pages.isEmpty) {
+                          return const SliverToBoxAdapter(
+                            child: SizedBox.shrink(),
+                          );
+                        }
+                        return SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: horizontalPad,
+                            ),
+                            child: Column(
+                              children: [
+                                ScaneliqSectionHeader(
+                                  title: 'Continue working',
+                                  actionLabel: 'Resume draft',
+                                  onAction: () {
+                                    ref
+                                        .read(scanSessionProvider.notifier)
+                                        .loadDraftSession(draft);
+                                    navigateToReviewPages(context);
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                ScaneliqFeaturedFolioCard(
+                                  draft: draft,
+                                  onResume: () {
+                                    ref
+                                        .read(scanSessionProvider.notifier)
+                                        .loadDraftSession(draft);
+                                    navigateToReviewPages(context);
+                                  },
+                                  onAddPages: () {
+                                    ref
+                                        .read(scanSessionProvider.notifier)
+                                        .loadDraftSession(draft);
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const ContinuousCameraScreen(),
+                                      ),
+                                    );
+                                  },
+                                  onSavePdf: () {
+                                    ref
+                                        .read(scanSessionProvider.notifier)
+                                        .loadDraftSession(draft);
+                                    navigateToReviewPages(context);
+                                  },
+                                ),
+                                const SizedBox(height: 15),
+                                const ScaneliqHairlineDivider(),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      orElse: () =>
+                          const SliverToBoxAdapter(child: SizedBox.shrink()),
+                    ),
+
+                  // 4. Document Stream Section Header
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPad,
+                        16,
+                        horizontalPad,
+                        4,
+                      ),
+                      child: ScaneliqSectionHeader(
+                        title: _searchQuery.isNotEmpty
+                            ? 'Search Results'
+                            : (_scope == _HomeDocumentScope.starred
+                                  ? 'Starred Documents'
+                                  : _currentMonthHeader()),
+                        actionLabel: 'All files',
+                        onAction: _openFoldersDestination,
+                      ),
+                    ),
+                  ),
+
+                  // 5. Hairline Document Stream / Loading / Empty
+                  docsAsync.when(
+                    loading: () => SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: bottomNavInset),
+                        child: const ScaneliqLoadingIndicator(),
+                      ),
+                    ),
+                    error: (err, _) => SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: bottomNavInset),
+                        child: ScaneliqEmptyState(
+                          icon: Icons.error_outline_rounded,
+                          title: 'Could not read local vault',
+                          description: '$err',
+                        ),
+                      ),
+                    ),
+                    data: (rawDocs) {
+                      final list = _applyFiltersAndSort(rawDocs);
+                      if (list.isEmpty) {
+                        return SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Padding(
+                            padding: EdgeInsets.only(bottom: bottomNavInset),
+                            child: ScaneliqEmptyState(
+                              icon: _searchQuery.isNotEmpty
+                                  ? Icons.search_off_rounded
+                                  : (_scope == _HomeDocumentScope.starred
+                                        ? Icons.star_outline_rounded
+                                        : Icons.document_scanner_outlined),
+                              title: _searchQuery.isNotEmpty
+                                  ? 'No matching documents'
+                                  : (_scope == _HomeDocumentScope.starred
+                                        ? 'No starred documents'
+                                        : 'No scans yet'),
+                              description: _searchQuery.isNotEmpty
+                                  ? 'Try another title or keyword indexed by on-device OCR.'
+                                  : (_scope == _HomeDocumentScope.starred
+                                        ? 'Star important contracts or receipts from any document menu.'
+                                        : 'Scan paper documents, IDs, or receipts into your encrypted local vault.'),
+                              primaryActionLabel:
+                                  _searchQuery.isEmpty &&
+                                      _scope == _HomeDocumentScope.recent
+                                  ? 'Scan document'
+                                  : null,
+                              onPrimaryAction: _startNewScan,
+                              secondaryActionLabel:
+                                  _searchQuery.isEmpty &&
+                                      _scope == _HomeDocumentScope.recent
+                                  ? 'Import from Gallery'
+                                  : null,
+                              onSecondaryAction: _importFiles,
+                            ),
+                          ),
+                        );
+                      }
+
+                      return SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          horizontalPad,
+                          0,
+                          horizontalPad,
+                          bottomNavInset,
+                        ),
+                        sliver: SliverList.builder(
+                          itemCount: list.length,
+                          itemBuilder: (context, index) {
+                            final doc = list[index];
+                            final selected = _selectedDocIds.contains(doc.id);
+                            return ScaneliqDocumentRow(
+                              document: doc,
+                              selectionMode: _selectionMode,
+                              isSelected: selected,
+                              onTap: _selectionMode
+                                  ? () => _toggleSelection(doc.id)
+                                  : () => _openDocument(doc),
+                              onLongPress: () {
+                                if (!_selectionMode) {
+                                  setState(() {
+                                    _selectionMode = true;
+                                    _selectedDocIds.add(doc.id);
+                                  });
+                                }
+                              },
+                              onMoreTap: _selectionMode
+                                  ? null
+                                  : () => _showDocumentActionsSheet(doc),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            // 6. Floating Capture Cluster (`[Gallery]` + `[📷 Scan]`) OR Selection Dock
+            if (_selectionMode)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _buildSelectionActionDock(tokens, filteredDocs),
+              )
+            else
+              Positioned(
+                right: horizontalPad,
+                bottom: ScaneliqSpacing.fabClusterBottomGap,
+                child: ScaneliqFloatingCaptureCluster(
+                  onScanPressed: _startNewScan,
+                  onImportPressed: _importFiles,
+                  isBusy: _isCaptureBusy,
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildCardMenu(ScannedDocument doc) {
-    final hasExport =
-        doc.exportPath != null && File(doc.exportPath!).existsSync();
-
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, size: 20),
-      padding: EdgeInsets.zero,
-      onSelected: (val) {
-        if (val == 'share') {
-          _shareDocument(doc);
-        } else if (val == 'delete') {
-          _deleteDocument(doc);
-        }
-      },
-      itemBuilder: (context) => [
-        if (hasExport)
-          const PopupMenuItem(
-            value: 'share',
-            child: Row(
-              children: [
-                Icon(Icons.share_outlined, size: 18),
-                SizedBox(width: 8),
-                Text('Share PDF'),
-              ],
-            ),
-          ),
-        const PopupMenuItem(
-          value: 'delete',
+  Widget _buildEditorialHeader(
+    TextTheme textTheme,
+    ScaneliqTokens tokens,
+    bool isDark,
+  ) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
           child: Row(
             children: [
-              Icon(Icons.delete_outline, size: 18, color: AppColors.error),
-              SizedBox(width: 8),
-              Text('Delete', style: TextStyle(color: AppColors.error)),
+              const ScaneliqMark(size: 26),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  'Scaneliq',
+                  style: textTheme.headlineLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
         ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ScaneliqIconButton(
+              icon: isDark
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+              tooltip: 'Switch theme',
+              onPressed: () {
+                ref
+                    .read(themeModeProvider.notifier)
+                    .toggleLightDark(MediaQuery.platformBrightnessOf(context));
+              },
+            ),
+            ScaneliqIconButton(
+              icon: Icons.check_box_outlined,
+              tooltip: 'Select multiple',
+              onPressed: () {
+                setState(() {
+                  _selectionMode = true;
+                  _selectedDocIds.clear();
+                });
+              },
+            ),
+            ScaneliqIconButton(
+              icon: Icons.settings_outlined,
+              tooltip: 'Settings & Vault',
+              onPressed: () => navigateToSettings(context),
+            ),
+          ],
+        ),
       ],
     );
+  }
+
+  Widget _buildSelectionHeader(
+    TextTheme textTheme,
+    ScaneliqTokens tokens,
+    List<ScannedDocument> visibleDocs,
+  ) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              ScaneliqIconButton(
+                icon: Icons.close_rounded,
+                tooltip: 'Cancel selection',
+                onPressed: () {
+                  setState(() {
+                    _selectionMode = false;
+                    _selectedDocIds.clear();
+                  });
+                },
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  '${_selectedDocIds.length} Selected',
+                  style: textTheme.headlineMedium,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ScaneliqTextButton(
+          label: 'Select all',
+          onPressed: () {
+            setState(() {
+              _selectedDocIds
+                ..clear()
+                ..addAll(visibleDocs.map((d) => d.id));
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectionActionDock(
+    ScaneliqTokens tokens,
+    List<ScannedDocument> visibleDocs,
+  ) {
+    final count = _selectedDocIds.length;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        border: Border(
+          top: BorderSide(color: tokens.hairline, width: 1),
+          bottom: BorderSide(color: tokens.hairline, width: 1),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '$count selected',
+            style: ScaneliqTypography.monoStyle(
+              color: tokens.textSecondary,
+              fontSize: 11.5,
+            ),
+          ),
+          Row(
+            children: [
+              ScaneliqTextButton(
+                label: 'Folders',
+                onPressed: count == 0 ? null : _openFoldersDestination,
+              ),
+              const SizedBox(width: 8),
+              ScaneliqDestructiveButton(
+                label: 'Trash',
+                icon: Icons.delete_outline_rounded,
+                onPressed: count == 0
+                    ? null
+                    : () => _trashSelected(visibleDocs),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _currentMonthHeader() {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    final now = DateTime.now();
+    return '${months[now.month - 1]} ${now.year}';
   }
 }

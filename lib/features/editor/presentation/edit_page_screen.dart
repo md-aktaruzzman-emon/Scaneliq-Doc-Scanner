@@ -1,1245 +1,1393 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
-import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
+import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
+import 'package:scaneliq/core/theme/scaneliq_typography.dart';
+import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
+import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
+import 'package:scaneliq/features/editor/presentation/edit_history_controller.dart';
+import 'package:scaneliq/features/editor/presentation/widgets/editor_preview_stage.dart';
+import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 
-enum EditTab { filter, binarize, crop, adjust, cleanup }
+/// Primary editing categories for the Concept A Scan Editor toolbar.
+enum EditTab { crop, enhance, filter, adjust, rotate }
 
-class EditPageScreen extends StatefulWidget {
+/// Concept A (Editorial Gallery Minimal) Non-Destructive Scan Editor.
+///
+/// Supports Auto Crop, 4-point Perspective Homography Warp, Box Crop,
+/// Rotation, 8+ Document Filters, Brightness/Contrast/Sharpness sliders,
+/// Otsu/Sauvola Binarization, Shadow Correction, Before/After Split Comparison,
+/// per-page Undo/Redo history, and Multi-Page session switching & reordering.
+class EditPageScreen extends ConsumerStatefulWidget {
   final DocumentPage page;
-  final Function(EditRecipe) onApply;
+  final void Function(EditRecipe recipe) onApply;
+  final List<DocumentPage>? pages;
+  final int? initialPageIndex;
+  final EditTab initialTab;
 
-  const EditPageScreen({super.key, required this.page, required this.onApply});
+  const EditPageScreen({
+    super.key,
+    required this.page,
+    required this.onApply,
+    this.pages,
+    this.initialPageIndex,
+    this.initialTab = EditTab.filter,
+  });
 
   @override
-  State<EditPageScreen> createState() => _EditPageScreenState();
+  ConsumerState<EditPageScreen> createState() => _EditPageScreenState();
 }
 
-class _EditPageScreenState extends State<EditPageScreen> {
-  EditTab _currentTab = EditTab.filter;
+class _EditPageScreenState extends ConsumerState<EditPageScreen> {
+  final MultiPageEditHistory _history = MultiPageEditHistory();
 
-  // Edit Recipe state
-  late int _rotation;
-  late PageFilter _filter;
-  late double _contrast;
-  late double _brightness;
-  late double _cropLeft;
-  late double _cropTop;
-  late double _cropRight;
-  late double _cropBottom;
+  late List<DocumentPage> _editablePages;
+  late int _activePageIndex;
+  late EditTab _currentTab;
 
-  // Phase 3 new capabilities
-  late BinarizationMode _binarization;
-  late bool _shadowCorrection;
-  late List<CleanupPatch> _cleanupPatches;
-  late PerspectiveQuad _quad;
   bool _usePerspectiveWarp = false;
-
-  // Cleanup tool config
+  bool _isComparing = false;
+  double _compareSplit = 0.5;
+  bool _isCleanupMode = false;
   String _cleanupType = 'holePunch';
-  double _cleanupRadius = 0.035; // ~3.5% of width
+  final double _cleanupRadius = 0.035;
 
-  // Debounced processed preview
-  Uint8List? _previewBytes;
   bool _isProcessingPreview = false;
+  bool _isSaving = false;
+  bool _isAutoDetectingCrop = false;
+  Uint8List? _processedPreviewBytes;
+  int _renderGeneration = 0;
   Timer? _debounceTimer;
+  Timer? _sliderHistoryDebounce;
 
   @override
   void initState() {
     super.initState();
-    final recipe = widget.page.editRecipe;
-    _rotation = recipe.rotationDegrees;
-    _filter = recipe.filter;
-    _contrast = recipe.contrast;
-    _brightness = recipe.brightness;
-    _cropLeft = recipe.cropLeft;
-    _cropTop = recipe.cropTop;
-    _cropRight = recipe.cropRight;
-    _cropBottom = recipe.cropBottom;
-    _binarization = recipe.binarization;
-    _shadowCorrection = recipe.shadowCorrection;
-    _cleanupPatches = List.from(recipe.cleanupPatches);
+    _currentTab = widget.initialTab;
 
-    if (recipe.perspectiveQuad != null) {
-      _quad = recipe.perspectiveQuad!;
-      _usePerspectiveWarp = !_quad.isStandard && _quad.isValidConvex();
+    final initialList = widget.pages;
+    if (initialList != null && initialList.isNotEmpty) {
+      _editablePages = List<DocumentPage>.from(initialList);
+      final idx = widget.initialPageIndex ??
+          _editablePages.indexWhere((p) => p.id == widget.page.id);
+      _activePageIndex = idx.clamp(0, _editablePages.length - 1);
     } else {
-      _quad = const PerspectiveQuad(
-        x1: 0.05,
-        y1: 0.05,
-        x2: 0.95,
-        y2: 0.05,
-        x3: 0.95,
-        y3: 0.95,
-        x4: 0.05,
-        y4: 0.95,
-      );
-      _usePerspectiveWarp = false;
+      _editablePages = [widget.page];
+      _activePageIndex = 0;
     }
 
-    _schedulePreviewUpdate();
+    // Seed initial history & perspective toggle from active page.
+    _syncUiFromActivePage();
+    _loadAndRenderCurrentPage(immediate: true);
   }
 
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _sliderHistoryDebounce?.cancel();
+    _history.clear();
     super.dispose();
   }
 
-  EditRecipe _buildCurrentRecipe({bool forCropTab = false}) {
-    return widget.page.editRecipe.copyWith(
-      rotationDegrees: _rotation,
-      filter: _filter,
-      contrast: _contrast,
-      brightness: _brightness,
-      cropLeft: forCropTab ? 0.0 : _cropLeft,
-      cropTop: forCropTab ? 0.0 : _cropTop,
-      cropRight: forCropTab ? 1.0 : _cropRight,
-      cropBottom: forCropTab ? 1.0 : _cropBottom,
-      perspectiveQuad: forCropTab || !_usePerspectiveWarp ? null : _quad,
-      clearPerspectiveQuad: forCropTab || !_usePerspectiveWarp,
-      binarization: _binarization,
-      shadowCorrection: _shadowCorrection,
-      cleanupPatches: _cleanupPatches,
-      recipeVersion: 2,
+  DocumentPage get _activePage => _editablePages[_activePageIndex];
+  EditHistoryStack get _activeStack => _history.stackFor(_activePage);
+  EditRecipe get _recipe => _activeStack.current;
+
+  void _syncUiFromActivePage() {
+    final recipe = _recipe;
+    final quad = recipe.perspectiveQuad;
+    _usePerspectiveWarp =
+        quad != null && !quad.isStandard && quad.isValidConvex();
+  }
+
+  void _commitRecipe(EditRecipe next, {bool immediatePreview = false}) {
+    final changed = _activeStack.record(next);
+    if (!changed) return;
+    _editablePages[_activePageIndex] = _activePage.copyWith(editRecipe: next);
+    setState(() {});
+    _schedulePreviewRender(immediate: immediatePreview);
+  }
+
+  void _previewContinuousRecipe(EditRecipe next) {
+    _activeStack.beginContinuousEdit();
+    _activeStack.previewContinuousEdit(next);
+    _editablePages[_activePageIndex] = _activePage.copyWith(editRecipe: next);
+    setState(() {});
+    _schedulePreviewRender(immediate: false);
+
+    _sliderHistoryDebounce?.cancel();
+    _sliderHistoryDebounce = Timer(
+      const Duration(milliseconds: 280),
+      () {
+        _activeStack.commitContinuousEdit();
+        if (mounted) setState(() {});
+      },
     );
   }
 
-  void _schedulePreviewUpdate() {
+  void _switchToPage(int newIndex) {
+    if (newIndex < 0 ||
+        newIndex >= _editablePages.length ||
+        newIndex == _activePageIndex) {
+      return;
+    }
+    _activeStack.commitContinuousEdit();
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 100), () async {
-      // Always derive from original uncompressed image to prevent generation loss
-      final imagePath = widget.page.originalPath;
-      final file = File(imagePath);
-      if (!file.existsSync() || !mounted) return;
+    setState(() {
+      _activePageIndex = newIndex;
+      _processedPreviewBytes = null;
+      _isComparing = false;
+      _syncUiFromActivePage();
+    });
+    _loadAndRenderCurrentPage(immediate: true);
+  }
 
-      final currentRecipe = _buildCurrentRecipe(
-        forCropTab: _currentTab == EditTab.crop,
-      );
+  void _undo() {
+    final restored = _activeStack.undo();
+    if (restored == null) return;
+    _editablePages[_activePageIndex] = _activePage.copyWith(
+      editRecipe: restored,
+    );
+    setState(() {
+      _syncUiFromActivePage();
+    });
+    _schedulePreviewRender(immediate: true);
+  }
 
-      // If entirely default and not in crop tab, use fast base renderer
-      if (currentRecipe.isDefault && _currentTab != EditTab.crop) {
-        if (mounted) {
-          setState(() {
-            _previewBytes = null;
-            _isProcessingPreview = false;
-          });
-        }
-        return;
-      }
+  void _redo() {
+    final redone = _activeStack.redo();
+    if (redone == null) return;
+    _editablePages[_activePageIndex] = _activePage.copyWith(editRecipe: redone);
+    setState(() {
+      _syncUiFromActivePage();
+    });
+    _schedulePreviewRender(immediate: true);
+  }
 
-      if (mounted) setState(() => _isProcessingPreview = true);
-
-      try {
-        final bytes = await file.readAsBytes();
-        final decoded = img.decodeImage(bytes);
-        if (decoded == null || !mounted) {
-          if (mounted) setState(() => _isProcessingPreview = false);
-          return;
-        }
-
-        // Downsample for responsive preview performance (~600px)
-        img.Image previewSource = decoded;
-        const maxPreviewDim = 600;
-        if (previewSource.width > maxPreviewDim ||
-            previewSource.height > maxPreviewDim) {
-          final aspect = previewSource.width / previewSource.height;
-          final pw = aspect >= 1.0
-              ? maxPreviewDim
-              : (maxPreviewDim * aspect).round();
-          final ph = aspect >= 1.0
-              ? (maxPreviewDim / aspect).round()
-              : maxPreviewDim;
-          previewSource = img.copyResize(previewSource, width: pw, height: ph);
-        }
-
-        final processed = ImageProcessingService.applyEditRecipe(
-          previewSource,
-          currentRecipe,
-        );
-        final encoded = Uint8List.fromList(
-          img.encodeJpg(processed, quality: 85),
-        );
-
-        if (mounted) {
-          setState(() {
-            _previewBytes = encoded;
-            _isProcessingPreview = false;
-          });
-        }
-      } catch (_) {
-        if (mounted) setState(() => _isProcessingPreview = false);
-      }
+  void _resetCurrentPage() {
+    _commitRecipe(const EditRecipe(), immediatePreview: true);
+    setState(() {
+      _usePerspectiveWarp = false;
+      _isComparing = false;
     });
   }
 
-  void _rotateClockwise() {
-    setState(() {
-      _rotation = (_rotation + 90) % 360;
-    });
-    _schedulePreviewUpdate();
+  void _rotateBy(int deltaDegrees) {
+    final nextRot = ((_recipe.rotationDegrees + deltaDegrees) % 360 + 360) % 360;
+    _commitRecipe(
+      _recipe.copyWith(rotationDegrees: nextRot),
+      immediatePreview: true,
+    );
+  }
+
+  Future<void> _runAutoCropDetection() async {
+    final origFile = File(_activePage.originalPath);
+    if (!origFile.existsSync()) {
+      showScaneliqToast(context, 'Original capture missing on storage.');
+      return;
+    }
+
+    setState(() => _isAutoDetectingCrop = true);
+    try {
+      final detectedQuad =
+          await ImageProcessingService.autoDetectDocumentQuadFromFile(origFile);
+      if (!mounted) return;
+      if (detectedQuad != null && detectedQuad.isValidConvex()) {
+        setState(() => _usePerspectiveWarp = true);
+        _commitRecipe(
+          _recipe.copyWith(
+            perspectiveQuad: detectedQuad,
+            cropLeft: 0.0,
+            cropTop: 0.0,
+            cropRight: 1.0,
+            cropBottom: 1.0,
+          ),
+          immediatePreview: true,
+        );
+        showScaneliqToast(context, 'Document boundary detected.');
+      } else {
+        showScaneliqToast(
+          context,
+          'No distinct outer paper boundary detected; adjust handles manually.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showScaneliqToast(context, 'Auto-crop analysis failed: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isAutoDetectingCrop = false);
+    }
   }
 
   void _resetCrop() {
+    setState(() => _usePerspectiveWarp = false);
+    _commitRecipe(
+      _recipe.copyWith(
+        cropLeft: 0.0,
+        cropTop: 0.0,
+        cropRight: 1.0,
+        cropBottom: 1.0,
+        clearPerspectiveQuad: true,
+      ),
+      immediatePreview: true,
+    );
+  }
+
+  Future<void> _movePageOrder(int fromIdx, int toIdx) async {
+    if (fromIdx == toIdx ||
+        toIdx < 0 ||
+        toIdx >= _editablePages.length) {
+      return;
+    }
     setState(() {
-      _cropLeft = 0.0;
-      _cropTop = 0.0;
-      _cropRight = 1.0;
-      _cropBottom = 1.0;
-      _usePerspectiveWarp = false;
-      _quad = const PerspectiveQuad(
-        x1: 0.05,
-        y1: 0.05,
-        x2: 0.95,
-        y2: 0.05,
-        x3: 0.95,
-        y3: 0.95,
-        x4: 0.05,
-        y4: 0.95,
+      final moved = _editablePages.removeAt(fromIdx);
+      _editablePages.insert(toIdx, moved);
+      for (int i = 0; i < _editablePages.length; i++) {
+        _editablePages[i] = _editablePages[i].copyWith(pageOrder: i);
+      }
+      _activePageIndex = toIdx;
+    });
+  }
+
+  Future<void> _duplicateCurrentPage() async {
+    final page = _activePage;
+    try {
+      final ok = await ref
+          .read(scanSessionProvider.notifier)
+          .duplicatePage(page.id);
+      if (!mounted) return;
+      if (ok) {
+        final sessionPages = ref.read(scanSessionProvider).pages;
+        setState(() {
+          _editablePages = List<DocumentPage>.from(sessionPages);
+          _activePageIndex = (_activePageIndex + 1).clamp(
+            0,
+            _editablePages.length - 1,
+          );
+          _syncUiFromActivePage();
+        });
+        _loadAndRenderCurrentPage(immediate: true);
+        showScaneliqToast(context, 'Page duplicated.');
+      } else {
+        // Standalone non-session fallback clone in editable list
+        final clone = page.copyWith(
+          id: '${page.id}_copy_${DateTime.now().millisecondsSinceEpoch}',
+          pageOrder: _activePageIndex + 1,
+        );
+        setState(() {
+          _editablePages.insert(_activePageIndex + 1, clone);
+          for (int i = 0; i < _editablePages.length; i++) {
+            _editablePages[i] = _editablePages[i].copyWith(pageOrder: i);
+          }
+          _activePageIndex += 1;
+        });
+        showScaneliqToast(context, 'Page duplicated.');
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _applyCurrentFilterToAllPages() async {
+    final activeFilter = _recipe.filter;
+    final activeBinarization = _recipe.binarization;
+    final activeShadow = _recipe.shadowCorrection;
+
+    for (int i = 0; i < _editablePages.length; i++) {
+      final p = _editablePages[i];
+      final stack = _history.stackFor(p);
+      final updated = stack.current.copyWith(
+        filter: activeFilter,
+        binarization: activeBinarization,
+        shadowCorrection: activeShadow,
       );
-    });
-    _schedulePreviewUpdate();
+      stack.record(updated);
+      _editablePages[i] = p.copyWith(editRecipe: updated);
+    }
+    setState(() {});
+    _schedulePreviewRender(immediate: true);
+    showScaneliqToast(
+      context,
+      'Applied filter settings to all ${_editablePages.length} pages.',
+    );
   }
 
-  void _resetAll() {
-    setState(() {
-      _rotation = 0;
-      _filter = PageFilter.original;
-      _contrast = 1.0;
-      _brightness = 0.0;
-      _binarization = BinarizationMode.none;
-      _shadowCorrection = false;
-      _cleanupPatches.clear();
-      _resetCrop();
-    });
-    _schedulePreviewUpdate();
+  Future<void> _loadAndRenderCurrentPage({bool immediate = false}) async {
+    final page = _activePage;
+    if (_history.cachedBaseBytesFor(page.id) == null) {
+      final file = File(page.originalPath);
+      if (file.existsSync()) {
+        try {
+          final rawBytes = await file.readAsBytes();
+          final compactBytes = await Isolate.run(() {
+            final decoded = img.decodeImage(rawBytes);
+            if (decoded == null) return null;
+            const maxPreviewDim = 640;
+            final img.Image resized =
+                (decoded.width > maxPreviewDim ||
+                    decoded.height > maxPreviewDim)
+                ? (decoded.width >= decoded.height
+                      ? img.copyResize(decoded, width: maxPreviewDim)
+                      : img.copyResize(decoded, height: maxPreviewDim))
+                : decoded;
+            return Uint8List.fromList(img.encodeJpg(resized, quality: 88));
+          });
+          if (compactBytes != null && mounted) {
+            _history.cacheBaseBytes(page.id, compactBytes);
+          }
+        } catch (_) {}
+      }
+    }
+    if (mounted) {
+      _schedulePreviewRender(immediate: immediate);
+    }
   }
 
-  void _applyAndClose() {
-    widget.onApply(_buildCurrentRecipe(forCropTab: false));
-    Navigator.pop(context);
+  void _schedulePreviewRender({bool immediate = false}) {
+    _debounceTimer?.cancel();
+    final delay = immediate
+        ? Duration.zero
+        : const Duration(milliseconds: 90);
+    _debounceTimer = Timer(delay, _executePreviewRender);
+  }
+
+  Future<void> _executePreviewRender() async {
+    if (!mounted) return;
+    final page = _activePage;
+    final recipe = _recipe;
+    final effectiveRecipe = _currentTab == EditTab.crop
+        ? recipe.copyWith(
+            cropLeft: 0.0,
+            cropTop: 0.0,
+            cropRight: 1.0,
+            cropBottom: 1.0,
+            clearPerspectiveQuad: true,
+          )
+        : recipe;
+
+    if (effectiveRecipe.isDefault) {
+      if (mounted) {
+        setState(() {
+          _processedPreviewBytes = null;
+          _isProcessingPreview = false;
+        });
+      }
+      return;
+    }
+
+    final Uint8List? baseBytes = _history.cachedBaseBytesFor(page.id);
+    final file = File(page.originalPath);
+    if (baseBytes == null && !file.existsSync()) {
+      return;
+    }
+
+    final int token = ++_renderGeneration;
+    if (mounted) setState(() => _isProcessingPreview = true);
+
+    try {
+      final Uint8List encoded = baseBytes != null
+          ? await ImageProcessingService.processEncodedSourceBytesInIsolate(
+              baseBytes,
+              effectiveRecipe,
+              quality: 86,
+            )
+          : await ImageProcessingService.processImageFileToBytesInIsolate(
+              file,
+              effectiveRecipe,
+              quality: 86,
+              maxDimension: 640,
+            );
+
+      if (!mounted || token != _renderGeneration) return;
+      setState(() {
+        _processedPreviewBytes = encoded;
+        _isProcessingPreview = false;
+      });
+    } catch (_) {
+      if (mounted && token == _renderGeneration) {
+        setState(() => _isProcessingPreview = false);
+      }
+    }
+  }
+
+  Future<void> _saveAndFinish() async {
+    if (_isSaving) return;
+    _activeStack.commitContinuousEdit();
+    setState(() => _isSaving = true);
+
+    try {
+      if (_editablePages.length == 1) {
+        widget.onApply(_recipe);
+      } else {
+        final sessionNotifier = ref.read(scanSessionProvider.notifier);
+        final sessionState = ref.read(scanSessionProvider);
+        final sessionIds = sessionState.pages.map((p) => p.id).toSet();
+        final allInSession = _editablePages.every(
+          (p) => sessionIds.contains(p.id),
+        );
+
+        if (allInSession && sessionState.pages.isNotEmpty) {
+          await sessionNotifier.syncEditedPages(_editablePages);
+        } else {
+          final initialTarget = _editablePages.firstWhere(
+            (p) => p.id == widget.page.id,
+            orElse: () => _activePage,
+          );
+          widget.onApply(initialTarget.editRecipe);
+        }
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        showScaneliqToast(context, 'Could not save edits: $e');
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final imagePath = widget.page.processedPath ?? widget.page.originalPath;
-    final file = File(imagePath);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tokens = context.tokens;
+    final horizontalPad = ScaneliqSpacing.adaptiveHorizontalPadding(
+      MediaQuery.sizeOf(context).width,
+    );
+    final bool isMultiPage = _editablePages.length > 1;
+    final bool compact = MediaQuery.sizeOf(context).width < 360;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Edit Page ${widget.page.pageOrder + 1}'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.restart_alt_rounded),
-            tooltip: 'Reset All',
-            onPressed: _resetAll,
-          ),
-          TextButton(
-            onPressed: _applyAndClose,
-            child: const Text(
-              'Apply',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Main Preview Canvas with interactive touch handlers
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.all(16),
-              alignment: Alignment.center,
-              child: file.existsSync()
-                  ? LayoutBuilder(
-                      builder: (context, constraints) {
-                        return Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Base Preview Image (processed memory bytes or raw file with ColorFilter)
-                            if (_previewBytes != null)
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.memory(
-                                  _previewBytes!,
-                                  fit: BoxFit.contain,
-                                  width: constraints.maxWidth,
-                                  height: constraints.maxHeight,
-                                ),
-                              )
-                            else
-                              Transform.rotate(
-                                angle: _rotation * math.pi / 180,
-                                child: ColorFiltered(
-                                  colorFilter: _getColorFilter(),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.file(
-                                      file,
-                                      fit: BoxFit.contain,
-                                      width: constraints.maxWidth,
-                                      height: constraints.maxHeight,
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                            // Loading spinner when regenerating heavy preview
-                            if (_isProcessingPreview)
-                              Positioned(
-                                top: 12,
-                                right: 12,
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black54,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                            // Interactive overlays depending on active tab
-                            if (_currentTab == EditTab.crop)
-                              if (_usePerspectiveWarp)
-                                _buildPerspectiveOverlay(
-                                  constraints.maxWidth,
-                                  constraints.maxHeight,
-                                )
-                              else
-                                _buildCropOverlay(
-                                  constraints.maxWidth,
-                                  constraints.maxHeight,
-                                ),
-
-                            if (_currentTab == EditTab.cleanup)
-                              _buildCleanupTapOverlay(
-                                constraints.maxWidth,
-                                constraints.maxHeight,
-                              ),
-                          ],
-                        );
-                      },
-                    )
-                  : const Center(child: Text('Image file missing')),
-            ),
-          ),
-
-          // Edit Tools Bottom Panel
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              border: Border(
-                top: BorderSide(
-                  color: isDark
-                      ? AppColors.surface3Dark
-                      : AppColors.surface3Light,
-                ),
+      backgroundColor: tokens.bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 1. Top Bar: Back, Page indicator, Undo, Redo, Compare, Done
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                compact ? 4 : 8,
+                6,
+                compact ? 8 : 12,
+                6,
               ),
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
                 children: [
-                  // Tab Switcher (Horizontal scroll for 5 tabs)
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildTabButton(
-                          EditTab.filter,
-                          'Filters',
-                          Icons.auto_awesome,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildTabButton(
-                          EditTab.binarize,
-                          'Binarize',
-                          Icons.contrast,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildTabButton(
-                          EditTab.crop,
-                          'Crop & Warp',
-                          Icons.crop_rotate,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildTabButton(EditTab.adjust, 'Lighting', Icons.tune),
-                        const SizedBox(width: 6),
-                        _buildTabButton(
-                          EditTab.cleanup,
-                          'Cleanup',
-                          Icons.cleaning_services,
-                        ),
-                      ],
+                  IconButton(
+                    tooltip: 'Back',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
                     ),
+                    icon: const Icon(Icons.arrow_back_rounded, size: 22),
+                    onPressed: _isSaving
+                        ? null
+                        : () => Navigator.of(context).maybePop(),
                   ),
-                  const SizedBox(height: 12),
 
-                  // Tab 1: Filters & Color Enhancement
-                  if (_currentTab == EditTab.filter) ...[
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
+                  // Page indicator & prev/next controls
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tokens.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: tokens.hairline),
+                      ),
                       child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          _buildFilterChip(
-                            'Original',
-                            PageFilter.original,
-                            Icons.photo_outlined,
+                          if (isMultiPage) ...[
+                            InkWell(
+                              onTap: _activePageIndex > 0
+                                  ? () => _switchToPage(_activePageIndex - 1)
+                                  : null,
+                              child: Icon(
+                                Icons.chevron_left_rounded,
+                                size: 15,
+                                color: _activePageIndex > 0
+                                    ? tokens.textPrimary
+                                    : tokens.textTertiary,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                          ],
+                          Flexible(
+                            child: Text(
+                              isMultiPage
+                                  ? 'P${_activePageIndex + 1}/${_editablePages.length}'
+                                  : 'PAGE ${_activePage.pageOrder + 1}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: ScaneliqTypography.monoStyle(
+                                color: tokens.textPrimary,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                          _buildFilterChip(
-                            'Magic Color',
-                            PageFilter.magicColor,
-                            Icons.auto_awesome,
-                          ),
-                          _buildFilterChip(
-                            'Color Boost',
-                            PageFilter.colorBoost,
-                            Icons.palette,
-                          ),
-                          _buildFilterChip(
-                            'B&W High-Contrast',
-                            PageFilter.blackAndWhite,
-                            Icons.contrast,
-                          ),
-                          _buildFilterChip(
-                            'Whiteboard',
-                            PageFilter.whiteboard,
-                            Icons.co_present,
-                          ),
-                          _buildFilterChip(
-                            'Grayscale',
-                            PageFilter.grayscale,
-                            Icons.filter_b_and_w,
-                          ),
-                          _buildFilterChip(
-                            'Enhanced Text',
-                            PageFilter.enhancedText,
-                            Icons.auto_fix_high,
-                          ),
+                          if (isMultiPage) ...[
+                            const SizedBox(width: 2),
+                            InkWell(
+                              onTap:
+                                  _activePageIndex < _editablePages.length - 1
+                                  ? () => _switchToPage(_activePageIndex + 1)
+                                  : null,
+                              child: Icon(
+                                Icons.chevron_right_rounded,
+                                size: 15,
+                                color:
+                                    _activePageIndex <
+                                        _editablePages.length - 1
+                                    ? tokens.textPrimary
+                                    : tokens.textTertiary,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                  ],
+                  ),
 
-                  // Tab 2: Otsu & Sauvola Binarization
-                  if (_currentTab == EditTab.binarize) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ChoiceChip(
-                          label: const Text('None'),
-                          selected: _binarization == BinarizationMode.none,
-                          onSelected: (val) {
-                            if (val) {
-                              setState(
-                                () => _binarization = BinarizationMode.none,
-                              );
-                              _schedulePreviewUpdate();
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          avatar: const Icon(Icons.circle, size: 14),
-                          label: const Text('Otsu B&W'),
-                          selected: _binarization == BinarizationMode.otsu,
-                          onSelected: (val) {
-                            if (val) {
-                              setState(
-                                () => _binarization = BinarizationMode.otsu,
-                              );
-                              _schedulePreviewUpdate();
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        ChoiceChip(
-                          avatar: const Icon(Icons.blur_on, size: 14),
-                          label: const Text('Sauvola Adaptive'),
-                          selected: _binarization == BinarizationMode.sauvola,
-                          onSelected: (val) {
-                            if (val) {
-                              setState(
-                                () => _binarization = BinarizationMode.sauvola,
-                              );
-                              _schedulePreviewUpdate();
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _binarization == BinarizationMode.otsu
-                          ? 'Otsu: Global histogram variance optimization for crisp scans.'
-                          : _binarization == BinarizationMode.sauvola
-                          ? 'Sauvola: Local adaptive thresholding overcoming uneven lighting.'
-                          : 'Retain full color/grayscale dynamic range.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
-                    ),
-                  ],
+                  const SizedBox(width: 4),
 
-                  // Tab 3: Crop, Perspective Warp & Rotation
-                  if (_currentTab == EditTab.crop) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _usePerspectiveWarp = !_usePerspectiveWarp;
-                            });
-                            _schedulePreviewUpdate();
-                          },
-                          icon: Icon(
-                            _usePerspectiveWarp ? Icons.transform : Icons.crop,
-                            size: 18,
-                            color: _usePerspectiveWarp
-                                ? AppColors.brandPrimary
-                                : null,
-                          ),
-                          label: Text(
-                            _usePerspectiveWarp
-                                ? '4-Point Warp: ON'
-                                : 'Mode: Box Crop',
-                          ),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _rotateClockwise,
-                          icon: const Icon(
-                            Icons.rotate_right_rounded,
-                            size: 18,
-                          ),
-                          label: Text('Rotate ($_rotation°)'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: _resetCrop,
-                          icon: const Icon(Icons.restart_alt, size: 18),
-                          label: const Text('Reset'),
-                        ),
-                      ],
+                  IconButton(
+                    tooltip: 'Undo',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 34,
+                      minHeight: 36,
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _usePerspectiveWarp
-                          ? 'Drag 4 corner handles to perform full homography rectifying'
-                          : 'Drag edge boundaries to crop rectangular area',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
+                    icon: Icon(
+                      Icons.undo_rounded,
+                      size: 20,
+                      color: _activeStack.canUndo
+                          ? tokens.textPrimary
+                          : tokens.textTertiary.withValues(alpha: 0.45),
+                    ),
+                    onPressed: _activeStack.canUndo && !_isSaving ? _undo : null,
+                  ),
+                  IconButton(
+                    tooltip: 'Redo',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 34,
+                      minHeight: 36,
+                    ),
+                    icon: Icon(
+                      Icons.redo_rounded,
+                      size: 20,
+                      color: _activeStack.canRedo
+                          ? tokens.textPrimary
+                          : tokens.textTertiary.withValues(alpha: 0.45),
+                    ),
+                    onPressed: _activeStack.canRedo && !_isSaving ? _redo : null,
+                  ),
+                  IconButton(
+                    tooltip: 'Compare Original',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 34,
+                      minHeight: 36,
+                    ),
+                    icon: Icon(
+                      Icons.compare_rounded,
+                      size: 20,
+                      color: _isComparing ? tokens.accent : tokens.textPrimary,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isComparing = !_isComparing;
+                        if (_isComparing && _currentTab == EditTab.crop) {
+                          _currentTab = EditTab.filter;
+                        }
+                      });
+                      _schedulePreviewRender(immediate: true);
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: tokens.accent,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 34),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
                       ),
                     ),
-                  ],
-
-                  // Tab 4: Lighting & Shadow Correction
-                  if (_currentTab == EditTab.adjust) ...[
-                    Row(
-                      children: [
-                        const Icon(Icons.brightness_6, size: 16),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Brightness',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: _brightness,
-                            min: -0.5,
-                            max: 0.5,
-                            divisions: 10,
-                            label: _brightness.toStringAsFixed(1),
-                            onChanged: (val) {
-                              setState(() => _brightness = val);
-                              _schedulePreviewUpdate();
-                            },
+                    onPressed: _isSaving ? null : _saveAndFinish,
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 15,
+                            height: 15,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Done',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        const Icon(Icons.contrast, size: 16),
-                        const SizedBox(width: 8),
-                        const Text('Contrast', style: TextStyle(fontSize: 12)),
-                        Expanded(
-                          child: Slider(
-                            value: _contrast,
-                            min: 0.5,
-                            max: 2.0,
-                            divisions: 15,
-                            label: _contrast.toStringAsFixed(1),
-                            onChanged: (val) {
-                              setState(() => _contrast = val);
-                              _schedulePreviewUpdate();
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    SwitchListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      secondary: const Icon(Icons.wb_sunny_outlined, size: 18),
-                      title: const Text(
-                        'Shadow & Illumination Correction',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      subtitle: const Text(
-                        'Equalize uneven ambient shadows across paper',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                      value: _shadowCorrection,
-                      onChanged: (val) {
-                        setState(() => _shadowCorrection = val);
-                        _schedulePreviewUpdate();
-                      },
-                    ),
-                  ],
-
-                  // Tab 5: Manual Cleanup (Hole-punch & Finger Inpainting)
-                  if (_currentTab == EditTab.cleanup) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            ChoiceChip(
-                              label: const Text('Hole Punch'),
-                              selected: _cleanupType == 'holePunch',
-                              onSelected: (val) {
-                                if (val) {
-                                  setState(() => _cleanupType = 'holePunch');
-                                }
-                              },
-                            ),
-                            const SizedBox(width: 6),
-                            ChoiceChip(
-                              label: const Text('Finger'),
-                              selected: _cleanupType == 'finger',
-                              onSelected: (val) {
-                                if (val) {
-                                  setState(() => _cleanupType = 'finger');
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.undo, size: 20),
-                              tooltip: 'Undo last patch',
-                              onPressed: _cleanupPatches.isNotEmpty
-                                  ? () {
-                                      setState(() {
-                                        _cleanupPatches.removeLast();
-                                      });
-                                      _schedulePreviewUpdate();
-                                    }
-                                  : null,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_sweep, size: 20),
-                              tooltip: 'Clear all patches',
-                              onPressed: _cleanupPatches.isNotEmpty
-                                  ? () {
-                                      setState(() {
-                                        _cleanupPatches.clear();
-                                      });
-                                      _schedulePreviewUpdate();
-                                    }
-                                  : null,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        const Text(
-                          'Brush Size',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: _cleanupRadius,
-                            min: 0.02,
-                            max: 0.08,
-                            divisions: 6,
-                            label: '${(_cleanupRadius * 100).round()}%',
-                            onChanged: (val) {
-                              setState(() => _cleanupRadius = val);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      'Tap on document to place clean background patch over hole punches or fingers',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
-                    ),
-                  ],
+                  ),
                 ],
               ),
             ),
+
+            const ScaneliqHairlineDivider(),
+
+            // 2. Main Document Preview Stage (occupies majority of screen)
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPad * 0.5,
+                  vertical: 8,
+                ),
+                child: EditorPreviewStage(
+                  originalFile: File(_activePage.originalPath),
+                  originalPreviewBytes: _history.cachedBaseBytesFor(
+                    _activePage.id,
+                  ),
+                  processedPreviewBytes: _processedPreviewBytes,
+                  isProcessing: _isProcessingPreview,
+                  isComparing: _isComparing,
+                  compareSplit: _compareSplit,
+                  onCompareSplitChanged: (v) =>
+                      setState(() => _compareSplit = v),
+                  isCropMode: _currentTab == EditTab.crop,
+                  usePerspectiveWarp: _usePerspectiveWarp,
+                  cropLeft: _recipe.cropLeft,
+                  cropTop: _recipe.cropTop,
+                  cropRight: _recipe.cropRight,
+                  cropBottom: _recipe.cropBottom,
+                  perspectiveQuad:
+                      _recipe.perspectiveQuad ??
+                      const PerspectiveQuad(
+                        x1: 0.06,
+                        y1: 0.06,
+                        x2: 0.94,
+                        y2: 0.06,
+                        x3: 0.94,
+                        y3: 0.94,
+                        x4: 0.06,
+                        y4: 0.94,
+                      ),
+                  onBoxCropChanged: (l, t, r, b) {
+                    _previewContinuousRecipe(
+                      _recipe.copyWith(
+                        cropLeft: l,
+                        cropTop: t,
+                        cropRight: r,
+                        cropBottom: b,
+                        clearPerspectiveQuad: true,
+                      ),
+                    );
+                  },
+                  onPerspectiveQuadChanged: (q) {
+                    _previewContinuousRecipe(
+                      _recipe.copyWith(perspectiveQuad: q),
+                    );
+                  },
+                  isCleanupMode: _currentTab == EditTab.rotate && _isCleanupMode,
+                  cleanupPatches: _recipe.cleanupPatches,
+                  onAddCleanupPatch: (nx, ny) {
+                    final updated = List<CleanupPatch>.from(
+                      _recipe.cleanupPatches,
+                    )..add(
+                      CleanupPatch(
+                        x: nx,
+                        y: ny,
+                        radius: _cleanupRadius,
+                        type: _cleanupType,
+                      ),
+                    );
+                    _commitRecipe(
+                      _recipe.copyWith(cleanupPatches: updated),
+                      immediatePreview: true,
+                    );
+                  },
+                ),
+              ),
+            ),
+
+            // 3. Multi-Page Quick Thumbnail Strip (when editing >=2 pages)
+            if (isMultiPage) _buildMultiPageStrip(tokens, horizontalPad),
+
+            // 4. Contextual Tool Controls Drawer + 5-Category Toolbar
+            Container(
+              decoration: BoxDecoration(
+                color: tokens.surface,
+                border: Border(top: BorderSide(color: tokens.hairline)),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPad,
+                10,
+                horizontalPad,
+                10,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildActiveToolPanel(tokens, isMultiPage),
+                  const SizedBox(height: 10),
+                  const ScaneliqHairlineDivider(),
+                  const SizedBox(height: 8),
+                  _buildBottomCategoryBar(tokens),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMultiPageStrip(ScaneliqTokens tokens, double horizontalPad) {
+    return Container(
+      height: 60,
+      decoration: BoxDecoration(
+        color: tokens.bg,
+        border: Border(top: BorderSide(color: tokens.hairline)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPad,
+                vertical: 7,
+              ),
+              itemCount: _editablePages.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final page = _editablePages[index];
+                final selected = index == _activePageIndex;
+                final f = File(page.processedPath ?? page.originalPath);
+                return InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () => _switchToPage(index),
+                  child: Container(
+                    width: 36,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: tokens.surfaceSubtle,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: selected ? tokens.accent : tokens.hairline,
+                        width: selected ? 2 : 1,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (f.existsSync())
+                          Image.file(f, fit: BoxFit.cover, cacheWidth: 140)
+                        else
+                          Icon(
+                            Icons.description_outlined,
+                            size: 16,
+                            color: tokens.textTertiary,
+                          ),
+                        Positioned(
+                          bottom: 2,
+                          right: 2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 3,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: selected ? tokens.accent : Colors.black54,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              '${index + 1}',
+                              style: ScaneliqTypography.monoStyle(
+                                color: Colors.white,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          IconButton(
+            tooltip: 'Move page earlier',
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 15),
+            onPressed: _activePageIndex > 0
+                ? () => _movePageOrder(_activePageIndex, _activePageIndex - 1)
+                : null,
+          ),
+          IconButton(
+            tooltip: 'Move page later',
+            icon: const Icon(Icons.arrow_forward_ios_rounded, size: 15),
+            onPressed: _activePageIndex < _editablePages.length - 1
+                ? () => _movePageOrder(_activePageIndex, _activePageIndex + 1)
+                : null,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTabButton(EditTab tab, String label, IconData icon) {
-    final isSelected = _currentTab == tab;
-    return ChoiceChip(
-      selected: isSelected,
-      avatar: Icon(icon, size: 16, color: isSelected ? Colors.white : null),
-      label: Text(label),
-      selectedColor: AppColors.brandPrimary,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : null,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-      ),
-      onSelected: (_) {
-        final wasCrop = _currentTab == EditTab.crop;
-        setState(() => _currentTab = tab);
-        if (wasCrop || tab == EditTab.crop) {
-          _schedulePreviewUpdate();
-        }
-      },
-    );
+  Widget _buildActiveToolPanel(ScaneliqTokens tokens, bool isMultiPage) {
+    return switch (_currentTab) {
+      EditTab.crop => _buildCropControls(tokens),
+      EditTab.enhance => _buildEnhanceControls(tokens, isMultiPage),
+      EditTab.filter => _buildFiltersRibbon(tokens),
+      EditTab.adjust => _buildAdjustmentSliders(tokens),
+      EditTab.rotate => _buildRotateAndCleanupControls(tokens, isMultiPage),
+    };
   }
 
-  Widget _buildFilterChip(String label, PageFilter filter, IconData icon) {
-    final isSelected = _filter == filter;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        selected: isSelected,
-        avatar: Icon(icon, size: 16),
-        label: Text(label),
-        onSelected: (_) {
-          setState(() {
-            _filter = filter;
-            if (filter == PageFilter.original) {
-              _binarization = BinarizationMode.none;
-            }
-          });
-          _schedulePreviewUpdate();
-        },
-      ),
-    );
-  }
-
-  // ===========================================================================
-  // INTERACTIVE OVERLAYS
-  // ===========================================================================
-
-  /// Overlay for standard Axis-Aligned Bounding Box Crop
-  Widget _buildCropOverlay(double boxWidth, double boxHeight) {
-    final leftPx = _cropLeft * boxWidth;
-    final topPx = _cropTop * boxHeight;
-    final widthPx = (_cropRight - _cropLeft) * boxWidth;
-    final heightPx = (_cropBottom - _cropTop) * boxHeight;
-
-    return Stack(
+  Widget _buildCropControls(ScaneliqTokens tokens) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Positioned(
-          left: leftPx,
-          top: topPx,
-          width: widthPx,
-          height: heightPx,
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.brandAccent, width: 2),
-              color: AppColors.brandAccent.withAlpha(20),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            _EditorActionPill(
+              icon: _isAutoDetectingCrop
+                  ? Icons.hourglass_top_rounded
+                  : Icons.auto_fix_high_outlined,
+              label: _isAutoDetectingCrop ? 'Detecting...' : 'Auto Crop',
+              accent: true,
+              onPressed: _isAutoDetectingCrop ? null : _runAutoCropDetection,
             ),
-          ),
+            _EditorActionPill(
+              icon: _usePerspectiveWarp ? Icons.transform_rounded : Icons.crop_rounded,
+              label: _usePerspectiveWarp ? '4-Pt Perspective' : 'Box Crop',
+              onPressed: () {
+                setState(() {
+                  _usePerspectiveWarp = !_usePerspectiveWarp;
+                  if (_usePerspectiveWarp && _recipe.perspectiveQuad == null) {
+                    _activeStack.record(
+                      _recipe.copyWith(
+                        perspectiveQuad: const PerspectiveQuad(
+                          x1: 0.06,
+                          y1: 0.06,
+                          x2: 0.94,
+                          y2: 0.06,
+                          x3: 0.94,
+                          y3: 0.94,
+                          x4: 0.06,
+                          y4: 0.94,
+                        ),
+                      ),
+                    );
+                  }
+                });
+              },
+            ),
+            _EditorActionPill(
+              icon: Icons.check_rounded,
+              label: 'Apply Crop',
+              onPressed: () {
+                _activeStack.commitContinuousEdit();
+                setState(() => _currentTab = EditTab.filter);
+                _schedulePreviewRender(immediate: true);
+              },
+            ),
+            _EditorActionPill(
+              icon: Icons.restart_alt_rounded,
+              label: 'Reset Crop',
+              onPressed: _resetCrop,
+            ),
+          ],
         ),
-        _buildHandle(
-          left: leftPx - 16,
-          top: topPx - 16,
-          onDrag: (dx, dy) {
-            setState(() {
-              _cropLeft = (_cropLeft + dx / boxWidth).clamp(
-                0.0,
-                _cropRight - 0.05,
-              );
-              _cropTop = (_cropTop + dy / boxHeight).clamp(
-                0.0,
-                _cropBottom - 0.05,
-              );
-            });
-            _schedulePreviewUpdate();
-          },
-        ),
-        _buildHandle(
-          left: leftPx + widthPx - 16,
-          top: topPx - 16,
-          onDrag: (dx, dy) {
-            setState(() {
-              _cropRight = (_cropRight + dx / boxWidth).clamp(
-                _cropLeft + 0.05,
-                1.0,
-              );
-              _cropTop = (_cropTop + dy / boxHeight).clamp(
-                0.0,
-                _cropBottom - 0.05,
-              );
-            });
-            _schedulePreviewUpdate();
-          },
-        ),
-        _buildHandle(
-          left: leftPx - 16,
-          top: topPx + heightPx - 16,
-          onDrag: (dx, dy) {
-            setState(() {
-              _cropLeft = (_cropLeft + dx / boxWidth).clamp(
-                0.0,
-                _cropRight - 0.05,
-              );
-              _cropBottom = (_cropBottom + dy / boxHeight).clamp(
-                _cropTop + 0.05,
-                1.0,
-              );
-            });
-            _schedulePreviewUpdate();
-          },
-        ),
-        _buildHandle(
-          left: leftPx + widthPx - 16,
-          top: topPx + heightPx - 16,
-          onDrag: (dx, dy) {
-            setState(() {
-              _cropRight = (_cropRight + dx / boxWidth).clamp(
-                _cropLeft + 0.05,
-                1.0,
-              );
-              _cropBottom = (_cropBottom + dy / boxHeight).clamp(
-                _cropTop + 0.05,
-                1.0,
-              );
-            });
-            _schedulePreviewUpdate();
-          },
+        const SizedBox(height: 6),
+        Text(
+          _usePerspectiveWarp
+              ? 'Drag 4 corners to rectify perspective distortion'
+              : 'Drag corner handles to frame the page or tap Auto Crop',
+          style: Theme.of(context).textTheme.bodySmall,
+          textAlign: TextAlign.center,
         ),
       ],
     );
   }
 
-  /// Overlay for 4-Point Arbitrary Perspective Homography Warp
-  Widget _buildPerspectiveOverlay(double boxWidth, double boxHeight) {
-    return Stack(
+  Widget _buildEnhanceControls(ScaneliqTokens tokens, bool isMultiPage) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Connecting polygon painter
-        CustomPaint(
-          size: Size(boxWidth, boxHeight),
-          painter: _PerspectiveQuadPainter(quad: _quad),
-        ),
-
-        // P0: Top-Left Handle
-        _buildHandle(
-          left: _quad.x1 * boxWidth - 16,
-          top: _quad.y1 * boxHeight - 16,
-          label: 'TL',
-          onDrag: (dx, dy) {
-            setState(() {
-              _quad = _quad.copyWith(
-                x1: (_quad.x1 + dx / boxWidth).clamp(0.0, 1.0),
-                y1: (_quad.y1 + dy / boxHeight).clamp(0.0, 1.0),
-              );
-            });
-            _schedulePreviewUpdate();
-          },
-        ),
-
-        // P1: Top-Right Handle
-        _buildHandle(
-          left: _quad.x2 * boxWidth - 16,
-          top: _quad.y2 * boxHeight - 16,
-          label: 'TR',
-          onDrag: (dx, dy) {
-            setState(() {
-              _quad = _quad.copyWith(
-                x2: (_quad.x2 + dx / boxWidth).clamp(0.0, 1.0),
-                y2: (_quad.y2 + dy / boxHeight).clamp(0.0, 1.0),
-              );
-            });
-            _schedulePreviewUpdate();
-          },
-        ),
-
-        // P2: Bottom-Right Handle
-        _buildHandle(
-          left: _quad.x3 * boxWidth - 16,
-          top: _quad.y3 * boxHeight - 16,
-          label: 'BR',
-          onDrag: (dx, dy) {
-            setState(() {
-              _quad = _quad.copyWith(
-                x3: (_quad.x3 + dx / boxWidth).clamp(0.0, 1.0),
-                y3: (_quad.y3 + dy / boxHeight).clamp(0.0, 1.0),
-              );
-            });
-            _schedulePreviewUpdate();
-          },
-        ),
-
-        // P3: Bottom-Left Handle
-        _buildHandle(
-          left: _quad.x4 * boxWidth - 16,
-          top: _quad.y4 * boxHeight - 16,
-          label: 'BL',
-          onDrag: (dx, dy) {
-            setState(() {
-              _quad = _quad.copyWith(
-                x4: (_quad.x4 + dx / boxWidth).clamp(0.0, 1.0),
-                y4: (_quad.y4 + dy / boxHeight).clamp(0.0, 1.0),
-              );
-            });
-            _schedulePreviewUpdate();
-          },
-        ),
-      ],
-    );
-  }
-
-  /// Overlay for placing non-destructive cleanup patches
-  Widget _buildCleanupTapOverlay(double boxWidth, double boxHeight) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapUp: (details) {
-        final normX = (details.localPosition.dx / boxWidth).clamp(0.0, 1.0);
-        final normY = (details.localPosition.dy / boxHeight).clamp(0.0, 1.0);
-        setState(() {
-          _cleanupPatches.add(
-            CleanupPatch(
-              x: normX,
-              y: normY,
-              radius: _cleanupRadius,
-              type: _cleanupType,
-            ),
-          );
-        });
-        _schedulePreviewUpdate();
-      },
-      child: CustomPaint(
-        size: Size(boxWidth, boxHeight),
-        painter: _CleanupPatchesPainter(patches: _cleanupPatches),
-      ),
-    );
-  }
-
-  Widget _buildHandle({
-    required double left,
-    required double top,
-    required Function(double, double) onDrag,
-    String? label,
-  }) {
-    return Positioned(
-      left: left,
-      top: top,
-      child: GestureDetector(
-        onPanUpdate: (details) {
-          onDrag(details.delta.dx, details.delta.dy);
-        },
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: AppColors.brandPrimary,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black45,
-                blurRadius: 4,
-                offset: Offset(0, 2),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _EditorActionPill(
+                icon: Icons.auto_awesome_outlined,
+                label: 'Auto Enhance',
+                selected: _recipe.filter == PageFilter.autoEnhance,
+                onPressed: () => _commitRecipe(
+                  _recipe.copyWith(
+                    filter: PageFilter.autoEnhance,
+                    shadowCorrection: true,
+                    binarization: BinarizationMode.none,
+                  ),
+                  immediatePreview: true,
+                ),
               ),
+              const SizedBox(width: 8),
+              _EditorActionPill(
+                icon: Icons.contrast_rounded,
+                label: 'Otsu B&W',
+                selected: _recipe.binarization == BinarizationMode.otsu,
+                onPressed: () => _commitRecipe(
+                  _recipe.copyWith(
+                    binarization: _recipe.binarization == BinarizationMode.otsu
+                        ? BinarizationMode.none
+                        : BinarizationMode.otsu,
+                  ),
+                  immediatePreview: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _EditorActionPill(
+                icon: Icons.blur_on_rounded,
+                label: 'Sauvola',
+                selected: _recipe.binarization == BinarizationMode.sauvola,
+                onPressed: () => _commitRecipe(
+                  _recipe.copyWith(
+                    binarization:
+                        _recipe.binarization == BinarizationMode.sauvola
+                        ? BinarizationMode.none
+                        : BinarizationMode.sauvola,
+                  ),
+                  immediatePreview: true,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _EditorActionPill(
+                icon: Icons.wb_sunny_outlined,
+                label: 'Shadows',
+                selected: _recipe.shadowCorrection,
+                onPressed: () => _commitRecipe(
+                  _recipe.copyWith(
+                    shadowCorrection: !_recipe.shadowCorrection,
+                  ),
+                  immediatePreview: true,
+                ),
+              ),
+              if (isMultiPage) ...[
+                const SizedBox(width: 8),
+                _EditorActionPill(
+                  icon: Icons.done_all_rounded,
+                  label: 'Apply All Pages',
+                  accent: true,
+                  onPressed: _applyCurrentFilterToAllPages,
+                ),
+              ],
             ],
           ),
-          child: Center(
-            child: label != null
-                ? Text(
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFiltersRibbon(ScaneliqTokens tokens) {
+    const options = <(String, PageFilter, IconData)>[
+      ('Original', PageFilter.original, Icons.photo_outlined),
+      ('Auto', PageFilter.autoEnhance, Icons.auto_awesome_outlined),
+      ('Magic Color', PageFilter.magicColor, Icons.auto_fix_normal_outlined),
+      ('Enhance', PageFilter.enhancedText, Icons.text_fields_rounded),
+      ('Grayscale', PageFilter.grayscale, Icons.filter_b_and_w_outlined),
+      ('Black & White', PageFilter.blackAndWhite, Icons.contrast_rounded),
+      ('Lighten', PageFilter.lighten, Icons.brightness_high_outlined),
+      ('Darken', PageFilter.darken, Icons.brightness_low_outlined),
+      ('Color Boost', PageFilter.colorBoost, Icons.palette_outlined),
+      ('Whiteboard', PageFilter.whiteboard, Icons.co_present_outlined),
+    ];
+
+    return SizedBox(
+      height: 68,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: options.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final (label, filter, icon) = options[index];
+          final selected = _recipe.filter == filter;
+          return InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () {
+              setState(() => _isComparing = false);
+              _commitRecipe(
+                _recipe.copyWith(
+                  filter: filter,
+                  binarization: filter == PageFilter.original
+                      ? BinarizationMode.none
+                      : _recipe.binarization,
+                ),
+                immediatePreview: true,
+              );
+            },
+            child: Container(
+              width: 80,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected ? tokens.accentSoft : tokens.surfaceSubtle,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: selected ? tokens.accent : tokens.hairline,
+                  width: selected ? 1.6 : 1.0,
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: selected ? tokens.accent : tokens.textPrimary,
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
                     label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  )
-                : Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      color: selected ? tokens.accent : tokens.textPrimary,
                     ),
                   ),
-          ),
-        ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  ColorFilter _getColorFilter() {
-    switch (_filter) {
-      case PageFilter.grayscale:
-        return const ColorFilter.matrix([
-          0.2126,
-          0.7152,
-          0.0722,
-          0,
-          0,
-          0.2126,
-          0.7152,
-          0.0722,
-          0,
-          0,
-          0.2126,
-          0.7152,
-          0.0722,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-        ]);
-      case PageFilter.magicColor:
-        return const ColorFilter.matrix([
-          1.25,
-          0,
-          0,
-          0,
-          10,
-          0,
-          1.25,
-          0,
-          0,
-          10,
-          0,
-          0,
-          1.25,
-          0,
-          10,
-          0,
-          0,
-          0,
-          1,
-          0,
-        ]);
-      case PageFilter.blackAndWhite:
-        return const ColorFilter.matrix([
-          1.5,
-          0,
-          0,
-          0,
-          -50,
-          0,
-          1.5,
-          0,
-          0,
-          -50,
-          0,
-          0,
-          1.5,
-          0,
-          -50,
-          0,
-          0,
-          0,
-          1,
-          0,
-        ]);
-      case PageFilter.whiteboard:
-        return const ColorFilter.matrix([
-          1.2,
-          0,
-          0,
-          0,
-          20,
-          0,
-          1.2,
-          0,
-          0,
-          20,
-          0,
-          0,
-          1.2,
-          0,
-          20,
-          0,
-          0,
-          0,
-          1,
-          0,
-        ]);
-      case PageFilter.enhancedText:
-        return const ColorFilter.matrix([
-          1.3,
-          0,
-          0,
-          0,
-          -20,
-          0,
-          1.3,
-          0,
-          0,
-          -20,
-          0,
-          0,
-          1.3,
-          0,
-          -20,
-          0,
-          0,
-          0,
-          1,
-          0,
-        ]);
-      case PageFilter.colorBoost:
-        return const ColorFilter.matrix([
-          1.2,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1.2,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1.2,
-          0,
-          0,
-          0,
-          0,
-          0,
-          1,
-          0,
-        ]);
-      case PageFilter.original:
-        return const ColorFilter.mode(Colors.transparent, BlendMode.multiply);
-    }
+  Widget _buildAdjustmentSliders(ScaneliqTokens tokens) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildSingleSlider(
+          label: 'Brightness',
+          valueText:
+              '${_recipe.brightness >= 0 ? '+' : ''}${(_recipe.brightness * 100).round()}',
+          value: _recipe.brightness.clamp(-0.5, 0.5),
+          min: -0.5,
+          max: 0.5,
+          divisions: 20,
+          onChanged: (v) => _previewContinuousRecipe(
+            _recipe.copyWith(brightness: v),
+          ),
+        ),
+        _buildSingleSlider(
+          label: 'Contrast',
+          valueText: '${_recipe.contrast.toStringAsFixed(2)}x',
+          value: _recipe.contrast.clamp(0.5, 2.0),
+          min: 0.5,
+          max: 2.0,
+          divisions: 15,
+          onChanged: (v) => _previewContinuousRecipe(
+            _recipe.copyWith(contrast: v),
+          ),
+        ),
+        _buildSingleSlider(
+          label: 'Sharpness',
+          valueText: '${(_recipe.sharpness * 100).round()}%',
+          value: _recipe.sharpness.clamp(0.0, 1.0),
+          min: 0.0,
+          max: 1.0,
+          divisions: 10,
+          onChanged: (v) => _previewContinuousRecipe(
+            _recipe.copyWith(sharpness: v),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              minimumSize: const Size(0, 28),
+            ),
+            onPressed: () {
+              _commitRecipe(
+                _recipe.copyWith(
+                  brightness: 0.0,
+                  contrast: 1.0,
+                  sharpness: 0.0,
+                ),
+                immediatePreview: true,
+              );
+            },
+            child: const Text('Reset Adjustments'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSingleSlider({
+    required String label,
+    required String valueText,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required ValueChanged<double> onChanged,
+  }) {
+    final tokens = context.tokens;
+    return Row(
+      children: [
+        SizedBox(
+          width: 72,
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2.5,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            ),
+            child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              divisions: divisions,
+              activeColor: tokens.accent,
+              onChangeStart: (_) => _activeStack.beginContinuousEdit(),
+              onChanged: onChanged,
+              onChangeEnd: (_) {
+                _sliderHistoryDebounce?.cancel();
+                _activeStack.commitContinuousEdit();
+                setState(() {});
+              },
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 44,
+          child: Text(
+            valueText,
+            textAlign: TextAlign.right,
+            style: ScaneliqTypography.monoStyle(
+              color: tokens.textPrimary,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRotateAndCleanupControls(
+    ScaneliqTokens tokens,
+    bool isMultiPage,
+  ) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            _EditorActionPill(
+              icon: Icons.rotate_left_rounded,
+              label: 'Left 90°',
+              onPressed: () => _rotateBy(-90),
+            ),
+            _EditorActionPill(
+              icon: Icons.rotate_right_rounded,
+              label: 'Right 90° (${_recipe.rotationDegrees}°)',
+              onPressed: () => _rotateBy(90),
+            ),
+            _EditorActionPill(
+              icon: Icons.cleaning_services_outlined,
+              label: _isCleanupMode ? 'Cleanup: ON' : 'Patch Cleanup',
+              selected: _isCleanupMode,
+              onPressed: () => setState(() => _isCleanupMode = !_isCleanupMode),
+            ),
+            _EditorActionPill(
+              icon: Icons.content_copy_outlined,
+              label: 'Duplicate',
+              onPressed: _duplicateCurrentPage,
+            ),
+            _EditorActionPill(
+              icon: Icons.restart_alt_rounded,
+              label: 'Reset All',
+              onPressed: _resetCurrentPage,
+            ),
+          ],
+        ),
+        if (_isCleanupMode) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ChoiceChip(
+                label: const Text('Hole Punch'),
+                selected: _cleanupType == 'holePunch',
+                onSelected: (_) => setState(() => _cleanupType = 'holePunch'),
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('Finger'),
+                selected: _cleanupType == 'finger',
+                onSelected: (_) => setState(() => _cleanupType = 'finger'),
+              ),
+              const SizedBox(width: 8),
+              if (_recipe.cleanupPatches.isNotEmpty)
+                IconButton(
+                  tooltip: 'Clear cleanup patches',
+                  icon: Icon(Icons.delete_sweep_outlined, color: tokens.danger),
+                  onPressed: () => _commitRecipe(
+                    _recipe.copyWith(cleanupPatches: const []),
+                    immediatePreview: true,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBottomCategoryBar(ScaneliqTokens tokens) {
+    const categories = <(EditTab, String, IconData)>[
+      (EditTab.crop, 'Crop', Icons.crop_rounded),
+      (EditTab.enhance, 'Enhance', Icons.auto_fix_high_outlined),
+      (EditTab.filter, 'Filters', Icons.auto_awesome_outlined),
+      (EditTab.adjust, 'Adjust', Icons.tune_rounded),
+      (EditTab.rotate, 'Rotate', Icons.rotate_right_rounded),
+    ];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: categories.map((item) {
+        final (tab, label, icon) = item;
+        final selected = _currentTab == tab;
+        return Expanded(
+          child: Semantics(
+            label: '$label tool',
+            selected: selected,
+            button: true,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () {
+                final bool cropChanged =
+                    (_currentTab == EditTab.crop) != (tab == EditTab.crop);
+                setState(() {
+                  _currentTab = tab;
+                  if (tab == EditTab.crop) _isComparing = false;
+                });
+                if (cropChanged) _schedulePreviewRender(immediate: true);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 20,
+                      color: selected ? tokens.accent : tokens.textSecondary,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w500,
+                        color: selected ? tokens.accent : tokens.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
   }
 }
 
-/// Custom painter for the 4-point quadrilateral homography boundaries
-class _PerspectiveQuadPainter extends CustomPainter {
-  final PerspectiveQuad quad;
+class _EditorActionPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool selected;
+  final bool accent;
 
-  _PerspectiveQuadPainter({required this.quad});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final isValid = quad.isValidConvex();
-    final strokeColor = isValid ? AppColors.brandAccent : Colors.redAccent;
-
-    final path = Path()
-      ..moveTo(quad.x1 * size.width, quad.y1 * size.height)
-      ..lineTo(quad.x2 * size.width, quad.y2 * size.height)
-      ..lineTo(quad.x3 * size.width, quad.y3 * size.height)
-      ..lineTo(quad.x4 * size.width, quad.y4 * size.height)
-      ..close();
-
-    final fillPaint = Paint()
-      ..color = (isValid ? AppColors.brandPrimary : Colors.red).withAlpha(30)
-      ..style = PaintingStyle.fill;
-
-    final strokePaint = Paint()
-      ..color = strokeColor
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawPath(path, fillPaint);
-    canvas.drawPath(path, strokePaint);
-  }
+  const _EditorActionPill({
+    required this.icon,
+    required this.label,
+    this.onPressed,
+    this.selected = false,
+    this.accent = false,
+  });
 
   @override
-  bool shouldRepaint(covariant _PerspectiveQuadPainter oldDelegate) {
-    return oldDelegate.quad != quad;
-  }
-}
-
-/// Custom painter displaying circles for active manual cleanup patches
-class _CleanupPatchesPainter extends CustomPainter {
-  final List<CleanupPatch> patches;
-
-  _CleanupPatchesPainter({required this.patches});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final patch in patches) {
-      final center = Offset(patch.x * size.width, patch.y * size.height);
-      final radius = patch.radius * size.width;
-
-      final fillPaint = Paint()
-        ..color =
-            (patch.type == 'holePunch' ? AppColors.brandAccent : Colors.amber)
-                .withAlpha(50)
-        ..style = PaintingStyle.fill;
-
-      final strokePaint = Paint()
-        ..color = patch.type == 'holePunch'
-            ? AppColors.brandAccent
-            : Colors.amber
-        ..strokeWidth = 1.8
-        ..style = PaintingStyle.stroke;
-
-      canvas.drawCircle(center, radius, fillPaint);
-      canvas.drawCircle(center, radius, strokePaint);
-
-      // Center cross indicator
-      canvas.drawLine(
-        Offset(center.dx - 4, center.dy),
-        Offset(center.dx + 4, center.dy),
-        strokePaint,
-      );
-      canvas.drawLine(
-        Offset(center.dx, center.dy - 4),
-        Offset(center.dx, center.dy + 4),
-        strokePaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _CleanupPatchesPainter oldDelegate) {
-    return oldDelegate.patches.length != patches.length;
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final bool active = selected || accent;
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? tokens.accentSoft : tokens.surfaceSubtle,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: active ? tokens.accent : tokens.hairline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: active ? tokens.accent : tokens.textPrimary,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: active ? tokens.accent : tokens.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

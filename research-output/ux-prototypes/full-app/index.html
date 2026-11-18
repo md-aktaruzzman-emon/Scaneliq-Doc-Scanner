@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scaneliq — Full Application Interactive Prototype (Concept A: Editorial Gallery Minimal)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Noto+Sans+Bengali:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="design-tokens.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Inline SVG Symbol Sprite (File-Protocol Safe) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="ic-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M4 16v2a2 2 0 0 0 2 2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M16 20h2a2 2 0 0 0 2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/>
+    </symbol>
+    <symbol id="ic-signal" viewBox="0 0 16 12" fill="currentColor">
+      <rect x="1" y="8" width="2.2" height="3.5" rx="0.6"/><rect x="4.5" y="6" width="2.2" height="5.5" rx="0.6"/><rect x="8" y="3.5" width="2.2" height="8" rx="0.6"/><rect x="11.5" y="1" width="2.2" height="10.5" rx="0.6"/>
+    </symbol>
+    <symbol id="ic-wifi" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+      <path d="M1.5 4.2a10 10 0 0 1 13 0"/><path d="M4 7a6.5 6.5 0 0 1 8 0"/><circle cx="8" cy="10" r="1.1" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="ic-battery" viewBox="0 0 22 12" fill="none">
+      <rect x="1" y="1.5" width="17" height="9" rx="2.2" stroke="currentColor" stroke-width="1.3"/><rect x="3" y="3.3" width="13" height="5.4" rx="1" fill="currentColor"/><path d="M19.5 4.2v3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ic-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+    </symbol>
+    <symbol id="ic-gallery" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+    </symbol>
+    <symbol id="ic-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+    </symbol>
+    <symbol id="ic-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+    </symbol>
+    <symbol id="ic-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+    </symbol>
+    <symbol id="ic-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+    </symbol>
+  </svg>
+
+  <!-- Studio Control Header (Interactive Screen & User Journey Switcher) -->
+  <div class="studio-shell">
+    <div class="studio-top">
+      <div class="studio-brand">
+        <span class="studio-badge">CONCEPT A · APPROVED MASTER</span>
+        <span class="studio-title">Scaneliq — Editorial Gallery Minimal (65 Screens · 8 Groups)</span>
+      </div>
+      <div class="studio-controls">
+        <button class="studio-btn active" data-view-btn="dual" onclick="App.setViewMode('dual')">Dual (Light + Dark)</button>
+        <button class="studio-btn" data-view-btn="light" onclick="App.setViewMode('light')">Light Only (393×852)</button>
+        <button class="studio-btn" data-view-btn="dark" onclick="App.setViewMode('dark')">Dark Only (393×852)</button>
+      </div>
+    </div>
+
+    <!-- Screen Switcher Bar -->
+    <div class="studio-controls">
+      <button class="studio-btn active" data-screen-btn="home" onclick="App.go('home')">1. Home Dashboard</button>
+      <button class="studio-btn" data-screen-btn="search" onclick="App.go('search')">2. OCR Search</button>
+      <button class="studio-btn" data-screen-btn="camera" onclick="App.go('camera')">3. Scanner Camera</button>
+      <button class="studio-btn" data-screen-btn="editor" onclick="App.go('editor')">4. Scan Editor & Filters</button>
+      <button class="studio-btn" data-screen-btn="viewer" onclick="App.go('viewer')">5. PDF Viewer & Dock</button>
+      <button class="studio-btn" data-screen-btn="folders" onclick="App.go('folders')">6. Folders Vault</button>
+      <button class="studio-btn" data-screen-btn="pdf-suite" onclick="App.go('pdf-suite')">7. PDF Suite (14 Tools)</button>
+      <button class="studio-btn" data-screen-btn="ocr-ai" onclick="App.go('ocr-ai')">8. OCR, বাংলা & AI</button>
+      <button class="studio-btn" data-screen-btn="receipt" onclick="App.go('pdf-suite', 'receipt')">9. Receipt Ledger</button>
+      <button class="studio-btn" data-screen-btn="lock" onclick="App.setSettingsSub('lock'); App.go('settings')">10. App Lock PIN</button>
+      <button class="studio-btn" data-screen-btn="backup" onclick="App.setSettingsSub('backup'); App.go('settings')">11. Backup Vault</button>
+      <button class="studio-btn" data-screen-btn="settings" onclick="App.setSettingsSub(null); App.go('settings')">12. Settings</button>
+      <button class="studio-btn" data-screen-btn="onboarding" onclick="App.go('onboarding')">13. Onboarding</button>
+    </div>
+
+    <!-- 7 User Journeys Bar -->
+    <div class="studio-controls" style="padding-top:2px;border-top:1px solid #23262F;">
+      <span style="font-family:var(--font-mono);font-size:10px;color:#8E929F;align-self:center;margin-right:4px;">USER JOURNEYS:</span>
+      <button class="studio-btn" onclick="App.runJourney(1)">J1: Scan → Filter → PDF</button>
+      <button class="studio-btn" onclick="App.runJourney(2)">J2: Inspect & Share</button>
+      <button class="studio-btn" onclick="App.runJourney(3)">J3: Folders & Batch</button>
+      <button class="studio-btn" onclick="App.runJourney(4)">J4: OCR & বাংলা AI</button>
+      <button class="studio-btn" onclick="App.runJourney(5)">J5: PDF Suite Compress</button>
+      <button class="studio-btn" onclick="App.runJourney(6)">J6: Security PIN Lock</button>
+      <button class="studio-btn" onclick="App.runJourney(7)">J7: Encrypted .scaneliq</button>
+    </div>
+  </div>
+
+  <!-- Dual Synchronized 393 × 852 Viewports -->
+  <div id="stage-wrap" class="stage-wrap">
+    <div id="col-light" class="device-col">
+      <div class="device-tag">LIGHT THEME · GALLERY ALABASTER (#FAF9F6) · 393 × 852</div>
+      <div id="viewport-light" class="viewport theme-light"></div>
+    </div>
+
+    <div id="col-dark" class="device-col">
+      <div class="device-tag">DARK THEME · CARBON STUDIO (#0D0E11) · 393 × 852</div>
+      <div id="viewport-dark" class="viewport theme-dark"></div>
+    </div>
+  </div>
+
+  <script src="screens/screens-renderer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

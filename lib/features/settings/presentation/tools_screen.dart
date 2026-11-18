@@ -3,17 +3,24 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
+import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
+import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
+import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
+import 'package:scaneliq/features/intelligence/presentation/ai_document_sheet.dart';
+import 'package:scaneliq/features/intelligence/presentation/business_card_dialog.dart';
+import 'package:scaneliq/features/intelligence/presentation/receipt_dialog.dart';
 import 'package:scaneliq/features/ocr/data/ocr_service.dart';
 import 'package:scaneliq/features/pdf/presentation/pdf_tools_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/count_cam_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_code_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/translate_screen.dart';
-import 'package:scaneliq/features/intelligence/presentation/business_card_dialog.dart';
-import 'package:scaneliq/features/intelligence/presentation/receipt_dialog.dart';
-import 'package:scaneliq/features/intelligence/presentation/ai_document_sheet.dart';
 
+/// Concept A (Editorial Gallery Minimal) consolidated PDF Suite & Productivity Hub (Tab 3).
+///
+/// Unifies Organize, Edit, Optimize, Convert, OCR, and Document Intelligence workflows
+/// with honest disclosure badges for planned/beta capabilities.
 class ToolsScreen extends StatefulWidget {
   const ToolsScreen({super.key});
 
@@ -25,7 +32,7 @@ class _ToolsScreenState extends State<ToolsScreen> {
   bool _isProcessingOcr = false;
   String? _extractedText;
 
-  void _runDirectOcrOnPickedFile() async {
+  Future<void> _runDirectOcrOnPickedFile() async {
     try {
       final pickedFiles = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -35,33 +42,44 @@ class _ToolsScreenState extends State<ToolsScreen> {
       if (pickedFiles.isNotEmpty && pickedFiles.first.path != null) {
         if (!mounted) return;
 
-        final chosenScript = await showDialog<OcrScript>(
+        final chosenScript = await showScaneliqBottomSheet<OcrScript>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Select Recognition Script'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.language),
-                  title: const Text('English / Latin'),
-                  subtitle: const Text('Latin alphabet documents'),
-                  onTap: () => Navigator.pop(ctx, OcrScript.latin),
+          builder: (ctx) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select Recognition Script',
+                style: Theme.of(ctx).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 10),
+              ScaneliqContextMenuRow(
+                icon: Icons.language_rounded,
+                title: 'English / Latin',
+                subtitle: 'Latin alphabet documents (Active on-device)',
+                trailing: const ScaneliqStatusLabel(
+                  text: 'ACTIVE',
+                  tone: ScaneliqStatusTone.success,
                 ),
-                ListTile(
-                  leading: const Icon(Icons.translate),
-                  title: const Text('Bengali (বাংলা) & Indic'),
-                  subtitle: const Text('Bengali script & numerals'),
-                  onTap: () => Navigator.pop(ctx, OcrScript.bengali),
+                onTap: () => Navigator.pop(ctx, OcrScript.latin),
+              ),
+              ScaneliqContextMenuRow(
+                icon: Icons.translate_rounded,
+                title: 'Bengali (বাংলা) & Indic',
+                subtitle: 'Indic script & numeral converter',
+                trailing: const ScaneliqStatusLabel(
+                  text: 'INDIC BETA',
+                  tone: ScaneliqStatusTone.warning,
                 ),
-                ListTile(
-                  leading: const Icon(Icons.auto_awesome),
-                  title: const Text('Devanagari (Hindi / Nepali)'),
-                  subtitle: const Text('Devanagari script documents'),
-                  onTap: () => Navigator.pop(ctx, OcrScript.devanagari),
-                ),
-              ],
-            ),
+                onTap: () => Navigator.pop(ctx, OcrScript.bengali),
+              ),
+              ScaneliqContextMenuRow(
+                icon: Icons.auto_awesome_outlined,
+                title: 'Devanagari (Hindi / Nepali)',
+                subtitle: 'Devanagari script recognition',
+                onTap: () => Navigator.pop(ctx, OcrScript.devanagari),
+              ),
+            ],
           ),
         );
 
@@ -86,512 +104,391 @@ class _ToolsScreenState extends State<ToolsScreen> {
         });
 
         if (mounted) {
-          _showTextResultDialog(_extractedText!);
+          _showTextResultSheet(_extractedText!);
         }
       }
     } catch (e) {
-      setState(() {
-        _isProcessingOcr = false;
-      });
+      setState(() => _isProcessingOcr = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('OCR Failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        showScaneliqToast(context, 'OCR Failed: $e');
       }
     }
   }
 
-  void _showTextResultDialog(String text) {
-    showDialog(
+  void _showTextResultSheet(String text) {
+    showScaneliqBottomSheet<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Extracted Text'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 300,
-          child: SingleChildScrollView(child: SelectableText(text)),
-        ),
-        actions: [
-          TextButton.icon(
-            icon: const Icon(Icons.copy_rounded, size: 18),
-            label: const Text('Copy'),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: text));
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Copied text to clipboard!')),
-              );
-            },
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Extracted Text',
+                style: Theme.of(ctx).textTheme.headlineMedium,
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.copy_rounded, size: 17),
+                label: const Text('Copy'),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: text));
+                  Navigator.pop(ctx);
+                  showScaneliqToast(context, 'Copied text to clipboard.');
+                },
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 280),
+            child: SingleChildScrollView(child: SelectableText(text)),
           ),
         ],
       ),
     );
   }
 
+  void _openPdfTool([PdfToolAction? action]) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PdfToolsScreen(initialAction: action)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+    final horizontalPad = ScaneliqSpacing.adaptiveHorizontalPadding(
+      MediaQuery.sizeOf(context).width,
+    );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Document Tools',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Productivity & OCR Tools Section
-            _buildSectionHeader(
-              'Productivity & OCR Tools',
-              'Extract text, recognize codes, and translate documents',
-              isDark,
-            ),
-            const SizedBox(height: 10),
-            _buildCardGroup(
-              isDark: isDark,
+      backgroundColor: tokens.bg,
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            horizontalPad,
+            ScaneliqSpacing.headerVerticalTop,
+            horizontalPad,
+            28,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+            // Editorial PDF Suite Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildToolTile(
-                  icon: Icons.document_scanner_rounded,
-                  title: 'Instant Image OCR',
-                  subtitle: 'Extract selectable text from any image file on your phone',
-                  isDark: isDark,
-                  trailing: _isProcessingOcr
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : null,
-                  onTap: _isProcessingOcr ? null : _runDirectOcrOnPickedFile,
+                Flexible(
+                  child: Text('PDF Suite', style: textTheme.headlineLarge),
                 ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.qr_code_scanner_rounded,
-                  title: 'QR & Barcode Scanner',
-                  subtitle:
-                      'Instant code detection, URL open, and clipboard copy',
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ScanCodeScreen()),
-                    );
-                  },
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.translate_rounded,
-                  title: 'Translate Lens',
-                  subtitle:
-                      'Optical camera translation overlay across languages',
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const TranslateScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.calculate_outlined,
-                  title: 'CountCam',
-                  subtitle: 'AI object detection and inventory item counting',
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CountCamScreen()),
-                    );
-                  },
+                const ScaneliqStatusLabel(
+                  text: '100% ON-DEVICE',
+                  tone: ScaneliqStatusTone.accent,
                 ),
               ],
+            ),
+            const SizedBox(height: 18),
+
+            // 1. ORGANIZE
+            const ScaneliqSectionHeader(
+              title: 'Organize',
+              trailing: ScaneliqStatusLabel(text: 'IMPLEMENTED'),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.call_merge_rounded,
+              title: 'Merge PDF',
+              subtitle: 'Combine multiple PDF documents into one ordered file',
+              badge: 'MERGE',
+              onTap: () => _openPdfTool(PdfToolAction.mergePdfs),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.call_split_rounded,
+              title: 'Split PDF',
+              subtitle: 'Split into single pages or partition by custom ranges',
+              badge: 'SPLIT',
+              onTap: () => _openPdfTool(PdfToolAction.splitSinglePages),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.dashboard_customize_outlined,
+              title: 'Reorder & Delete Pages',
+              subtitle: 'Organize, duplicate, insert, or remove individual PDF pages',
+              badge: 'ORGANIZE',
+              onTap: () => _openPdfTool(PdfToolAction.organizePages),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.file_upload_outlined,
+              title: 'Extract Pages',
+              subtitle: 'Save custom page ranges (e.g. 1-3, 5) into a new PDF',
+              badge: 'EXTRACT',
+              onTap: () => _openPdfTool(PdfToolAction.extractPages),
             ),
 
             const SizedBox(height: 22),
 
-            // Document Intelligence & AI
-            _buildSectionHeader(
-              'Document Intelligence & AI',
-              'Extract business contacts, parse receipt totals, and ask questions',
-              isDark,
+            // 2. EDIT & PROTECT
+            const ScaneliqSectionHeader(title: 'Edit & Protect'),
+            _SuiteHairlineRow(
+              icon: Icons.rotate_right_rounded,
+              title: 'Rotate PDF Pages',
+              subtitle: 'Inspect thumbnails and rotate individual or all pages 90°',
+              badge: 'ROTATE',
+              onTap: () => _openPdfTool(PdfToolAction.organizePages),
             ),
-            const SizedBox(height: 10),
-            _buildCardGroup(
-              isDark: isDark,
-              children: [
-                _buildToolTile(
-                  icon: Icons.contact_mail_outlined,
-                  title: 'Business Card Reader',
-                  subtitle: 'Extract contact details and export standard vCard (.vcf)',
-                  isDark: isDark,
-                  onTap: () => BusinessCardDialog.show(context),
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'Receipt & Invoice Scanner',
-                  subtitle: 'Extract totals, tax, line items with math verification & CSV export',
-                  isDark: isDark,
-                  onTap: () => ReceiptDialog.show(context),
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.auto_awesome_outlined,
-                  title: 'AI Document Summary & Q&A',
-                  subtitle: 'Offline TextRank executive summary and semantic passage answering',
-                  isDark: isDark,
-                  onTap: () => AiDocumentSheet.show(context),
-                ),
-              ],
+            _SuiteHairlineRow(
+              icon: Icons.draw_outlined,
+              title: 'Annotate & Add Signature',
+              subtitle: 'Place approval stamps, text notes, and signature overlays',
+              badge: 'SIGN',
+              onTap: () => _openPdfTool(PdfToolAction.annotatePdf),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.branding_watermark_outlined,
+              title: 'Add Watermark',
+              subtitle: 'Overlay CONFIDENTIAL, DRAFT, or custom diagonal text',
+              badge: 'MARK',
+              onTap: () => _openPdfTool(PdfToolAction.watermarkPdf),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.lock_outline_rounded,
+              title: 'Password Lock & Sanitizer',
+              subtitle: 'AES-256 encryption, unlock PDF, or blackout sensitive areas',
+              badge: 'AES-256',
+              tone: ScaneliqStatusTone.accent,
+              onTap: () => _openPdfTool(PdfToolAction.encryptPdf),
             ),
 
             const SizedBox(height: 22),
 
-            // 2. PDF Productivity Section
-            _buildSectionHeader(
-              'PDF Productivity Suite',
-              'Merge, split, organize pages, watermark, and encrypt PDFs',
-              isDark,
+            // 3. OPTIMIZE & CONVERT
+            const ScaneliqSectionHeader(title: 'Optimize & Convert'),
+            _SuiteHairlineRow(
+              icon: Icons.compress_rounded,
+              title: 'Compress PDF',
+              subtitle: 'Reduce file size with High Quality, Balanced, or Compact presets',
+              badge: 'COMPRESS',
+              tone: ScaneliqStatusTone.success,
+              onTap: () => _openPdfTool(PdfToolAction.compressPdf),
             ),
-            const SizedBox(height: 10),
-            _buildCardGroup(
-              isDark: isDark,
-              children: [
-                _buildToolTile(
-                  icon: Icons.picture_as_pdf_rounded,
-                  title: 'PDF Productivity Tools',
-                  subtitle: 'Merge multiple PDFs, split pages, encrypt with password & watermark',
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const PdfToolsScreen()),
-                    );
-                  },
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.share_outlined,
-                  title: 'Share & Export',
-                  subtitle: 'Send scanned documents via email, messaging, or system drive',
-                  isDark: isDark,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Sharing is integrated inside every document card and viewer.',
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                ),
-              ],
+            _SuiteHairlineRow(
+              icon: Icons.photo_camera_back_outlined,
+              title: 'Image to PDF Scan',
+              subtitle: 'Capture or import images and export clean A4 searchable PDF',
+              badge: 'JPG → PDF',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const ContinuousCameraScreen(mode: ScanMode.document),
+                  ),
+                );
+              },
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.view_stream_outlined,
+              title: 'Stitch to Long Image',
+              subtitle: 'Join multi-page receipts or bills into a continuous vertical JPEG',
+              badge: 'STITCH',
+              onTap: () => _openPdfTool(PdfToolAction.stitchLongImage),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.info_outline_rounded,
+              title: 'Inspect PDF Properties',
+              subtitle: 'Check page dimensions, file size, and encryption flags',
+              badge: 'INSPECT',
+              onTap: () => _openPdfTool(PdfToolAction.inspectPdf),
             ),
 
             const SizedBox(height: 22),
 
-            // 3. Specialized Capture Modes Section
-            _buildSectionHeader(
-              'Specialized Capture Modes',
-              'Direct access to camera capture workflows',
-              isDark,
+            // 4. PRODUCTIVITY & OCR TOOLS (Preserved Group Title & Keys)
+            const ScaneliqSectionHeader(
+              title: 'Productivity & OCR Tools',
+              trailing: ScaneliqStatusLabel(
+                text: 'OCR & AI',
+                tone: ScaneliqStatusTone.accent,
+              ),
             ),
-            const SizedBox(height: 10),
-            _buildCardGroup(
-              isDark: isDark,
-              children: [
-                _buildToolTile(
-                  icon: Icons.burst_mode_rounded,
-                  title: 'Batch Scanning',
-                  subtitle:
-                      'Continuous rapid multi-page capture with live counter',
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const ContinuousCameraScreen(mode: ScanMode.batch),
-                      ),
-                    );
-                  },
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.badge_outlined,
-                  title: 'ID Card 2-in-1',
-                  subtitle:
-                      'Scan front and back sides onto a single formatted page',
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const ContinuousCameraScreen(mode: ScanMode.idCard),
-                      ),
-                    );
-                  },
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.quiz_outlined,
-                  title: 'Q&A / Exam Mode',
-                  subtitle:
-                      'Structured capture for question sets and worksheets',
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ContinuousCameraScreen(
-                          mode: ScanMode.questionSet,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.menu_book_outlined,
-                  title: 'Book Mode',
-                  subtitle:
-                      'Scan open book spreads with curve flattening guidance',
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const ContinuousCameraScreen(mode: ScanMode.book),
-                      ),
-                    );
-                  },
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.co_present_outlined,
-                  title: 'Whiteboard',
-                  subtitle: 'Capture meeting boards with glare elimination',
-                  isDark: isDark,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ContinuousCameraScreen(
-                          mode: ScanMode.whiteboard,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+            _SuiteHairlineRow(
+              icon: Icons.document_scanner_outlined,
+              title: 'Instant Image OCR',
+              subtitle: 'Extract selectable text from any image file on your phone',
+              badge: _isProcessingOcr ? 'RUNNING…' : 'OCR',
+              tone: ScaneliqStatusTone.accent,
+              onTap: _isProcessingOcr ? null : _runDirectOcrOnPickedFile,
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.qr_code_scanner_rounded,
+              title: 'QR & Barcode Scanner',
+              subtitle: 'Instant code detection, URL open, and clipboard copy',
+              badge: 'QR',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ScanCodeScreen()),
+                );
+              },
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.translate_rounded,
+              title: 'Translate Lens',
+              subtitle: 'Cross-language document translation (requires network consent)',
+              badge: 'ONLINE',
+              tone: ScaneliqStatusTone.warning,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TranslateScreen()),
+                );
+              },
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.calculate_outlined,
+              title: 'CountCam',
+              subtitle: 'Interactive counter & OCR block pin marker (TFLite detector planned)',
+              badge: 'BETA',
+              tone: ScaneliqStatusTone.warning,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CountCamScreen()),
+                );
+              },
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.contact_mail_outlined,
+              title: 'Business Card Reader',
+              subtitle: 'Extract contact details and export standard vCard (.vcf)',
+              badge: 'VCARD',
+              onTap: () => BusinessCardDialog.show(context),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.receipt_long_outlined,
+              title: 'Receipt & Invoice Scanner',
+              subtitle: 'Extract totals, VAT/tax math check & CSV spreadsheet export',
+              badge: 'CSV',
+              tone: ScaneliqStatusTone.success,
+              onTap: () => ReceiptDialog.show(context),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.auto_awesome_outlined,
+              title: 'AI Document Summary & Q&A',
+              subtitle: '100% offline TextRank executive summary and TF-IDF citations',
+              badge: 'OFFLINE AI',
+              onTap: () => AiDocumentSheet.show(context),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.picture_as_pdf_outlined,
+              title: 'PDF Productivity Tools',
+              subtitle: 'Open complete PDF manipulation, encryption & watermark workbench',
+              badge: 'ALL TOOLS',
+              tone: ScaneliqStatusTone.accent,
+              onTap: () => _openPdfTool(),
+            ),
+            _SuiteHairlineRow(
+              icon: Icons.ios_share_rounded,
+              title: 'Share & Export',
+              subtitle: 'Export unwatermarked PDFs or text inside any document sheet',
+              badge: 'EXPORT',
+              onTap: () => showScaneliqToast(
+                context,
+                'Sharing is integrated inside every document row and viewer.',
+              ),
             ),
 
             const SizedBox(height: 22),
 
-            // 4. Upcoming Platform Integrations Section
-            _buildSectionHeader(
-              'Upcoming Platform Integrations',
-              'Features scheduled in the Scaneliq Master Blueprint roadmap',
-              isDark,
+            // 5. PLANNED / UNAVAILABLE INTEGRATIONS (Clearly Distinguished)
+            const ScaneliqSectionHeader(
+              title: 'Upcoming Platform Integrations',
+              trailing: ScaneliqStatusLabel(
+                text: 'PLANNED',
+                tone: ScaneliqStatusTone.warning,
+              ),
             ),
-            const SizedBox(height: 10),
-            _buildCardGroup(
-              isDark: isDark,
-              children: [
-                _buildToolTile(
-                  icon: Icons.cloud_sync_outlined,
-                  title: 'Cloud Backup & Multi-device Sync',
-                  subtitle: 'Zero-knowledge encrypted cloud backup and cross-device sync',
-                  isDark: isDark,
-                  trailing: _buildComingSoonBadge(isDark),
-                  onTap: null,
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.draw_outlined,
-                  title: 'E-Signature & Annotations',
-                  subtitle: 'Freehand signatures, stamp overlays, and page annotations',
-                  isDark: isDark,
-                  trailing: _buildComingSoonBadge(isDark),
-                  onTap: null,
-                ),
-                _buildDivider(isDark),
-                _buildToolTile(
-                  icon: Icons.table_chart_outlined,
-                  title: 'Table & Expense Extraction',
-                  subtitle: 'Receipt ledger parsing and CSV spreadsheet export',
-                  isDark: isDark,
-                  trailing: _buildComingSoonBadge(isDark),
-                  onTap: null,
-                ),
-              ],
+            const _SuiteHairlineRow(
+              icon: Icons.table_chart_outlined,
+              title: 'PDF to Word / Excel Conversion',
+              subtitle: 'Not yet available in this local-first release',
+              badge: 'UNAVAILABLE',
+              tone: ScaneliqStatusTone.warning,
+              onTap: null,
             ),
-
-            const SizedBox(height: 16),
+            const _SuiteHairlineRow(
+              icon: Icons.cloud_sync_outlined,
+              title: 'Cloud Backup & Multi-device Sync',
+              subtitle: 'Remote Drive AppData & WebDAV sync transport scheduled',
+              badge: 'PLANNED',
+              tone: ScaneliqStatusTone.warning,
+              onTap: null,
+            ),
           ],
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildCardGroup({
-    required List<Widget> children,
-    required bool isDark,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? AppColors.borderSubtleDark
-              : AppColors.borderSubtleLight,
-        ),
-      ),
-      child: Column(children: children),
-    );
-  }
+class _SuiteHairlineRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String badge;
+  final ScaneliqStatusTone tone;
+  final VoidCallback? onTap;
 
-  Widget _buildToolTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback? onTap,
-    Widget? trailing,
-    required bool isDark,
-  }) {
-    return Material(
-      color: Colors.transparent,
+  const _SuiteHairlineRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.badge,
+    this.tone = ScaneliqStatusTone.neutral,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+    final enabled = onTap != null;
+
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.62,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: tokens.hairline, width: 1),
+            ),
+          ),
           child: Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.surface2Dark : AppColors.brandLight,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: isDark ? AppColors.brandLight : AppColors.brandPrimary,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 14),
+              Icon(icon, size: 21, color: tokens.textPrimary),
+              const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text(title, style: textTheme.titleMedium),
                     const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
-                    ),
+                    Text(subtitle, style: textTheme.bodySmall),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              if (trailing != null)
-                trailing
-              else
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 20,
-                  color: isDark
-                      ? AppColors.textTertiaryDark
-                      : AppColors.textTertiaryLight,
-                ),
+              ScaneliqStatusLabel(text: badge, tone: tone),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildDivider(bool isDark) {
-    return Divider(
-      height: 1,
-      indent: 70,
-      endIndent: 14,
-      color: isDark
-          ? AppColors.borderDark.withValues(alpha: 0.5)
-          : AppColors.borderLight.withValues(alpha: 0.7),
-    );
-  }
-
-  Widget _buildComingSoonBadge(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surface2Dark : AppColors.surface2Light,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        'Coming soon',
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          color: isDark
-              ? AppColors.textSecondaryDark
-              : AppColors.textSecondaryLight,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, String subtitle, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          subtitle,
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark
-                ? AppColors.textSecondaryDark
-                : AppColors.textSecondaryLight,
-          ),
-        ),
-      ],
     );
   }
 }

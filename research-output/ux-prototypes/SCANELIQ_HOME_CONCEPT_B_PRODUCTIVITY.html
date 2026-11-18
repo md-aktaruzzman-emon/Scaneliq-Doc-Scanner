@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scaneliq — Concept B: Professional Productivity (393 × 852)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@500;600&family=Noto+Sans+Bengali:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-head: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
+      --font-body: 'Inter', 'Noto Sans Bengali', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+
+    body {
+      background: #0B0F15;
+      color: #F1F5F9;
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 24px 36px;
+      overflow-x: hidden;
+    }
+    body::-webkit-scrollbar { display: none; }
+
+    .studio-bar {
+      width: 100%;
+      max-width: 920px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #1E293B;
+    }
+    .studio-meta { display: flex; flex-direction: column; gap: 3px; }
+    .studio-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #10B981;
+      letter-spacing: 0.04em;
+    }
+    .studio-title {
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #FFFFFF;
+    }
+    .studio-controls { display: flex; gap: 8px; }
+    .studio-btn {
+      background: #162030;
+      color: #CBD5E1;
+      border: 1px solid #26354D;
+      padding: 7px 13px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .studio-btn.active, .studio-btn:hover {
+      background: #0D9488;
+      color: #FFFFFF;
+      border-color: #0D9488;
+    }
+
+    .stage {
+      display: flex;
+      gap: 44px;
+      justify-content: center;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .device-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .device-caption {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #94A3B8;
+      letter-spacing: 0.02em;
+    }
+
+    /* EXACT 393 x 852 LOGICAL PIXEL VIEWPORT */
+    .viewport {
+      width: 393px;
+      height: 852px;
+      border-radius: 46px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 30px 70px rgba(0,0,0,0.65), 0 0 0 10px #1B2432, 0 0 0 11px #2D3B50;
+      user-select: none;
+    }
+
+    /* Individually Designed Themes */
+    .viewport.theme-light {
+      --bg: #F1F4F8;
+      --top-hero: #0B1D33;
+      --top-hero-text: #FFFFFF;
+      --surface: #FFFFFF;
+      --surface-2: #E6ECF2;
+      --text-1: #0D1B2A;
+      --text-2: #4A5D73;
+      --text-3: #7B8D9E;
+      --border: #DCE3EC;
+      --jade: #089178;
+      --jade-soft: #E6F7F3;
+      --navy-accent: #133B6E;
+      --nav-bg: #FFFFFF;
+      background: var(--bg);
+      color: var(--text-1);
+    }
+
+    .viewport.theme-dark {
+      --bg: #080C12;
+      --top-hero: #0D1624;
+      --top-hero-text: #F8FAFC;
+      --surface: #111A27;
+      --surface-2: #192536;
+      --text-1: #F1F5F9;
+      --text-2: #94A3B8;
+      --text-3: #64748B;
+      --border: #1F2D40;
+      --jade: #14B89A;
+      --jade-soft: rgba(20, 184, 154, 0.14);
+      --navy-accent: #38BDF8;
+      --nav-bg: #0E1520;
+      background: var(--bg);
+      color: var(--text-1);
+    }
+
+    /* Command Top Canopy (Executive Dark Navy Canopy in Both Modes) */
+    .command-canopy {
+      background: var(--top-hero);
+      color: var(--top-hero-text);
+      padding-bottom: 16px;
+      flex-shrink: 0;
+    }
+    .safe-top {
+      height: 47px;
+      padding: 14px 26px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .dynamic-island {
+      width: 108px;
+      height: 28px;
+      background: #000000;
+      border-radius: 999px;
+    }
+    .status-icons { display: flex; align-items: center; gap: 6px; }
+
+    .canopy-bar {
+      padding: 10px 18px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .brand-badge {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: #14B89A;
+      color: #06221D;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .brand-name {
+      font-family: var(--font-head);
+      font-size: 19px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .vault-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(20, 184, 154, 0.16);
+      border: 1px solid rgba(20, 184, 154, 0.35);
+      color: #2DD4BF;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 10.5px;
+      font-weight: 600;
+    }
+
+    .command-search {
+      margin: 0 18px;
+      height: 42px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #CBD5E1;
+    }
+    .command-search input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #FFFFFF;
+      font-size: 13px;
+      width: 100%;
+    }
+    .command-search input::placeholder { color: #94A3B8; }
+    .qr-trigger {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFFFFF;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    /* Main Workspace Body */
+    .workspace {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px 96px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scrollbar-width: none;
+    }
+    .workspace::-webkit-scrollbar { display: none; }
+
+    /* 2x4 CamScanner-Inspired Precision Workbench Matrix */
+    .workbench-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 10px 12px;
+    }
+    .workbench-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      row-gap: 14px;
+      column-gap: 4px;
+    }
+    .tool-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .tool-icon-box {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: var(--jade-soft);
+      color: var(--jade);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: transform 0.15s;
+    }
+    .tool-cell:hover .tool-icon-box { transform: translateY(-1px); }
+    .tool-icon-box.navy {
+      background: var(--surface-2);
+      color: var(--text-1);
+    }
+    .tool-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-1);
+      text-align: center;
+      letter-spacing: -0.01em;
+    }
+
+    /* Quick Resume Strip */
+    .resume-strip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3.5px solid var(--jade);
+      border-radius: 10px;
+      padding: 9px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .resume-left {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+    .resume-title {
+      font-size: 12.5px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .resume-sub {
+      font-size: 11px;
+      color: var(--text-2);
+    }
+    .resume-cta {
+      background: var(--jade);
+      color: #FFFFFF;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 11px;
+      border-radius: 7px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    /* Folder Quick-Jump Ribbon */
+    .folder-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 2px;
+    }
+    .sec-heading {
+      font-family: var(--font-head);
+      font-size: 14.5px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .sec-meta {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--jade);
+      cursor: pointer;
+    }
+
+    .folder-ribbon {
+      display: flex;
+      gap: 7px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .folder-ribbon::-webkit-scrollbar { display: none; }
+    .folder-pill {
+      height: 33px;
+      padding: 0 11px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-2);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .folder-pill.active {
+      background: var(--text-1);
+      color: var(--surface);
+      border-color: var(--text-1);
+    }
+    .folder-count {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      opacity: 0.7;
+    }
+
+    /* Dense Productivity Document Cards */
+    .file-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .file-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      cursor: pointer;
+    }
+    .file-thumb {
+      width: 48px;
+      height: 62px;
+      background: #FFFFFF;
+      border: 1px solid #CBD5E1;
+      border-radius: 5px;
+      padding: 5px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      flex-shrink: 0;
+      color: #0F172A;
+    }
+    .format-corner {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background: #089178;
+      color: #FFFFFF;
+      font-family: var(--font-mono);
+      font-size: 7.5px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-bottom-left-radius: 4px;
+    }
+    .format-corner.pdf { background: #1E40AF; }
+    .format-corner.lock { background: #B45309; }
+    .thumb-line { height: 2px; background: #94A3B8; border-radius: 1px; margin-top: 2px; }
+    .thumb-line.dark { background: #1E293B; height: 3px; width: 65%; }
+
+    .file-body { flex: 1; min-width: 0; }
+    .file-title {
+      font-family: var(--font-head);
+      font-size: 13.8px;
+      font-weight: 700;
+      color: var(--text-1);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+    .file-specs {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11.5px;
+      color: var(--text-2);
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 5px;
+    }
+    .file-badges {
+      display: flex;
+      gap: 5px;
+    }
+    .micro-chip {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1.5px 6px;
+      border-radius: 4px;
+      background: var(--surface-2);
+      color: var(--text-2);
+    }
+    .micro-chip.ocr {
+      background: var(--jade-soft);
+      color: var(--jade);
+    }
+
+    .file-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .act-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-2);
+    }
+    .act-btn:hover { background: var(--surface-2); }
+
+    /* 5-Slot Productivity Dock with Central Jade Camera Shutter */
+    .prod-dock {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 84px;
+      padding: 6px 10px 24px;
+      background: var(--nav-bg);
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 1fr 1fr 68px 1fr 1fr;
+      align-items: center;
+      z-index: 20;
+    }
+    .dock-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-3);
+      cursor: pointer;
+    }
+    .dock-item.active { color: var(--jade); }
+    .shutter-wrap {
+      display: flex;
+      justify-content: center;
+      margin-top: -22px;
+    }
+    .shutter-fab {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--jade);
+      color: #FFFFFF;
+      border: 4px solid var(--nav-bg);
+      box-shadow: 0 8px 20px rgba(8, 145, 120, 0.38);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .home-indicator {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 134px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--text-1);
+      opacity: 0.22;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="studio-bar">
+    <div class="studio-meta">
+      <span class="studio-tag">CONCEPT B · 393 × 852 LOGICAL PX · CAMSCANNER INSPIRATION</span>
+      <h1 class="studio-title">Scaneliq — Executive Productivity Workbench</h1>
+    </div>
+    <div class="studio-controls">
+      <button class="studio-btn active" onclick="setView('both', this)">Side-by-Side (Light + Dark)</button>
+      <button class="studio-btn" onclick="setView('light', this)">Light Focus (393×852)</button>
+      <button class="studio-btn" onclick="setView('dark', this)">Dark Focus (393×852)</button>
+    </div>
+  </header>
+
+  <main class="stage">
+
+    <!-- ==================== LIGHT THEME (393 x 852) ==================== -->
+    <div class="device-col" id="col-light">
+      <span class="device-caption">EXECUTIVE SLATE & JADE (LIGHT) — 393 × 852</span>
+      <section class="viewport theme-light">
+        <div class="command-canopy">
+          <div class="safe-top">
+            <span>9:41</span>
+            <div class="dynamic-island"></div>
+            <div class="status-icons">
+              <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><path d="M1 7.5h2v3H1zm4-2.5h2v5.5H5zm4-2.5h2v8H9zm4-2h2v10h-2z"/></svg>
+              <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x="0.5" y="0.5" width="18" height="10" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="14" height="7" rx="1" fill="currentColor"/></svg>
+            </div>
+          </div>
+
+          <div class="canopy-bar">
+            <div class="brand-row">
+              <div class="brand-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </div>
+              <span class="brand-name">Scaneliq</span>
+            </div>
+            <div class="vault-status">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Local Vault · 42 Files
+            </div>
+          </div>
+
+          <div class="command-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" placeholder="Search filenames, full OCR text, tags…" />
+            <div class="qr-trigger" title="QR Scanner">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h7v7h-7z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="workspace">
+          <!-- 2x4 Precision Workbench -->
+          <div class="workbench-panel">
+            <div class="workbench-grid">
+              <div class="tool-cell">
+                <div class="tool-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                </div>
+                <span class="tool-label">Smart Scan</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2"/><path d="M14 10h4M14 14h3"/></svg>
+                </div>
+                <span class="tool-label">ID Card 2-in-1</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h5"/></svg>
+                </div>
+                <span class="tool-label">OCR Text</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+                </div>
+                <span class="tool-label">বাংলা OCR</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box navy">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                </div>
+                <span class="tool-label">Merge PDF</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box navy">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </div>
+                <span class="tool-label">Sign & Stamp</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box navy">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+                </div>
+                <span class="tool-label">Receipt CSV</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box navy">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                </div>
+                <span class="tool-label">Book Split</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Draft Resume Bar -->
+          <div class="resume-strip">
+            <div class="resume-left">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--jade)" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <div style="min-width:0;">
+                <div class="resume-title">Draft: Property_Deed_Scan (4 pages)</div>
+                <div class="resume-sub">Auto-saved · Tap to finish PDF export</div>
+              </div>
+            </div>
+            <div class="resume-cta">Continue</div>
+          </div>
+
+          <!-- Folder Quick-Jump Ribbon -->
+          <div class="folder-header">
+            <span class="sec-heading">Workspace Files</span>
+            <span class="sec-meta">+ New Folder</span>
+          </div>
+          <div class="folder-ribbon">
+            <div class="folder-pill active" onclick="pickFolder(this)">All <span class="folder-count">42</span></div>
+            <div class="folder-pill" onclick="pickFolder(this)">📁 Tax & Finance <span class="folder-count">14</span></div>
+            <div class="folder-pill" onclick="pickFolder(this)">📁 Legal & ID <span class="folder-count">8</span></div>
+            <div class="folder-pill" onclick="pickFolder(this)">📁 Receipts <span class="folder-count">19</span></div>
+          </div>
+
+          <!-- Productivity File List -->
+          <div class="file-list">
+            <div class="file-card">
+              <div class="file-thumb">
+                <span class="format-corner pdf">PDF</span>
+                <div>
+                  <div class="thumb-line dark"></div>
+                  <div class="thumb-line"></div>
+                  <div class="thumb-line"></div>
+                  <div class="thumb-line" style="width:75%"></div>
+                </div>
+                <div style="font-size:4.5px;font-weight:700;color:#1E40AF;">8 PAGES</div>
+              </div>
+              <div class="file-body">
+                <div class="file-title">FY2026_Corporate_Tax_Return.pdf</div>
+                <div class="file-specs">
+                  <span>8 pages</span><span>·</span><span>1.8 MB</span><span>·</span><span>Today 14:20</span>
+                </div>
+                <div class="file-badges">
+                  <span class="micro-chip">📁 Tax & Finance</span>
+                  <span class="micro-chip ocr">Searchable OCR</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div>
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+              </div>
+            </div>
+
+            <div class="file-card">
+              <div class="file-thumb">
+                <span class="format-corner">BN</span>
+                <div>
+                  <div class="thumb-line dark"></div>
+                  <div class="thumb-line"></div>
+                  <div class="thumb-line" style="width:82%"></div>
+                </div>
+                <div style="font-size:4.5px;font-weight:700;color:#089178;">বাংলা</div>
+              </div>
+              <div class="file-body">
+                <div class="file-title">বাংলা_দলিল_রেজিস্ট্রি_২০২৬</div>
+                <div class="file-specs">
+                  <span>12 pages</span><span>·</span><span>4.1 MB</span><span>·</span><span>Yesterday</span>
+                </div>
+                <div class="file-badges">
+                  <span class="micro-chip">📁 Legal & ID</span>
+                  <span class="micro-chip ocr">বাংলা OCR</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div>
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+              </div>
+            </div>
+
+            <div class="file-card">
+              <div class="file-thumb">
+                <span class="format-corner lock">AES</span>
+                <div>
+                  <div class="thumb-line dark"></div>
+                  <div class="thumb-line"></div>
+                </div>
+                <div style="font-size:4.5px;font-weight:700;color:#B45309;">LOCKED</div>
+              </div>
+              <div class="file-body">
+                <div class="file-title">NID_And_Passport_2in1_Sheet</div>
+                <div class="file-specs">
+                  <span>1 page</span><span>·</span><span>640 KB</span><span>·</span><span>Nov 15</span>
+                </div>
+                <div class="file-badges">
+                  <span class="micro-chip">📁 Legal & ID</span>
+                  <span class="micro-chip">AES-256 Protected</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div>
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="prod-dock">
+          <div class="dock-item active">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z"/></svg>
+            <span>Home</span>
+          </div>
+          <div class="dock-item">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>Files</span>
+          </div>
+          <div class="shutter-wrap">
+            <div class="shutter-fab">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </div>
+          </div>
+          <div class="dock-item">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span>PDF Tools</span>
+          </div>
+          <div class="dock-item">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>Vault</span>
+          </div>
+          <div class="home-indicator"></div>
+        </nav>
+      </section>
+    </div>
+
+    <!-- ==================== DARK THEME (393 x 852) ==================== -->
+    <div class="device-col" id="col-dark">
+      <span class="device-caption">MIDNIGHT COMMAND (DARK) — 393 × 852</span>
+      <section class="viewport theme-dark">
+        <div class="command-canopy">
+          <div class="safe-top">
+            <span>9:41</span>
+            <div class="dynamic-island"></div>
+            <div class="status-icons">
+              <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><path d="M1 7.5h2v3H1zm4-2.5h2v5.5H5zm4-2.5h2v8H9zm4-2h2v10h-2z"/></svg>
+              <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x="0.5" y="0.5" width="18" height="10" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="14" height="7" rx="1" fill="currentColor"/></svg>
+            </div>
+          </div>
+
+          <div class="canopy-bar">
+            <div class="brand-row">
+              <div class="brand-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 7V4h3M20 7V4h-3M4 17v3h3M20 17v3h-3"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </div>
+              <span class="brand-name">Scaneliq</span>
+            </div>
+            <div class="vault-status">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Local Vault · 42 Files
+            </div>
+          </div>
+
+          <div class="command-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" placeholder="Search filenames, full OCR text, tags…" />
+            <div class="qr-trigger">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h7v7h-7z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="workspace">
+          <div class="workbench-panel">
+            <div class="workbench-grid">
+              <div class="tool-cell">
+                <div class="tool-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                </div>
+                <span class="tool-label">Smart Scan</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2"/><path d="M14 10h4M14 14h3"/></svg>
+                </div>
+                <span class="tool-label">ID Card 2-in-1</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M8 13h8M8 17h5"/></svg>
+                </div>
+                <span class="tool-label">OCR Text</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+                </div>
+                <span class="tool-label">বাংলা OCR</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box navy">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                </div>
+                <span class="tool-label">Merge PDF</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box navy">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </div>
+                <span class="tool-label">Sign & Stamp</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box navy">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+                </div>
+                <span class="tool-label">Receipt CSV</span>
+              </div>
+              <div class="tool-cell">
+                <div class="tool-icon-box navy">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                </div>
+                <span class="tool-label">Book Split</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="resume-strip">
+            <div class="resume-left">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--jade)" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <div style="min-width:0;">
+                <div class="resume-title">Draft: Property_Deed_Scan (4 pages)</div>
+                <div class="resume-sub">Auto-saved · Tap to finish PDF export</div>
+              </div>
+            </div>
+            <div class="resume-cta">Continue</div>
+          </div>
+
+          <div class="folder-header">
+            <span class="sec-heading">Workspace Files</span>
+            <span class="sec-meta">+ New Folder</span>
+          </div>
+          <div class="folder-ribbon">
+            <div class="folder-pill active" onclick="pickFolder(this)">All <span class="folder-count">42</span></div>
+            <div class="folder-pill" onclick="pickFolder(this)">📁 Tax & Finance <span class="folder-count">14</span></div>
+            <div class="folder-pill" onclick="pickFolder(this)">📁 Legal & ID <span class="folder-count">8</span></div>
+            <div class="folder-pill" onclick="pickFolder(this)">📁 Receipts <span class="folder-count">19</span></div>
+          </div>
+
+          <div class="file-list">
+            <div class="file-card">
+              <div class="file-thumb">
+                <span class="format-corner pdf">PDF</span>
+                <div>
+                  <div class="thumb-line dark"></div>
+                  <div class="thumb-line"></div>
+                  <div class="thumb-line"></div>
+                  <div class="thumb-line" style="width:75%"></div>
+                </div>
+                <div style="font-size:4.5px;font-weight:700;color:#1E40AF;">8 PAGES</div>
+              </div>
+              <div class="file-body">
+                <div class="file-title">FY2026_Corporate_Tax_Return.pdf</div>
+                <div class="file-specs">
+                  <span>8 pages</span><span>·</span><span>1.8 MB</span><span>·</span><span>Today 14:20</span>
+                </div>
+                <div class="file-badges">
+                  <span class="micro-chip">📁 Tax & Finance</span>
+                  <span class="micro-chip ocr">Searchable OCR</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div>
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+              </div>
+            </div>
+
+            <div class="file-card">
+              <div class="file-thumb">
+                <span class="format-corner">BN</span>
+                <div>
+                  <div class="thumb-line dark"></div>
+                  <div class="thumb-line"></div>
+                  <div class="thumb-line" style="width:82%"></div>
+                </div>
+                <div style="font-size:4.5px;font-weight:700;color:#089178;">বাংলা</div>
+              </div>
+              <div class="file-body">
+                <div class="file-title">বাংলা_দলিল_রেজিস্ট্রি_২০২৬</div>
+                <div class="file-specs">
+                  <span>12 pages</span><span>·</span><span>4.1 MB</span><span>·</span><span>Yesterday</span>
+                </div>
+                <div class="file-badges">
+                  <span class="micro-chip">📁 Legal & ID</span>
+                  <span class="micro-chip ocr">বাংলা OCR</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div>
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+              </div>
+            </div>
+
+            <div class="file-card">
+              <div class="file-thumb">
+                <span class="format-corner lock">AES</span>
+                <div>
+                  <div class="thumb-line dark"></div>
+                  <div class="thumb-line"></div>
+                </div>
+                <div style="font-size:4.5px;font-weight:700;color:#B45309;">LOCKED</div>
+              </div>
+              <div class="file-body">
+                <div class="file-title">NID_And_Passport_2in1_Sheet</div>
+                <div class="file-specs">
+                  <span>1 page</span><span>·</span><span>640 KB</span><span>·</span><span>Nov 15</span>
+                </div>
+                <div class="file-badges">
+                  <span class="micro-chip">📁 Legal & ID</span>
+                  <span class="micro-chip">AES-256 Protected</span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></div>
+                <div class="act-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="prod-dock">
+          <div class="dock-item active">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z"/></svg>
+            <span>Home</span>
+          </div>
+          <div class="dock-item">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span>Files</span>
+          </div>
+          <div class="shutter-wrap">
+            <div class="shutter-fab">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </div>
+          </div>
+          <div class="dock-item">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span>PDF Tools</span>
+          </div>
+          <div class="dock-item">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>Vault</span>
+          </div>
+          <div class="home-indicator"></div>
+        </nav>
+      </section>
+    </div>
+
+  </main>
+
+  <script>
+    function setView(mode, btn) {
+      document.querySelectorAll('.studio-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('col-light').style.display = (mode === 'dark') ? 'none' : 'flex';
+      document.getElementById('col-dark').style.display = (mode === 'light') ? 'none' : 'flex';
+    }
+    function pickFolder(pill) {
+      pill.parentElement.querySelectorAll('.folder-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+    }
+  </script>
+</body>
+</html>

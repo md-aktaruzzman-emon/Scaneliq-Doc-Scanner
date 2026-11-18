@@ -157,10 +157,17 @@ class PdfOutlineItem {
 }
 
 /// Types of supported PDF annotations
-enum PdfAnnotationType { text, signature, highlight }
+enum PdfAnnotationType { text, signature, highlight, underline, freehand, shape }
 
-/// Represents an interactive annotation or signature to be applied to a PDF page
+/// Vector shape variants supported in annotation mode
+enum PdfShapeKind { rectangle, circle, arrow, line }
+
+/// Represents an interactive annotation or visual signature to be applied to a PDF page.
+///
+/// When [normalized] is true, [x], [y], [width], [height], and [points] are expressed in
+/// normalized `[0.0..1.0]` page-fraction coordinates and scaled to exact PDF page points on export.
 class PdfAnnotationItem {
+  final String? id;
   final PdfAnnotationType type;
   final int pageIndex; // 0-indexed
   final double x;
@@ -170,9 +177,16 @@ class PdfAnnotationItem {
   final String? text;
   final double fontSize;
   final Color color;
+  final double strokeWidth;
+  final double opacity;
+  final List<Offset> points;
+  final PdfShapeKind shapeKind;
+  final double rotationDegrees;
+  final bool normalized;
   final List<int>? signaturePngBytes;
 
   const PdfAnnotationItem({
+    this.id,
     required this.type,
     required this.pageIndex,
     required this.x,
@@ -182,8 +196,54 @@ class PdfAnnotationItem {
     this.text,
     this.fontSize = 14.0,
     this.color = const Color(0xFF000000),
+    this.strokeWidth = 2.5,
+    this.opacity = 1.0,
+    this.points = const [],
+    this.shapeKind = PdfShapeKind.rectangle,
+    this.rotationDegrees = 0.0,
+    this.normalized = false,
     this.signaturePngBytes,
   });
+
+  PdfAnnotationItem copyWith({
+    String? id,
+    PdfAnnotationType? type,
+    int? pageIndex,
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    String? text,
+    double? fontSize,
+    Color? color,
+    double? strokeWidth,
+    double? opacity,
+    List<Offset>? points,
+    PdfShapeKind? shapeKind,
+    double? rotationDegrees,
+    bool? normalized,
+    List<int>? signaturePngBytes,
+  }) {
+    return PdfAnnotationItem(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      pageIndex: pageIndex ?? this.pageIndex,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      text: text ?? this.text,
+      fontSize: fontSize ?? this.fontSize,
+      color: color ?? this.color,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      opacity: opacity ?? this.opacity,
+      points: points ?? this.points,
+      shapeKind: shapeKind ?? this.shapeKind,
+      rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+      normalized: normalized ?? this.normalized,
+      signaturePngBytes: signaturePngBytes ?? this.signaturePngBytes,
+    );
+  }
 }
 
 /// Area marked for permanent content redaction
@@ -1240,7 +1300,53 @@ class AdvancedPdfService {
   // 7. ANNOTATIONS, SIGNATURES & GENUINE REDACTION (F-26 & F-27)
   // ---------------------------------------------------------------------------
 
-  /// Applies interactive annotations, drawn signatures, and highlights onto a PDF document.
+  /// Extracts selectable text per 1-indexed page number.
+  /// Returns a map `{pageNumber1Indexed: text}` (empty strings on image-only scanned pages).
+  Future<Map<int, String>> extractTextByPage(File sourcePdf) async {
+    if (!await sourcePdf.exists()) {
+      throw FileNotFoundException('PDF file does not exist: ${sourcePdf.path}');
+    }
+    final bytes = await sourcePdf.readAsBytes();
+    final doc = sf.PdfDocument(inputBytes: bytes);
+    try {
+      final extractor = sf.PdfTextExtractor(doc);
+      final out = <int, String>{};
+      for (int i = 0; i < doc.pages.count; i++) {
+        out[i + 1] = extractor.extractText(startPageIndex: i, endPageIndex: i).trim();
+      }
+      return out;
+    } finally {
+      doc.dispose();
+    }
+  }
+
+  /// Updates descriptive PDF metadata (Title, Author, Subject, Keywords) into a new PDF file.
+  Future<File> updateMetadata({
+    required File sourcePdf,
+    String? title,
+    String? author,
+    String? subject,
+    String? keywords,
+    required String outputFileName,
+  }) async {
+    if (!await sourcePdf.exists()) {
+      throw FileNotFoundException('PDF file does not exist: ${sourcePdf.path}');
+    }
+    final bytes = await sourcePdf.readAsBytes();
+    final doc = sf.PdfDocument(inputBytes: bytes);
+    try {
+      if (title != null) doc.documentInformation.title = title;
+      if (author != null) doc.documentInformation.author = author;
+      if (subject != null) doc.documentInformation.subject = subject;
+      if (keywords != null) doc.documentInformation.keywords = keywords;
+      return await _saveDocumentSafely(doc, outputFileName);
+    } finally {
+      doc.dispose();
+    }
+  }
+
+  /// Applies interactive annotations, visual signatures, underlines, freehand ink,
+  /// shapes, and highlights onto a new PDF document non-destructively.
   Future<File> applyAnnotations({
     required File sourcePdf,
     required List<PdfAnnotationItem> annotations,
@@ -1259,6 +1365,18 @@ class AdvancedPdfService {
       for (final item in annotations) {
         if (item.pageIndex < 0 || item.pageIndex >= doc.pages.count) continue;
         final page = doc.pages[item.pageIndex];
+        final pageW = page.size.width;
+        final pageH = page.size.height;
+
+        final double px = item.normalized ? (item.x * pageW) : item.x;
+        final double py = item.normalized ? (item.y * pageH) : item.y;
+        final double pw = item.normalized ? (item.width * pageW) : item.width;
+        final double ph = item.normalized ? (item.height * pageH) : item.height;
+
+        final int r = (item.color.r * 255).round().clamp(0, 255);
+        final int g = (item.color.g * 255).round().clamp(0, 255);
+        final int b = (item.color.b * 255).round().clamp(0, 255);
+        final int alpha = (item.opacity * 255).round().clamp(15, 255);
 
         switch (item.type) {
           case PdfAnnotationType.text:
@@ -1268,18 +1386,12 @@ class AdvancedPdfService {
                 item.fontSize,
                 style: sf.PdfFontStyle.bold,
               );
-              final brush = sf.PdfSolidBrush(
-                sf.PdfColor(
-                  (item.color.r * 255).round(),
-                  (item.color.g * 255).round(),
-                  (item.color.b * 255).round(),
-                ),
-              );
+              final brush = sf.PdfSolidBrush(sf.PdfColor(r, g, b, alpha));
               page.graphics.drawString(
                 item.text!,
                 font,
                 brush: brush,
-                bounds: Rect.fromLTWH(item.x, item.y, item.width, item.height),
+                bounds: Rect.fromLTWH(px, py, math.max(40.0, pw), math.max(18.0, ph)),
               );
             }
             break;
@@ -1288,26 +1400,121 @@ class AdvancedPdfService {
             if (item.signaturePngBytes != null &&
                 item.signaturePngBytes!.isNotEmpty) {
               final bitmap = sf.PdfBitmap(item.signaturePngBytes!);
-              page.graphics.drawImage(
-                bitmap,
-                Rect.fromLTWH(item.x, item.y, item.width, item.height),
-              );
+              if (item.rotationDegrees.abs() > 0.1) {
+                page.graphics.save();
+                final cx = px + pw / 2.0;
+                final cy = py + ph / 2.0;
+                page.graphics.translateTransform(cx, cy);
+                page.graphics.rotateTransform(item.rotationDegrees);
+                page.graphics.drawImage(
+                  bitmap,
+                  Rect.fromLTWH(-pw / 2.0, -ph / 2.0, pw, ph),
+                );
+                page.graphics.restore();
+              } else {
+                page.graphics.drawImage(
+                  bitmap,
+                  Rect.fromLTWH(px, py, pw, ph),
+                );
+              }
             }
             break;
 
           case PdfAnnotationType.highlight:
-            final highlightBrush = sf.PdfSolidBrush(
-              sf.PdfColor(
-                (item.color.r * 255).round(),
-                (item.color.g * 255).round(),
-                (item.color.b * 255).round(),
-                100, // Semi-transparent highlight
-              ),
-            );
+            final int hAlpha = item.opacity < 0.99
+                ? alpha
+                : 100; // Semi-transparent default
+            final highlightBrush = sf.PdfSolidBrush(sf.PdfColor(r, g, b, hAlpha));
             page.graphics.drawRectangle(
               brush: highlightBrush,
-              bounds: Rect.fromLTWH(item.x, item.y, item.width, item.height),
+              bounds: Rect.fromLTWH(px, py, pw, math.max(8.0, ph)),
             );
+            break;
+
+          case PdfAnnotationType.underline:
+            final pen = sf.PdfPen(
+              sf.PdfColor(r, g, b, alpha),
+              width: math.max(1.5, item.strokeWidth),
+            );
+            final lineY = py + ph;
+            page.graphics.drawLine(
+              pen,
+              Offset(px, lineY),
+              Offset(px + math.max(12.0, pw), lineY),
+            );
+            break;
+
+          case PdfAnnotationType.freehand:
+            if (item.points.length >= 2) {
+              final pen = sf.PdfPen(
+                sf.PdfColor(r, g, b, alpha),
+                width: math.max(1.0, item.strokeWidth),
+              )..lineCap = sf.PdfLineCap.round
+               ..lineJoin = sf.PdfLineJoin.round;
+              for (int i = 0; i < item.points.length - 1; i++) {
+                final p1 = item.points[i];
+                final p2 = item.points[i + 1];
+                final a = item.normalized
+                    ? Offset(p1.dx * pageW, p1.dy * pageH)
+                    : p1;
+                final c = item.normalized
+                    ? Offset(p2.dx * pageW, p2.dy * pageH)
+                    : p2;
+                page.graphics.drawLine(pen, a, c);
+              }
+            }
+            break;
+
+          case PdfAnnotationType.shape:
+            final pen = sf.PdfPen(
+              sf.PdfColor(r, g, b, alpha),
+              width: math.max(1.5, item.strokeWidth),
+            );
+            final rect = Rect.fromLTWH(
+              px,
+              py,
+              math.max(8.0, pw),
+              math.max(8.0, ph),
+            );
+            switch (item.shapeKind) {
+              case PdfShapeKind.rectangle:
+                page.graphics.drawRectangle(pen: pen, bounds: rect);
+                break;
+              case PdfShapeKind.circle:
+                page.graphics.drawEllipse(rect, pen: pen);
+                break;
+              case PdfShapeKind.line:
+                page.graphics.drawLine(
+                  pen,
+                  Offset(px, py),
+                  Offset(px + pw, py + ph),
+                );
+                break;
+              case PdfShapeKind.arrow:
+                final end = Offset(px + pw, py + ph);
+                final start = Offset(px, py);
+                page.graphics.drawLine(pen, start, end);
+                final angle = math.atan2(end.dy - start.dy, end.dx - start.dx);
+                const headLen = 10.0;
+                const headAngle = 0.52;
+                page.graphics.drawLine(
+                  pen,
+                  end,
+                  Offset(
+                    end.dx - headLen * math.cos(angle - headAngle),
+                    end.dy - headLen * math.sin(angle - headAngle),
+                  ),
+                );
+                page.graphics.drawLine(
+                  pen,
+                  end,
+                  Offset(
+                    end.dx - headLen * math.cos(angle + headAngle),
+                    end.dy - headLen * math.sin(angle + headAngle),
+                  ),
+                );
+                break;
+            }
             break;
         }
       }

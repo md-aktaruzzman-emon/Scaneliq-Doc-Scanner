@@ -1,13 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
-import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
+import 'package:scaneliq/core/theme/scaneliq_typography.dart';
+import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/editor/presentation/edit_page_screen.dart';
 import 'package:scaneliq/features/intelligence/presentation/ai_document_sheet.dart';
@@ -15,174 +16,146 @@ import 'package:scaneliq/features/ocr/data/ocr_service.dart';
 import 'package:scaneliq/features/pdf/data/advanced_pdf_service.dart';
 import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 import 'package:scaneliq/features/pdf/presentation/pdf_page_organizer_screen.dart';
+import 'package:scaneliq/features/pdf/presentation/widgets/pdf_annotation_studio.dart';
+import 'package:scaneliq/features/pdf/presentation/widgets/pdf_metadata_and_bookmarks_sheets.dart';
+import 'package:scaneliq/features/pdf/presentation/widgets/signature_studio_sheet.dart';
+import 'package:scaneliq/features/pdf/presentation/widgets/watermark_studio_sheet.dart';
 
+/// Concept A Professional PDF Viewer & Productivity Studio.
+///
+/// Supports PDFium rendering via `pdfrx` (pinch/double-tap zoom, text search,
+/// page jump), collapsible page thumbnail strip, interactive annotations &
+/// markup, visual signature overlays, watermarks, compression, encryption,
+/// metadata editing, bookmarks, OCR, and page organization.
 class DocumentViewerScreen extends StatefulWidget {
   final ScannedDocument document;
+  final WidgetBuilder? pdfCanvasBuilder;
+  final bool startInAnnotateMode;
+  final bool startInSearchMode;
 
-  const DocumentViewerScreen({super.key, required this.document});
+  const DocumentViewerScreen({
+    super.key,
+    required this.document,
+    this.pdfCanvasBuilder,
+    this.startInAnnotateMode = false,
+    this.startInSearchMode = false,
+  });
 
   @override
   State<DocumentViewerScreen> createState() => _DocumentViewerScreenState();
 }
 
 class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
-  late final PdfViewerController _pdfController;
-  late final PdfTextSearcher _textSearcher;
-
-  late ScannedDocument _activeDoc;
-  bool _isGeneratingPdf = false;
-  String? _pdfError;
-  bool _showFallbackImageViewer = false;
-
-  int _currentPage = 1;
-  int _totalPages = 1;
-  bool _isSearchOpen = false;
+  final PdfViewerController _pdfController = PdfViewerController();
+  PdfTextSearcher? _textSearcher;
+  final PdfAnnotationController _annotationController = PdfAnnotationController();
   final TextEditingController _searchQueryController = TextEditingController();
 
-  bool _isExtractingText = false;
-  String? _extractedText;
+  late ScannedDocument _activeDoc;
+  int _currentPage = 1;
+  int _totalPages = 1;
+  double _zoomFactor = 1.0;
 
+  bool _isGeneratingPdf = false;
+  bool _isSavingAnnotated = false;
+  bool _isExtractingText = false;
+  bool _showFallbackImageViewer = false;
+  bool _isSearchOpen = false;
+  bool _isAnnotateMode = false;
+  bool _showThumbnailRail = false;
+  bool _searchHasTextLayer = true;
+  int _fallbackTextMatchCount = 0;
+
+  String? _pdfError;
+  String? _extractedText;
   List<DocumentBookmark> _bookmarks = [];
-  bool _isLoadingBookmarks = false;
+  Map<int, String> _cachedPageTexts = {};
 
   @override
   void initState() {
     super.initState();
     _activeDoc = widget.document;
-    _pdfController = PdfViewerController();
-    _textSearcher = PdfTextSearcher(_pdfController)
-      ..addListener(() {
+    _totalPages = _activeDoc.pageCount > 0 ? _activeDoc.pageCount : 1;
+    _isAnnotateMode = widget.startInAnnotateMode;
+    _isSearchOpen = widget.startInSearchMode;
+
+    _loadInitialMetadata();
+  }
+
+  void _ensureTextSearcher() {
+    if (_textSearcher != null || !_pdfController.isReady) return;
+    try {
+      final searcher = PdfTextSearcher(_pdfController);
+      searcher.addListener(() {
         if (mounted) setState(() {});
       });
-
-    _loadBookmarks();
-    _autoEnsurePdfExists();
+      _textSearcher = searcher;
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _textSearcher?.dispose();
+    _annotationController.dispose();
     _searchQueryController.dispose();
-    _textSearcher.dispose();
     super.dispose();
   }
 
-  Future<void> _loadBookmarks() async {
-    setState(() => _isLoadingBookmarks = true);
+  Future<void> _loadInitialMetadata() async {
+    await Future.wait([
+      _refreshPageCountAndTextLayer(),
+      _loadBookmarks(),
+    ]);
+    await _autoEnsurePdfExists();
+  }
+
+  Future<List<DocumentBookmark>> _loadBookmarks() async {
     try {
       final list = await AppDatabaseService.instance.getBookmarks(
-        widget.document.id,
+        _activeDoc.id,
       );
       if (mounted) {
-        setState(() {
-          _bookmarks = list;
-          _isLoadingBookmarks = false;
-        });
+        setState(() => _bookmarks = list);
       }
+      return list;
     } catch (_) {
-      if (mounted) setState(() => _isLoadingBookmarks = false);
+      return [];
     }
   }
 
-  Future<String?> _promptPassword(BuildContext ctx) async {
-    final controller = TextEditingController();
-    return await showDialog<String>(
-      context: ctx,
-      barrierDismissible: false,
-      builder: (dCtx) => AlertDialog(
-        title: const Text('Password Required'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'This PDF document is encrypted with password protection:',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              obscureText: true,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Enter Password',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dCtx, null),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dCtx, controller.text.trim()),
-            child: const Text('Unlock'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _refreshPageCountAndTextLayer() async {
+    final path = _activeDoc.exportPath;
+    if (path == null) return;
+    final file = File(path);
+    if (!await file.exists()) return;
+    try {
+      final count = await AdvancedPdfService.instance.getPageCount(file);
+      final texts = await AdvancedPdfService.instance.extractTextByPage(file);
+      final hasText = texts.values.any((t) => t.trim().isNotEmpty);
+      if (mounted && count > 0) {
+        setState(() {
+          _totalPages = count;
+          _cachedPageTexts = texts;
+          _searchHasTextLayer = hasText;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _autoEnsurePdfExists() async {
-    final path = _activeDoc.exportPath;
-    if (path != null && File(path).existsSync()) return;
-
-    List<DocumentPage> pages = _activeDoc.pages;
-    if (pages.isEmpty) {
-      final loaded = await AppDatabaseService.instance.getDocument(
-        _activeDoc.id,
-      );
-      if (loaded != null && loaded.pages.isNotEmpty) {
-        _activeDoc = loaded;
-        pages = loaded.pages;
-      }
-    }
-
-    if (pages.isEmpty) return;
-
-    final hasImages = pages.any(
-      (p) => File(p.processedPath ?? p.originalPath).existsSync(),
-    );
-    if (!hasImages) return;
-
-    if (mounted) setState(() => _isGeneratingPdf = true);
-
-    try {
-      final generatedPdf = await PdfService.generatePdf(
-        document: _activeDoc,
-        pages: pages,
-        customTitle: _activeDoc.title,
-      );
-
-      _activeDoc = _activeDoc.copyWith(
-        exportPath: generatedPdf.path,
-        isDraft: false,
-      );
-      await AppDatabaseService.instance.saveDocument(_activeDoc);
-
-      if (mounted) {
-        setState(() {
-          _isGeneratingPdf = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isGeneratingPdf = false;
-          _pdfError = 'Failed to generate PDF: $e';
-        });
-      }
+    final pdfPath = _activeDoc.exportPath;
+    final hasFile = pdfPath != null && File(pdfPath).existsSync();
+    if (!hasFile && _activeDoc.pages.isNotEmpty) {
+      await _regeneratePdf();
     }
   }
 
   Future<void> _regeneratePdf() async {
-    if (mounted) {
-      setState(() {
-        _isGeneratingPdf = true;
-        _pdfError = null;
-      });
-    }
+    if (_isGeneratingPdf) return;
+    setState(() {
+      _isGeneratingPdf = true;
+      _pdfError = null;
+    });
 
     try {
       List<DocumentPage> pages = _activeDoc.pages;
@@ -208,21 +181,18 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
 
       _activeDoc = _activeDoc.copyWith(
         exportPath: generatedPdf.path,
+        pageCount: pages.length,
         isDraft: false,
       );
       await AppDatabaseService.instance.saveDocument(_activeDoc);
+      await _refreshPageCountAndTextLayer();
 
       if (mounted) {
         setState(() {
           _isGeneratingPdf = false;
           _showFallbackImageViewer = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('PDF successfully generated and verified!'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+        showScaneliqToast(context, 'PDF compiled cleanly.');
       }
     } catch (e) {
       if (mounted) {
@@ -230,15 +200,231 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           _isGeneratingPdf = false;
           _pdfError = '$e';
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Regeneration failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        showScaneliqToast(context, 'PDF regeneration failed: $e');
       }
     }
   }
+
+  Future<String?> _promptPassword(BuildContext context) async {
+    final ctrl = TextEditingController();
+    final res = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Protected PDF'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Enter document password to unlock viewing:'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Password'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: const Text('Unlock'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    return res;
+  }
+
+  Future<void> _updateActivePdfFile(File newFile, {String? toastMessage}) async {
+    final count = await AdvancedPdfService.instance.getPageCount(newFile);
+    final texts = await AdvancedPdfService.instance.extractTextByPage(newFile);
+    final updatedDoc = _activeDoc.copyWith(
+      exportPath: newFile.path,
+      pageCount: count > 0 ? count : _activeDoc.pageCount,
+      modifiedAt: DateTime.now(),
+    );
+    try {
+      await AppDatabaseService.instance.saveDocument(updatedDoc);
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _activeDoc = updatedDoc;
+        if (count > 0) _totalPages = count;
+        _currentPage = _currentPage.clamp(1, _totalPages);
+        _cachedPageTexts = texts;
+        _searchHasTextLayer = texts.values.any((t) => t.trim().isNotEmpty);
+      });
+      if (toastMessage != null) {
+        showScaneliqToast(context, toastMessage);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // SEARCH
+  // ---------------------------------------------------------------------------
+
+  Future<void> _executeSearch(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      _textSearcher?.resetTextSearch();
+      setState(() => _fallbackTextMatchCount = 0);
+      return;
+    }
+
+    if (!_searchHasTextLayer && _cachedPageTexts.isEmpty) {
+      final path = _activeDoc.exportPath;
+      if (path != null && File(path).existsSync()) {
+        _cachedPageTexts = await AdvancedPdfService.instance.extractTextByPage(
+          File(path),
+        );
+        _searchHasTextLayer = _cachedPageTexts.values.any(
+          (t) => t.trim().isNotEmpty,
+        );
+      }
+    }
+
+    final lower = trimmed.toLowerCase();
+    int count = 0;
+    int? firstMatchPage;
+    for (final entry in _cachedPageTexts.entries) {
+      final matches = lower.allMatches(entry.value.toLowerCase()).length;
+      if (matches > 0) {
+        firstMatchPage ??= entry.key;
+        count += matches;
+      }
+    }
+
+    if (mounted) {
+      setState(() => _fallbackTextMatchCount = count);
+      if (firstMatchPage != null && firstMatchPage != _currentPage) {
+        _jumpToPage(firstMatchPage);
+      }
+    }
+
+    try {
+      _ensureTextSearcher();
+      _textSearcher?.startTextSearch(trimmed);
+    } catch (_) {}
+  }
+
+  void _jumpToPage(int pageNumber) {
+    final target = pageNumber.clamp(1, _totalPages);
+    setState(() => _currentPage = target);
+    try {
+      if (_pdfController.isReady) {
+        _pdfController.goToPage(pageNumber: target);
+      }
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------------
+  // ANNOTATIONS & SIGNATURES
+  // ---------------------------------------------------------------------------
+
+  Future<String?> _promptAnnotationNote(String? initialText) async {
+    final ctrl = TextEditingController(text: initialText ?? '');
+    final res = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(initialText == null ? 'Add PDF Note' : 'Edit PDF Note'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(hintText: 'Enter annotation text...'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    return res;
+  }
+
+  Future<void> _saveAnnotationsToPdf() async {
+    final path = _activeDoc.exportPath;
+    if (path == null || !File(path).existsSync()) {
+      showScaneliqToast(context, 'Generate a PDF first before saving markup.');
+      return;
+    }
+    if (_annotationController.items.isEmpty) {
+      showScaneliqToast(context, 'Add annotations before saving.');
+      return;
+    }
+
+    setState(() => _isSavingAnnotated = true);
+    try {
+      final outFile = await AdvancedPdfService.instance.applyAnnotations(
+        sourcePdf: File(path),
+        annotations: _annotationController.items,
+        outputFileName:
+            '${_activeDoc.title}_annotated_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      _annotationController.clearAll();
+      if (mounted) {
+        setState(() {
+          _isSavingAnnotated = false;
+          _isAnnotateMode = false;
+        });
+      }
+      await _updateActivePdfFile(
+        outFile,
+        toastMessage: 'Saved annotated PDF copy non-destructively.',
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSavingAnnotated = false);
+        showScaneliqToast(context, 'Annotation save failed: $e');
+      }
+    }
+  }
+
+  Future<void> _openSignatureStudio() async {
+    final draft = await showSignatureStudioSheet(context);
+    if (draft == null || !mounted) return;
+
+    _annotationController.addItem(
+      PdfAnnotationItem(
+        type: PdfAnnotationType.signature,
+        pageIndex: (_currentPage - 1).clamp(0, _totalPages - 1),
+        x: 0.30,
+        y: 0.68,
+        width: 0.36 * draft.scale,
+        height: 0.12 * draft.scale,
+        rotationDegrees: draft.rotationDegrees,
+        signaturePngBytes: draft.pngBytes,
+        normalized: true,
+      ),
+      select: true,
+    );
+    _annotationController.setTool(PdfAnnotationTool.select);
+    setState(() => _isAnnotateMode = true);
+    showScaneliqToast(
+      context,
+      'Drag signature to position it, then tap Save PDF.',
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // PAGE EDITOR, ORGANIZER, OCR, WATERMARK, COMPRESS, ENCRYPT, SHARE
+  // ---------------------------------------------------------------------------
 
   Future<void> _openPageEditorSheet() async {
     List<DocumentPage> pages = _activeDoc.pages;
@@ -251,306 +437,256 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         pages = loaded.pages;
       }
     }
-
-    if (pages.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No original pages found to edit.')),
-        );
-      }
+    if (pages.isEmpty || !mounted) {
+      if (mounted) showScaneliqToast(context, 'No original pages to edit.');
       return;
     }
 
-    if (pages.length == 1) {
-      _editSpecificPage(pages.first);
-      return;
-    }
-
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Text(
-                  'Select Page to Edit & Filter',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const Divider(),
-              Expanded(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: pages.length,
-                  itemBuilder: (context, index) {
-                    final p = pages[index];
-                    final file = File(p.processedPath ?? p.originalPath);
-                    return ListTile(
-                      leading: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(6),
-                          color: Colors.grey.shade200,
-                        ),
-                        child: file.existsSync()
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Image.file(file, fit: BoxFit.cover),
-                              )
-                            : const Icon(Icons.image),
-                      ),
-                      title: Text(
-                        'Page ${index + 1}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        'Filter: ${p.editRecipe.filter.name.toUpperCase()}',
-                      ),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _editSpecificPage(p);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _editSpecificPage(DocumentPage page) {
-    Navigator.push(
+    await Navigator.push<void>(
       context,
       MaterialPageRoute(
         builder: (_) => EditPageScreen(
-          page: page,
+          page: pages[(_currentPage - 1).clamp(0, pages.length - 1)],
+          pages: pages,
+          initialPageIndex: (_currentPage - 1).clamp(0, pages.length - 1),
           onApply: (newRecipe) async {
-            final origFile = File(page.originalPath);
-            String? newProcPath;
-            if (origFile.existsSync() && !newRecipe.isDefault) {
-              final targetPath =
-                  '${AppStorageService.instance.processedDir.path}/${page.id}_proc.jpg';
-              final tempPath = '$targetPath.tmp';
-              final processedBytes =
-                  await ImageProcessingService.processImageFileToBytes(
-                    origFile,
-                    newRecipe,
-                    quality: 85,
-                  );
-              final tempFile = File(tempPath);
-              await tempFile.writeAsBytes(processedBytes, flush: true);
-              final finalFile = await tempFile.rename(targetPath);
-              newProcPath = finalFile.path;
-              PaintingBinding.instance.imageCache.evict(FileImage(finalFile));
-            }
-
-            final updatedPages = _activeDoc.pages.map((p) {
-              if (p.id == page.id) {
-                return p.copyWith(
-                  editRecipe: newRecipe,
-                  processedPath: newProcPath,
-                );
-              }
-              return p;
-            }).toList();
-
+            final idx = (_currentPage - 1).clamp(0, pages.length - 1);
+            final target = pages[idx];
+            final updatedPages = List<DocumentPage>.from(pages);
+            updatedPages[idx] = target.copyWith(editRecipe: newRecipe);
             _activeDoc = _activeDoc.copyWith(pages: updatedPages);
             await AppDatabaseService.instance.saveDocumentWithPages(
               _activeDoc,
               updatedPages,
             );
-            await _regeneratePdf();
           },
         ),
       ),
     );
+    await _regeneratePdf();
   }
 
-  void _shareDocument() {
+  Future<void> _openOrganizer() async {
     final path = _activeDoc.exportPath;
-    if (path != null && File(path).existsSync()) {
-      SharePlus.instance.share(
-        ShareParams(
-          text: _activeDoc.title,
-          files: [XFile(path, mimeType: 'application/pdf')],
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PDF file is not found on device.')),
-      );
-    }
-  }
-
-  void _openExternal() {
-    _shareDocument();
-  }
-
-  void _runOcr() async {
-    if (widget.document.pages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No pages available for OCR.')),
-      );
+    if (path == null || !File(path).existsSync()) {
+      showScaneliqToast(context, 'PDF file not available yet.');
       return;
     }
 
-    setState(() {
-      _isExtractingText = true;
-    });
+    final updatedFile = await Navigator.push<File>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PdfPageOrganizerScreen(
+          pdfFile: File(path),
+          document: _activeDoc,
+        ),
+      ),
+    );
+    if (updatedFile != null && await updatedFile.exists()) {
+      await _updateActivePdfFile(
+        updatedFile,
+        toastMessage: 'PDF page layout updated.',
+      );
+    }
+  }
 
+  Future<void> _runOcr() async {
+    if (_activeDoc.pages.isEmpty) {
+      showScaneliqToast(context, 'No image pages available for OCR.');
+      return;
+    }
+    setState(() => _isExtractingText = true);
     try {
       final buffer = StringBuffer();
-      for (int i = 0; i < widget.document.pages.length; i++) {
-        final page = widget.document.pages[i];
-        final imagePath = page.processedPath ?? page.originalPath;
-        final file = File(imagePath);
-        if (await file.exists()) {
-          final text = await OcrService.instance.extractText(file);
-          if (text.trim().isNotEmpty) {
+      for (int i = 0; i < _activeDoc.pages.length; i++) {
+        final page = _activeDoc.pages[i];
+        final f = File(page.processedPath ?? page.originalPath);
+        if (await f.exists()) {
+          final txt = await OcrService.instance.extractText(f);
+          if (txt.trim().isNotEmpty) {
             buffer.writeln('--- Page ${i + 1} ---');
-            buffer.writeln(text.trim());
+            buffer.writeln(txt.trim());
             buffer.writeln();
           }
         }
       }
-
-      final fullText = buffer.toString().trim();
+      final full = buffer.toString().trim();
+      if (full.isNotEmpty) {
+        await AppDatabaseService.instance.saveDocumentOcr(_activeDoc.id, full);
+      }
+      if (!mounted) return;
       setState(() {
         _isExtractingText = false;
-        _extractedText = fullText.isEmpty
-            ? 'No readable text was detected on these pages.'
-            : fullText;
+        _extractedText = full;
       });
-
-      if (mounted) {
-        _showOcrResultModal(_extractedText!);
+      if (full.isEmpty) {
+        showScaneliqToast(context, 'No readable text detected on scanned pages.');
+      } else {
+        AiDocumentSheet.show(context, text: full);
       }
     } catch (e) {
-      setState(() {
-        _isExtractingText = false;
-      });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('OCR extraction error: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() => _isExtractingText = false);
+        showScaneliqToast(context, 'OCR extraction failed: $e');
       }
     }
   }
 
-  void _showOcrResultModal(String text) {
-    showModalBottomSheet(
+  Future<void> _openWatermarkStudio(File file) async {
+    final opts = await showWatermarkStudioSheet(
+      context,
+      currentPage: _currentPage,
+      totalPages: _totalPages,
+    );
+    if (opts == null) return;
+    try {
+      final out = await AdvancedPdfService.instance.addWatermark(
+        sourcePdf: file,
+        options: opts,
+        outputFileName:
+            '${_activeDoc.title}_watermarked_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      await _updateActivePdfFile(
+        out,
+        toastMessage: 'Watermark applied to new PDF copy.',
+      );
+    } catch (e) {
+      if (mounted) showScaneliqToast(context, 'Watermark failed: $e');
+    }
+  }
+
+  Future<void> _showCompressSheet(File file) async {
+    PdfCompressionPreset selected = PdfCompressionPreset.balanced;
+    final chosen = await showScaneliqBottomSheet<PdfCompressionPreset>(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.65,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (_, scrollController) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final tokens = ctx.tokens;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Extracted Text (OCR)',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  Row(
-                    children: [
-                      TextButton.icon(
-                        icon: const Icon(
-                          Icons.auto_awesome,
-                          size: 18,
-                          color: Color(0xFF6366F1),
-                        ),
-                        label: const Text(
-                          'AI Summary',
-                          style: TextStyle(color: Color(0xFF6366F1)),
-                        ),
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          AiDocumentSheet.show(context, text: text);
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.copy),
-                        tooltip: 'Copy all text',
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: text));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Text copied to clipboard!'),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ],
+              Text(
+                'Compress PDF',
+                style: Theme.of(ctx).textTheme.headlineMedium,
               ),
-              const Divider(),
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  child: SelectableText(
-                    text,
-                    style: const TextStyle(fontSize: 14, height: 1.5),
+              const SizedBox(height: 10),
+              RadioGroup<PdfCompressionPreset>(
+                groupValue: selected,
+                onChanged: (v) {
+                  if (v != null) setSheetState(() => selected = v);
+                },
+                child: Column(
+                  children: const [
+                    RadioListTile(
+                      value: PdfCompressionPreset.highQuality,
+                      title: Text('High Quality'),
+                      subtitle: Text('Minimal size optimization (~85% quality)'),
+                    ),
+                    RadioListTile(
+                      value: PdfCompressionPreset.balanced,
+                      title: Text('Balanced (Recommended)'),
+                      subtitle: Text('Sharp text & compact storage (~65%)'),
+                    ),
+                    RadioListTile(
+                      value: PdfCompressionPreset.smallerFile,
+                      title: Text('Small File'),
+                      subtitle: Text('Maximum reduction for email/upload (~45%)'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: tokens.accent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
+                  onPressed: () => Navigator.pop(ctx, selected),
+                  child: const Text('Compress Copy'),
                 ),
               ),
             ],
-          ),
-        ),
+          );
+        },
       ),
     );
+    if (chosen == null || !mounted) return;
+
+    try {
+      final res = await AdvancedPdfService.instance.compressPdf(
+        sourcePdf: file,
+        preset: chosen,
+        outputFileName:
+            '${_activeDoc.title}_compressed_${DateTime.now().millisecondsSinceEpoch}',
+        associatedDocument: _activeDoc,
+      );
+      if (!mounted) return;
+      final origKb = (res.originalSizeBytes / 1024).toStringAsFixed(1);
+      final compKb = (res.compressedSizeBytes / 1024).toStringAsFixed(1);
+      final pct = res.percentageReduction.toStringAsFixed(1);
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Compression Result'),
+          content: Text(
+            'Original: $origKb KB\nCompressed: $compKb KB\nReduced by: $pct%',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _updateActivePdfFile(res.outputFile);
+              },
+              child: const Text('Use Compressed Copy'),
+            ),
+            FilledButton.icon(
+              icon: const Icon(Icons.share_outlined, size: 17),
+              label: const Text('Share'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                SharePlus.instance.share(
+                  ShareParams(
+                    text: _activeDoc.title,
+                    files: [XFile(res.outputFile.path)],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) showScaneliqToast(context, 'Compression failed: $e');
+    }
   }
 
-  // ---------------------------------------------------------------------------
-  // JUMP TO PAGE
-  // ---------------------------------------------------------------------------
-
-  void _showJumpToPageDialog() {
-    final controller = TextEditingController(text: '$_currentPage');
-    showDialog(
+  Future<void> _showEncryptDialog(File file) async {
+    final p1 = TextEditingController();
+    final p2 = TextEditingController();
+    final password = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Jump to Page'),
+        title: const Text('Password Protect PDF'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Enter page number (1 to $_totalPages):'),
-            const SizedBox(height: 12),
             TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Page Number',
-                border: OutlineInputBorder(),
-              ),
+              controller: p1,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'New Password'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: p2,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Confirm Password'),
             ),
           ],
         ),
@@ -559,901 +695,425 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: () {
-              final target = int.tryParse(controller.text.trim());
-              if (target != null && target >= 1 && target <= _totalPages) {
-                Navigator.pop(ctx);
-                _pdfController.goToPage(pageNumber: target);
-              }
+              if (p1.text.trim().isEmpty || p1.text != p2.text) return;
+              Navigator.pop(ctx, p1.text.trim());
             },
+            child: const Text('Protect Copy'),
+          ),
+        ],
+      ),
+    );
+    p1.dispose();
+    p2.dispose();
+    if (password == null) return;
+    try {
+      final out = await AdvancedPdfService.instance.encryptPdf(
+        sourcePdf: file,
+        userPassword: password,
+        outputFileName:
+            '${_activeDoc.title}_protected_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      if (mounted) {
+        showScaneliqToast(context, 'Protected PDF saved: ${out.uri.pathSegments.last}');
+      }
+    } catch (e) {
+      if (mounted) showScaneliqToast(context, 'Protection failed: $e');
+    }
+  }
+
+  Future<void> _showJumpToPageDialog() async {
+    final ctrl = TextEditingController(text: '$_currentPage');
+    final target = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Jump to Page'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Page (1 - $_totalPages)',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, int.tryParse(ctrl.text.trim())),
             child: const Text('Go'),
           ),
         ],
       ),
     );
-  }
-
-  // ---------------------------------------------------------------------------
-  // BOOKMARKS
-  // ---------------------------------------------------------------------------
-
-  void _showBookmarksSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (sheetCtx, setSheetState) => Container(
-          padding: const EdgeInsets.all(16),
-          height: MediaQuery.of(context).size.height * 0.6,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Page Bookmarks',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.bookmark_add, size: 18),
-                    label: const Text('Bookmark Page'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandPrimary,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: () async {
-                      final titleController = TextEditingController(
-                        text: 'Page $_currentPage',
-                      );
-                      final title = await showDialog<String>(
-                        context: context,
-                        builder: (dCtx) => AlertDialog(
-                          title: Text('Bookmark Page $_currentPage'),
-                          content: TextField(
-                            controller: titleController,
-                            autofocus: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Bookmark Label',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(dCtx, null),
-                              child: const Text('Cancel'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(
-                                dCtx,
-                                titleController.text.trim(),
-                              ),
-                              child: const Text('Save'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (title != null && title.isNotEmpty) {
-                        await AppDatabaseService.instance.addBookmark(
-                          documentId: widget.document.id,
-                          pageNumber: _currentPage,
-                          title: title,
-                        );
-                        await _loadBookmarks();
-                        setSheetState(() {});
-                      }
-                    },
-                  ),
-                ],
-              ),
-              const Divider(),
-              if (_isLoadingBookmarks)
-                const Center(child: CircularProgressIndicator())
-              else if (_bookmarks.isEmpty)
-                const Expanded(
-                  child: Center(
-                    child: Text(
-                      'No bookmarks yet.\nTap "Bookmark Page" to save important pages.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.textSecondaryLight),
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: _bookmarks.length,
-                    itemBuilder: (context, index) {
-                      final b = _bookmarks[index];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.brandPrimary.withValues(
-                            alpha: 0.15,
-                          ),
-                          child: Text(
-                            '${b.pageNumber}',
-                            style: const TextStyle(
-                              color: AppColors.brandPrimary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          b.title,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          'Page ${b.pageNumber} · ${b.createdAt.year}-${b.createdAt.month.toString().padLeft(2, '0')}-${b.createdAt.day.toString().padLeft(2, '0')}',
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: AppColors.error,
-                          ),
-                          onPressed: () async {
-                            await AppDatabaseService.instance.deleteBookmark(
-                              b.id,
-                            );
-                            await _loadBookmarks();
-                            setSheetState(() {});
-                          },
-                        ),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          _pdfController.goToPage(pageNumber: b.pageNumber);
-                        },
-                      );
-                    },
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // METADATA INSPECTION
-  // ---------------------------------------------------------------------------
-
-  Future<void> _showMetadataDialog(File file) async {
-    try {
-      final info = await AdvancedPdfService.instance.inspectPdf(file);
-      if (!mounted) return;
-
-      final sizeMb = (info.fileSizeBytes / (1024 * 1024)).toStringAsFixed(2);
-      final sizeKb = (info.fileSizeBytes / 1024).toStringAsFixed(1);
-
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('PDF Document Details'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _detailRow('Title', info.title ?? widget.document.title),
-              _detailRow('Page Count', '${info.pageCount} pages'),
-              _detailRow('File Size', '$sizeMb MB ($sizeKb KB)'),
-              _detailRow(
-                'Page Dimensions',
-                '${info.firstPageWidth.toStringAsFixed(0)} × ${info.firstPageHeight.toStringAsFixed(0)} pt',
-              ),
-              _detailRow('Encrypted', info.isEncrypted ? 'Yes' : 'No'),
-              if (info.producer != null) _detailRow('Producer', info.producer!),
-              if (info.creationDate != null)
-                _detailRow(
-                  'Created',
-                  '${info.creationDate!.year}-${info.creationDate!.month.toString().padLeft(2, '0')}-${info.creationDate!.day.toString().padLeft(2, '0')}',
-                ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to read details: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+    ctrl.dispose();
+    if (target != null && target >= 1 && target <= _totalPages) {
+      _jumpToPage(target);
     }
   }
 
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+  Future<void> _exportPagesAsImages() async {
+    if (_activeDoc.pages.isEmpty) {
+      showScaneliqToast(context, 'No source pages to export as JPEG.');
+      return;
+    }
+    int count = 0;
+    for (int i = 0; i < _activeDoc.pages.length; i++) {
+      final page = _activeDoc.pages[i];
+      final f = File(page.processedPath ?? page.originalPath);
+      if (await f.exists()) {
+        final raw = await f.readAsBytes();
+        final outBytes = await ImageProcessingService.processEncodedSourceBytesInIsolate(
+          raw,
+          page.editRecipe,
+          quality: 92,
+        );
+        final outPath =
+            '${AppStorageService.instance.exportsDir.path}/${_activeDoc.title}_p${i + 1}.jpg';
+        await File(outPath).writeAsBytes(outBytes, flush: true);
+        count++;
+      }
+    }
+    if (mounted) {
+      showScaneliqToast(context, 'Exported $count JPEG page(s) to Exports folder.');
+    }
+  }
+
+  Future<void> _shareDocument() async {
+    final path = _activeDoc.exportPath;
+    if (path == null || !File(path).existsSync()) {
+      showScaneliqToast(context, 'Generate the PDF before sharing.');
+      return;
+    }
+    await SharePlus.instance.share(
+      ShareParams(text: _activeDoc.title, files: [XFile(path)]),
+    );
+  }
+
+  void _showMoreToolsSheet(File? file) {
+    final tokens = context.tokens;
+    final hasFile = file != null && file.existsSync();
+    showScaneliqBottomSheet<void>(
+      context: context,
+      builder: (sheetCtx) => Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
+          Text(
+            'PDF Tools & Export',
+            style: Theme.of(sheetCtx).textTheme.headlineMedium,
           ),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // COMPRESS PDF QUICK ACTION
-  // ---------------------------------------------------------------------------
-
-  Future<void> _showCompressDialog(File file) async {
-    PdfCompressionPreset selected = PdfCompressionPreset.balanced;
-
-    final confirmed = await showDialog<PdfCompressionPreset>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (dCtx, setDialogState) => AlertDialog(
-          title: const Text('Compress PDF Document'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Select target compression level:'),
-              RadioGroup<PdfCompressionPreset>(
-                groupValue: selected,
-                onChanged: (val) {
-                  if (val != null) {
-                    setDialogState(() => selected = val);
-                  }
-                },
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    RadioListTile<PdfCompressionPreset>(
-                      value: PdfCompressionPreset.highQuality,
-                      title: Text('High Quality'),
-                      subtitle: Text('Minimal compression (~85% quality)'),
-                    ),
-                    RadioListTile<PdfCompressionPreset>(
-                      value: PdfCompressionPreset.balanced,
-                      title: Text('Balanced (Recommended)'),
-                      subtitle: Text('Optimal balance (~65% quality)'),
-                    ),
-                    RadioListTile<PdfCompressionPreset>(
-                      value: PdfCompressionPreset.smallerFile,
-                      title: Text('Smaller File'),
-                      subtitle: Text('Maximum size reduction (~45% quality)'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dCtx, null),
-              child: const Text('Cancel'),
+          const SizedBox(height: 8),
+          if (hasFile) ...[
+            ScaneliqContextMenuRow(
+              icon: Icons.branding_watermark_outlined,
+              title: 'Watermark Studio',
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _openWatermarkStudio(file);
+              },
             ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dCtx, selected),
-              child: const Text('Compress'),
+            ScaneliqContextMenuRow(
+              icon: Icons.compress_rounded,
+              title: 'Compress PDF',
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _showCompressSheet(file);
+              },
             ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmed == null) return;
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Compressing PDF document...')),
-    );
-
-    try {
-      final outName =
-          '${widget.document.title}_compressed_${DateTime.now().millisecondsSinceEpoch}';
-      final result = await AdvancedPdfService.instance.compressPdf(
-        sourcePdf: file,
-        preset: confirmed,
-        outputFileName: outName,
-        associatedDocument: widget.document,
-      );
-
-      final origKb = (result.originalSizeBytes / 1024).toStringAsFixed(1);
-      final compKb = (result.compressedSizeBytes / 1024).toStringAsFixed(1);
-      final pct = result.percentageReduction.toStringAsFixed(1);
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Compression Complete'),
-            content: Text(
-              'Original: $origKb KB\nCompressed: $compKb KB\nSpace Saved: $pct%\n\nSaved to: ${result.outputFile.path}',
+            ScaneliqContextMenuRow(
+              icon: Icons.lock_outline_rounded,
+              title: 'Password Protect PDF',
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _showEncryptDialog(file);
+              },
             ),
-            actions: [
-              TextButton.icon(
-                icon: const Icon(Icons.share),
-                label: const Text('Share'),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  SharePlus.instance.share(
-                    ShareParams(
-                      text: 'Compressed PDF',
-                      files: [XFile(result.outputFile.path)],
-                    ),
-                  );
-                },
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Done'),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Compression failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // WATERMARK QUICK ACTION
-  // ---------------------------------------------------------------------------
-
-  Future<void> _showWatermarkDialog(File file) async {
-    final textController = TextEditingController(text: 'CONFIDENTIAL');
-    WatermarkPosition pos = WatermarkPosition.diagonalCenter;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (dCtx, setDialogState) => AlertDialog(
-          title: const Text('Apply Watermark'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: textController,
-                decoration: const InputDecoration(
-                  labelText: 'Watermark Text',
-                  hintText: 'e.g. CONFIDENTIAL / DRAFT',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<WatermarkPosition>(
-                initialValue: pos,
-                decoration: const InputDecoration(
-                  labelText: 'Position',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: WatermarkPosition.diagonalCenter,
-                    child: Text('Diagonal Center (-45°)'),
+            ScaneliqContextMenuRow(
+              icon: Icons.info_outline_rounded,
+              title: 'PDF Properties & Metadata',
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                showPdfMetadataSheet(
+                  context: context,
+                  pdfFile: file,
+                  fallbackTitle: _activeDoc.title,
+                  onMetadataUpdatedPdf: (updated) => _updateActivePdfFile(
+                    updated,
+                    toastMessage: 'PDF metadata updated in new copy.',
                   ),
-                  DropdownMenuItem(
-                    value: WatermarkPosition.horizontalCenter,
-                    child: Text('Horizontal Center'),
-                  ),
-                  DropdownMenuItem(
-                    value: WatermarkPosition.headerTop,
-                    child: Text('Header (Top)'),
-                  ),
-                  DropdownMenuItem(
-                    value: WatermarkPosition.footerBottom,
-                    child: Text('Footer (Bottom)'),
-                  ),
-                ],
-                onChanged: (val) => setDialogState(() => pos = val!),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dCtx, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dCtx, true),
-              child: const Text('Apply'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      final outName =
-          '${widget.document.title}_watermarked_${DateTime.now().millisecondsSinceEpoch}';
-      final watermarked = await AdvancedPdfService.instance.addWatermark(
-        sourcePdf: file,
-        options: WatermarkOptions(
-          text: textController.text.trim(),
-          position: pos,
-          color: const Color(0xFFDC2626),
-          opacity: 0.25,
-        ),
-        outputFileName: outName,
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Watermark applied: ${watermarked.path}'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Watermark failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // PASSWORD PROTECT QUICK ACTION
-  // ---------------------------------------------------------------------------
-
-  Future<void> _showEncryptDialog(File file) async {
-    final pass1 = TextEditingController();
-    final pass2 = TextEditingController();
-
-    final confirmed = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Password Protect PDF'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter password to encrypt with AES-256:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: pass1,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: pass2,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Confirm Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, null),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (pass1.text != pass2.text) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Passwords do not match!')),
                 );
-                return;
-              }
-              if (pass1.text.trim().isEmpty) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Password cannot be empty!')),
-                );
-                return;
-              }
-              Navigator.pop(ctx, pass1.text.trim());
+              },
+            ),
+            ScaneliqContextMenuRow(
+              icon: Icons.ios_share_rounded,
+              title: 'Share PDF',
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _shareDocument();
+              },
+            ),
+          ],
+          ScaneliqContextMenuRow(
+            icon: Icons.image_outlined,
+            title: 'Export Pages as JPEG',
+            onTap: () {
+              Navigator.pop(sheetCtx);
+              _exportPagesAsImages();
             },
-            child: const Text('Encrypt'),
           ),
+          ScaneliqContextMenuRow(
+            icon: Icons.tune_rounded,
+            title: 'Edit Scan Filters & Crop',
+            onTap: () {
+              Navigator.pop(sheetCtx);
+              _openPageEditorSheet();
+            },
+          ),
+          if (_extractedText != null && _extractedText!.isNotEmpty)
+            ScaneliqContextMenuRow(
+              icon: Icons.auto_awesome_outlined,
+              title: 'AI Summary & Q&A',
+              titleColor: tokens.accent,
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                AiDocumentSheet.show(context, text: _extractedText);
+              },
+            ),
         ],
       ),
     );
-
-    if (confirmed == null) return;
-
-    try {
-      final outName =
-          '${widget.document.title}_protected_${DateTime.now().millisecondsSinceEpoch}';
-      final encrypted = await AdvancedPdfService.instance.encryptPdf(
-        sourcePdf: file,
-        userPassword: confirmed,
-        outputFileName: outName,
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Document protected: ${encrypted.path}'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Encryption failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
   }
 
-  Widget _buildFallbackImageViewer() {
-    final pages = _activeDoc.pages;
-    if (pages.isEmpty) {
-      return const Center(child: Text('No pages found in document.'));
-    }
-
-    return Stack(
-      children: [
-        PageView.builder(
-          itemCount: pages.length,
-          itemBuilder: (context, index) {
-            final page = pages[index];
-            final file = File(page.processedPath ?? page.originalPath);
-            return InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 4.0,
-              child: Center(
-                child: file.existsSync()
-                    ? Image.file(file, fit: BoxFit.contain)
-                    : const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.broken_image,
-                            size: 48,
-                            color: Colors.grey,
-                          ),
-                          SizedBox(height: 8),
-                          Text('Original image file missing'),
-                        ],
-                      ),
-              ),
-            );
-          },
-        ),
-        Positioned(
-          top: 16,
-          right: 16,
-          child: FilledButton.tonalIcon(
-            onPressed: () => setState(() => _showFallbackImageViewer = false),
-            icon: const Icon(Icons.picture_as_pdf),
-            label: const Text('Back to PDF'),
-          ),
-        ),
-        Positioned(
-          bottom: 16,
-          left: 16,
-          right: 16,
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                'Viewing Raw Scans (${pages.length} pages)',
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  // ---------------------------------------------------------------------------
+  // BUILD UI
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.tokens;
     final pdfPath = _activeDoc.exportPath;
     final file = pdfPath != null ? File(pdfPath) : null;
     final fileExists = file != null && file.existsSync();
 
     return Scaffold(
+      backgroundColor: tokens.bg,
       appBar: AppBar(
+        backgroundColor: tokens.bg,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: tokens.hairline),
+        ),
         title: _isSearchOpen
             ? TextField(
                 controller: _searchQueryController,
                 autofocus: true,
-                style: const TextStyle(fontSize: 16),
+                style: Theme.of(context).textTheme.bodyMedium,
                 decoration: InputDecoration(
-                  hintText: 'Search text in document...',
+                  hintText: 'Find text in PDF...',
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  fillColor: Colors.transparent,
+                  isDense: true,
                   suffixIcon: IconButton(
-                    icon: const Icon(Icons.clear),
+                    icon: const Icon(Icons.clear_rounded, size: 19),
+                    tooltip: 'Clear Search',
                     onPressed: () {
                       _searchQueryController.clear();
-                      _textSearcher.resetTextSearch();
+                      _executeSearch('');
                     },
                   ),
                 ),
-                onSubmitted: (query) {
-                  if (query.trim().isNotEmpty) {
-                    _textSearcher.startTextSearch(query.trim());
-                  }
+                onSubmitted: _executeSearch,
+                onChanged: (val) {
+                  if (val.isEmpty) _executeSearch('');
                 },
               )
-            : Text(
-                _activeDoc.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _activeDoc.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(
+                    'Page $_currentPage of $_totalPages',
+                    style: ScaneliqTypography.monoStyle(
+                      color: tokens.textSecondary,
+                      fontSize: 10.5,
+                    ),
+                  ),
+                ],
               ),
         actions: [
           if (_isSearchOpen) ...[
-            if (_textSearcher.hasMatches) ...[
+            if (_textSearcher?.hasMatches == true) ...[
               IconButton(
-                icon: const Icon(Icons.arrow_upward),
+                icon: const Icon(Icons.keyboard_arrow_up_rounded),
                 tooltip: 'Previous Match',
-                onPressed: () => _textSearcher.goToPrevMatch(),
+                onPressed: _textSearcher?.goToPrevMatch,
               ),
               IconButton(
-                icon: const Icon(Icons.arrow_downward),
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
                 tooltip: 'Next Match',
-                onPressed: () => _textSearcher.goToNextMatch(),
+                onPressed: _textSearcher?.goToNextMatch,
               ),
             ],
             IconButton(
-              icon: const Icon(Icons.close),
+              icon: const Icon(Icons.close_rounded),
               tooltip: 'Close Search',
               onPressed: () {
-                setState(() => _isSearchOpen = false);
+                setState(() {
+                  _isSearchOpen = false;
+                  _fallbackTextMatchCount = 0;
+                });
                 _searchQueryController.clear();
-                _textSearcher.resetTextSearch();
+                _textSearcher?.resetTextSearch();
               },
             ),
           ] else ...[
             IconButton(
-              icon: const Icon(Icons.search),
-              tooltip: 'Search in Document',
+              icon: const Icon(Icons.search_rounded),
+              tooltip: 'Search Text',
               onPressed: () => setState(() => _isSearchOpen = true),
             ),
             IconButton(
-              icon: const Icon(Icons.bookmark_outline),
-              tooltip: 'Bookmarks',
-              onPressed: _showBookmarksSheet,
+              icon: Icon(
+                _showThumbnailRail
+                    ? Icons.view_carousel_rounded
+                    : Icons.view_carousel_outlined,
+                color: _showThumbnailRail ? tokens.accent : tokens.textPrimary,
+              ),
+              tooltip: 'Page Thumbnails',
+              onPressed: () => setState(() => _showThumbnailRail = !_showThumbnailRail),
             ),
             IconButton(
-              icon: _isExtractingText
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.text_snippet_outlined),
-              tooltip: 'Extract Text (OCR)',
-              onPressed: _isExtractingText ? null : _runOcr,
-            ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              tooltip: 'Document Tools',
-              onSelected: (val) {
-                switch (val) {
-                  case 'edit_pages':
-                    _openPageEditorSheet();
-                    break;
-                  case 'regenerate':
-                    _regeneratePdf();
-                    break;
-                  case 'organize':
-                    if (file != null && file.existsSync()) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => PdfPageOrganizerScreen(
-                            pdfFile: file,
-                            document: _activeDoc,
-                          ),
-                        ),
-                      );
-                    }
-                    break;
-                  case 'compress':
-                    if (file != null && file.existsSync()) {
-                      _showCompressDialog(file);
-                    }
-                    break;
-                  case 'watermark':
-                    if (file != null && file.existsSync()) {
-                      _showWatermarkDialog(file);
-                    }
-                    break;
-                  case 'encrypt':
-                    if (file != null && file.existsSync()) {
-                      _showEncryptDialog(file);
-                    }
-                    break;
-                  case 'details':
-                    if (file != null && file.existsSync()) {
-                      _showMetadataDialog(file);
-                    }
-                    break;
-                  case 'share':
-                    _shareDocument();
-                    break;
-                  case 'external':
-                    _openExternal();
-                    break;
-                  case 'ai_summary':
-                    if (_extractedText != null && _extractedText!.isNotEmpty) {
-                      AiDocumentSheet.show(context, text: _extractedText);
-                    } else {
-                      _runOcr();
-                    }
-                    break;
-                }
-              },
-              itemBuilder: (ctx) => [
-                const PopupMenuItem(
-                  value: 'edit_pages',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.tune_outlined,
-                        size: 20,
-                        color: AppColors.brandPrimary,
-                      ),
-                      SizedBox(width: 8),
-                      Text('Edit Pages & Filters'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'ai_summary',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.auto_awesome,
-                        size: 20,
-                        color: Color(0xFF6366F1),
-                      ),
-                      SizedBox(width: 8),
-                      Text('AI Summary & Q&A'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'regenerate',
-                  child: Row(
-                    children: [
-                      Icon(Icons.refresh, size: 20),
-                      SizedBox(width: 8),
-                      Text('Regenerate PDF'),
-                    ],
-                  ),
-                ),
-                if (fileExists) ...[
-                  const PopupMenuItem(
-                    value: 'organize',
-                    child: Row(
-                      children: [
-                        Icon(Icons.dashboard_customize_outlined, size: 20),
-                        SizedBox(width: 8),
-                        Text('Organize Pages'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'compress',
-                    child: Row(
-                      children: [
-                        Icon(Icons.compress, size: 20),
-                        SizedBox(width: 8),
-                        Text('Compress PDF'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'watermark',
-                    child: Row(
-                      children: [
-                        Icon(Icons.branding_watermark_outlined, size: 20),
-                        SizedBox(width: 8),
-                        Text('Add Watermark'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'encrypt',
-                    child: Row(
-                      children: [
-                        Icon(Icons.lock_outline, size: 20),
-                        SizedBox(width: 8),
-                        Text('Password Protect'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'details',
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, size: 20),
-                        SizedBox(width: 8),
-                        Text('Document Details'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'share',
-                    child: Row(
-                      children: [
-                        Icon(Icons.share_outlined, size: 20),
-                        SizedBox(width: 8),
-                        Text('Share PDF'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'external',
-                    child: Row(
-                      children: [
-                        Icon(Icons.open_in_new, size: 20),
-                        SizedBox(width: 8),
-                        Text('Open in External App'),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
+              icon: const Icon(Icons.bookmark_border_rounded),
+              tooltip: 'Bookmarks',
+              onPressed: () => showPdfBookmarksSheet(
+                context: context,
+                documentId: _activeDoc.id,
+                currentPage: _currentPage,
+                initialBookmarks: _bookmarks,
+                onReload: _loadBookmarks,
+                onJumpToPage: _jumpToPage,
+              ),
             ),
           ],
         ],
       ),
-      body: _buildBody(fileExists, file),
+      body: Column(
+        children: [
+          // Search info strip (scanned-PDF notice or match counter)
+          if (_isSearchOpen) _buildSearchBanner(tokens),
+
+          // Main interactive canvas
+          Expanded(child: _buildBody(fileExists, file, tokens)),
+
+          // Collapsible Page Thumbnail Strip
+          if (_showThumbnailRail && fileExists) _buildThumbnailStrip(tokens),
+
+          // Bottom Action Bar: Annotate Toolbar OR 5-action Dock
+          if (_isAnnotateMode)
+            PdfAnnotationToolbar(
+              controller: _annotationController,
+              isSaving: _isSavingAnnotated,
+              onSavePdf: _saveAnnotationsToPdf,
+              onClearCurrentPage: () =>
+                  _annotationController.clearPage(_currentPage - 1),
+              onClose: () => setState(() => _isAnnotateMode = false),
+            )
+          else
+            _buildBottomActionDock(tokens, fileExists, file),
+        ],
+      ),
     );
   }
 
-  Widget _buildBody(bool fileExists, File? file) {
+  Widget _buildSearchBanner(ScaneliqTokens tokens) {
+    final query = _searchQueryController.text.trim();
+    final searcher = _textSearcher;
+    final int pdfrxMatches = searcher?.matches.length ?? 0;
+    final int count = pdfrxMatches > 0 ? pdfrxMatches : _fallbackTextMatchCount;
+
+    String statusText;
+    if (!_searchHasTextLayer) {
+      statusText = 'Scanned PDF has no text layer — run OCR to search text.';
+    } else if (query.isEmpty) {
+      statusText = 'Enter keywords and press search to highlight matches.';
+    } else if (count == 0) {
+      statusText = 'No matches for "$query".';
+    } else if (searcher?.hasMatches == true) {
+      statusText =
+          'Match ${(searcher?.currentIndex ?? 0) + 1} of $pdfrxMatches matches';
+    } else {
+      statusText = '$count match(es) located across searchable text.';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      decoration: BoxDecoration(
+        color: tokens.surfaceSubtle,
+        border: Border(bottom: BorderSide(color: tokens.hairline)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _searchHasTextLayer
+                ? Icons.find_in_page_outlined
+                : Icons.document_scanner_outlined,
+            size: 16,
+            color: _searchHasTextLayer ? tokens.accent : tokens.warning,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              statusText,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: tokens.textPrimary,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          if (!_searchHasTextLayer)
+            TextButton(
+              onPressed: _isExtractingText ? null : _runOcr,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                foregroundColor: tokens.accent,
+              ),
+              child: const Text('Run OCR'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(bool fileExists, File? file, ScaneliqTokens tokens) {
     if (_isGeneratingPdf) {
       return Center(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            const Text(
-              'Preparing PDF document...',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
+            CircularProgressIndicator(color: tokens.accent),
+            const SizedBox(height: 14),
             Text(
-              'Compiling ${_activeDoc.pageCount} page(s) with applied filters...',
-              style: const TextStyle(color: AppColors.textSecondaryLight),
+              'Compiling PDF document...',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${_activeDoc.pageCount} page(s) · A4 print layout',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),
@@ -1461,223 +1121,402 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     }
 
     if (_showFallbackImageViewer) {
-      return _buildFallbackImageViewer();
+      return _buildFallbackImageViewer(tokens);
     }
 
     if (fileExists && file != null) {
       return Stack(
         children: [
-          PdfViewer.file(
-            file.path,
-            controller: _pdfController,
-            passwordProvider: () async => await _promptPassword(context),
-            params: PdfViewerParams(
-              panAxis: PanAxis.free,
-              onPageChanged: (page) {
-                if (mounted) {
-                  setState(() {
-                    _currentPage = page ?? 1;
-                  });
-                }
-              },
-              onViewerReady: (document, layout) {
-                if (mounted) {
-                  setState(() {
-                    _totalPages = document.pages.length;
-                  });
-                }
-              },
-              errorBannerBuilder: (context, error, stackTrace, documentRef) {
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  color: AppColors.error.withValues(alpha: 0.1),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: AppColors.error),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'PDF preview error: $error',
-                          style: const TextStyle(
-                            color: AppColors.error,
-                            fontSize: 12,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+          // Main PDF canvas or test override
+          Positioned.fill(
+            child: widget.pdfCanvasBuilder != null
+                ? widget.pdfCanvasBuilder!(context)
+                : PdfViewer.file(
+                    file.path,
+                    controller: _pdfController,
+                    passwordProvider: () async => await _promptPassword(context),
+                    params: PdfViewerParams(
+                      panAxis: PanAxis.free,
+                      onPageChanged: (page) {
+                        if (mounted) {
+                          setState(() => _currentPage = page ?? 1);
+                        }
+                      },
+                      onViewerReady: (document, _) {
+                        if (mounted) {
+                          _ensureTextSearcher();
+                          setState(() => _totalPages = document.pages.length);
+                        }
+                      },
+                      errorBannerBuilder: (ctx, err, _, _) => Container(
+                        padding: const EdgeInsets.all(12),
+                        color: tokens.surfaceSubtle,
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline, color: tokens.danger),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'PDF preview unavailable: $err',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: tokens.danger, fontSize: 12),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  setState(() => _showFallbackImageViewer = true),
+                              child: const Text('Raw Scans'),
+                            ),
+                          ],
                         ),
                       ),
-                      TextButton(
-                        onPressed: _regeneratePdf,
-                        child: const Text('Regenerate'),
-                      ),
-                      TextButton(
-                        onPressed: () =>
-                            setState(() => _showFallbackImageViewer = true),
-                        child: const Text('View Images'),
-                      ),
-                    ],
+                    ),
                   ),
-                );
-              },
-            ),
           ),
 
-          // Floating Page Indicator & Jump Bar
+          // Interactive Vector / Ink / Note / Signature overlay during Annotate mode
+          if (_isAnnotateMode)
+            Positioned.fill(
+              child: PdfAnnotationOverlay(
+                controller: _annotationController,
+                pageIndex: (_currentPage - 1).clamp(0, _totalPages - 1),
+                onRequestNoteText: _promptAnnotationNote,
+              ),
+            ),
+
+          // Floating Page Jump & Zoom pill (bottom center)
           Positioned(
-            bottom: 16,
+            bottom: 12,
             left: 0,
             right: 0,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                 decoration: BoxDecoration(
-                  color: Colors.black87,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
+                  color: tokens.surface.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: tokens.hairline),
+                  boxShadow: tokens.paperShadow,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    GestureDetector(
+                    InkWell(
                       onTap: _showJumpToPageDialog,
-                      child: Text(
-                        'Page $_currentPage of $_totalPages',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          'P$_currentPage/$_totalPages',
+                          style: ScaneliqTypography.monoStyle(
+                            color: tokens.textPrimary,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Container(width: 1, height: 14, color: Colors.white30),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () => _pdfController.zoomDown(),
-                      child: const Icon(
-                        Icons.remove,
-                        color: Colors.white,
-                        size: 18,
+                    Container(
+                      width: 1,
+                      height: 14,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      color: tokens.hairline,
+                    ),
+                    InkWell(
+                      onTap: () {
+                        setState(
+                          () => _zoomFactor = (_zoomFactor - 0.25).clamp(0.75, 4.0),
+                        );
+                        try {
+                          if (_pdfController.isReady) _pdfController.zoomDown();
+                        } catch (_) {}
+                      },
+                      child: Icon(Icons.remove_rounded, size: 17, color: tokens.textPrimary),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(
+                        '${(_zoomFactor * 100).round()}%',
+                        style: ScaneliqTypography.monoStyle(
+                          color: tokens.textSecondary,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () => _pdfController.zoomUp(),
-                      child: const Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 18,
-                      ),
+                    InkWell(
+                      onTap: () {
+                        setState(
+                          () => _zoomFactor = (_zoomFactor + 0.25).clamp(0.75, 4.0),
+                        );
+                        try {
+                          if (_pdfController.isReady) _pdfController.zoomUp();
+                        } catch (_) {}
+                      },
+                      child: Icon(Icons.add_rounded, size: 17, color: tokens.textPrimary),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-
-          // Search Match Indicator Bar if searching
-          if (_isSearchOpen && _textSearcher.hasMatches)
-            Positioned(
-              top: 10,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.brandPrimary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Match ${(_textSearcher.currentIndex ?? 0) + 1} of ${_textSearcher.matches.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ),
         ],
       );
     }
 
+    // Missing PDF state
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.picture_as_pdf_outlined,
-              size: 64,
-              color: AppColors.textSecondaryLight,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'PDF file is missing or has not been exported yet.',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
+            Icon(Icons.picture_as_pdf_outlined, size: 54, color: tokens.textTertiary),
+            const SizedBox(height: 12),
             Text(
-              'All ${_activeDoc.pageCount} scanned page(s) and recipes are safely stored in your local database.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondaryLight),
+              'PDF file not yet exported',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             if (_pdfError != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _pdfError!,
-                  style: const TextStyle(color: AppColors.error, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
+              const SizedBox(height: 8),
+              Text(
+                _pdfError!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: tokens.danger, fontSize: 12),
               ),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
             Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: 10,
+              runSpacing: 10,
               alignment: WrapAlignment.center,
               children: [
                 FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: tokens.accent),
                   onPressed: _regeneratePdf,
-                  icon: const Icon(Icons.build_circle_outlined),
-                  label: const Text('Generate PDF Now'),
+                  icon: const Icon(Icons.build_circle_outlined, size: 18),
+                  label: const Text('Generate PDF'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () =>
-                      setState(() => _showFallbackImageViewer = true),
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('View Original Pages'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _openPageEditorSheet,
-                  icon: const Icon(Icons.tune),
-                  label: const Text('Edit Filters'),
+                  onPressed: () => setState(() => _showFallbackImageViewer = true),
+                  icon: const Icon(Icons.photo_library_outlined, size: 18),
+                  label: const Text('Raw Scans'),
                 ),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThumbnailStrip(ScaneliqTokens tokens) {
+    return Container(
+      height: 76,
+      decoration: BoxDecoration(
+        color: tokens.surfaceSubtle,
+        border: Border(top: BorderSide(color: tokens.hairline)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _totalPages,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (ctx, index) {
+          final pageNum = index + 1;
+          final isActive = pageNum == _currentPage;
+          final pageModel = index < _activeDoc.pages.length
+              ? _activeDoc.pages[index]
+              : null;
+          final imgPath = pageModel?.processedPath ?? pageModel?.originalPath;
+          final imgFile = imgPath != null ? File(imgPath) : null;
+
+          return InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => _jumpToPage(pageNum),
+            child: Container(
+              width: 46,
+              decoration: BoxDecoration(
+                color: tokens.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isActive ? tokens.accent : tokens.paperBorder,
+                  width: isActive ? 2 : 1,
+                ),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (imgFile != null && imgFile.existsSync())
+                    Image.file(imgFile, fit: BoxFit.cover, cacheWidth: 140)
+                  else
+                    Center(
+                      child: Icon(
+                        Icons.description_outlined,
+                        size: 18,
+                        color: tokens.textTertiary,
+                      ),
+                    ),
+                  Positioned(
+                    right: 2,
+                    bottom: 2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: isActive ? tokens.accent : Colors.black54,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '$pageNum',
+                        style: ScaneliqTypography.monoStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBottomActionDock(
+    ScaneliqTokens tokens,
+    bool fileExists,
+    File? file,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        border: Border(top: BorderSide(color: tokens.hairline)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _DockAction(
+              icon: Icons.edit_note_rounded,
+              label: 'Annotate',
+              enabled: fileExists,
+              onTap: () => setState(() => _isAnnotateMode = true),
+            ),
+            _DockAction(
+              icon: Icons.draw_outlined,
+              label: 'Sign',
+              enabled: fileExists,
+              onTap: _openSignatureStudio,
+            ),
+            _DockAction(
+              icon: Icons.dashboard_customize_outlined,
+              label: 'Organize',
+              enabled: fileExists,
+              onTap: _openOrganizer,
+            ),
+            _DockAction(
+              icon: Icons.text_snippet_outlined,
+              label: _isExtractingText ? 'OCR...' : 'OCR',
+              enabled: !_isExtractingText,
+              onTap: _runOcr,
+            ),
+            _DockAction(
+              icon: Icons.more_horiz_rounded,
+              label: 'More',
+              enabled: true,
+              onTap: () => _showMoreToolsSheet(file),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFallbackImageViewer(ScaneliqTokens tokens) {
+    final pages = _activeDoc.pages;
+    if (pages.isEmpty) {
+      return const Center(child: Text('No original scan pages available.'));
+    }
+    return Stack(
+      children: [
+        PageView.builder(
+          itemCount: pages.length,
+          onPageChanged: (idx) => setState(() => _currentPage = idx + 1),
+          itemBuilder: (_, idx) {
+            final f = File(pages[idx].processedPath ?? pages[idx].originalPath);
+            return InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4.0,
+              child: Center(
+                child: f.existsSync()
+                    ? Image.file(f, fit: BoxFit.contain)
+                    : Icon(Icons.broken_image_outlined, color: tokens.textTertiary, size: 42),
+              ),
+            );
+          },
+        ),
+        Positioned(
+          top: 12,
+          right: 12,
+          child: FilledButton.tonalIcon(
+            onPressed: () => setState(() => _showFallbackImageViewer = false),
+            icon: const Icon(Icons.picture_as_pdf_outlined, size: 17),
+            label: const Text('PDF View'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DockAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _DockAction({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final color = enabled
+        ? tokens.textPrimary
+        : tokens.textTertiary.withValues(alpha: 0.45);
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: ScaneliqTypography.bodyFontFamily,
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,0 +1,73 @@
+/* ==========================================================================
+   SCANELIQ — OFFICIAL MASTER DESIGN TOKENS (CONCEPT A: EDITORIAL MINIMAL)
+   Source of Truth: SCANELIQ_HOME_CONCEPT_A_PREMIUM_MINIMAL.html
+   Viewport Reference: 393 × 852 Logical Pixels
+   ========================================================================== */
+
+:root {
+  --font-head: 'Instrument Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', 'Noto Sans Bengali', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --viewport-w: 393px;
+  --viewport-h: 852px;
+  --safe-top-h: 47px;
+  --bottom-nav-h: 82px;
+  --gutter-x: 24px;
+
+  --radius-sheet: 3px;
+  --radius-paper: 4px;
+  --radius-tag: 4px;
+  --radius-input: 10px;
+  --radius-folio: 14px;
+  --radius-modal: 22px;
+  --radius-pill: 999px;
+}
+
+/* LIGHT THEME — GALLERY ALABASTER (Exact Concept A Tokens) */
+.theme-light {
+  --bg: #FAF9F6;
+  --surface: #FFFFFF;
+  --surface-subtle: #F2F0EB;
+  --text-1: #141413;
+  --text-2: #5C5B57;
+  --text-3: #8C8A84;
+  --hairline: #E6E4DD;
+  --accent: #0052FF;
+  --accent-soft: rgba(0, 82, 255, 0.08);
+  --badge-bg: #141413;
+  --badge-fg: #FFFFFF;
+  --nav-glass: rgba(250, 249, 246, 0.88);
+  --paper-shadow: 0 6px 18px rgba(20, 20, 19, 0.07), 0 1px 3px rgba(20, 20, 19, 0.06);
+
+  --success: #059669;
+  --success-soft: rgba(5, 150, 105, 0.10);
+  --warning: #B45309;
+  --warning-soft: rgba(180, 83, 9, 0.10);
+  --danger: #DC2626;
+  --danger-soft: rgba(220, 38, 38, 0.10);
+}
+
+/* DARK THEME — CARBON STUDIO (Exact Concept A Tokens) */
+.theme-dark {
+  --bg: #0D0E11;
+  --surface: #15171C;
+  --surface-subtle: #1C1F26;
+  --text-1: #F4F4F6;
+  --text-2: #9CA0AB;
+  --text-3: #636773;
+  --hairline: #23262F;
+  --accent: #3B82F6;
+  --accent-soft: rgba(59, 130, 246, 0.14);
+  --badge-bg: #262A34;
+  --badge-fg: #E5E7EB;
+  --nav-glass: rgba(13, 14, 17, 0.88);
+  --paper-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+
+  --success: #34D399;
+  --success-soft: rgba(52, 211, 153, 0.14);
+  --warning: #FBBF24;
+  --warning-soft: rgba(251, 191, 36, 0.14);
+  --danger: #F87171;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+}

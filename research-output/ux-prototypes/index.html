@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scaneliq — Precision Paper UI/UX Prototypes (Light & Dark)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=Noto+Sans+Bengali:wght@400;600&display=swap');
+
+    :root {
+      --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+      --font-ui: 'Inter', 'Noto Sans Bengali', system-ui, sans-serif;
+      /* Light Tokens */
+      --l-canvas: #F6F7F9;
+      --l-surface: #FFFFFF;
+      --l-muted: #EDEFF3;
+      --l-border: #E2E5EB;
+      --l-text: #111827;
+      --l-text-sec: #4B5563;
+      --l-text-ter: #6B7280;
+      --l-brand: #1E40AF;
+      --l-tint: #EEF2FF;
+      --l-emerald: #0D9488;
+      --l-warn-bg: #FFFBEB;
+      --l-warn-bd: #FDE68A;
+      --l-warn: #B45309;
+      /* Dark Tokens */
+      --d-canvas: #0B0F17;
+      --d-surface: #141923;
+      --d-muted: #1D2432;
+      --d-border: #262F40;
+      --d-text: #F3F4F6;
+      --d-text-sec: #9CA3AF;
+      --d-text-ter: #6B7280;
+      --d-brand: #60A5FA;
+      --d-brand-fill: #2563EB;
+      --d-tint: #1E293B;
+      --d-emerald: #2DD4BF;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0F141E;
+      color: #F3F4F6;
+      font-family: var(--font-ui);
+      padding: 40px 28px 80px;
+      line-height: 1.4;
+    }
+
+    .board-header {
+      max-width: 1520px;
+      margin: 0 auto 36px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 20px;
+      border-bottom: 1px solid #242C3D;
+      padding-bottom: 24px;
+    }
+    .board-title {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #FFFFFF;
+    }
+    .board-subtitle {
+      font-size: 14px;
+      color: #9CA3AF;
+      margin-top: 6px;
+      max-width: 720px;
+    }
+    .token-pills {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .token-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #171E2C;
+      border: 1px solid #2A3447;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #E5E7EB;
+    }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .grid {
+      max-width: 1520px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 40px 28px;
+      justify-items: center;
+    }
+
+    .screen-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .screen-label {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 700;
+      color: #E5E7EB;
+      letter-spacing: -0.1px;
+    }
+    .screen-caption {
+      font-size: 12px;
+      color: #9CA3AF;
+      text-align: center;
+      max-width: 340px;
+    }
+
+    /* Realistic Mobile Shell 360x760 scaled cleanly */
+    .phone {
+      width: 360px;
+      height: 760px;
+      border-radius: 38px;
+      border: 8px solid #1E2534;
+      box-shadow: 0 28px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px #2D374B;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: var(--l-canvas);
+      color: var(--l-text);
+    }
+    .phone.dark {
+      background: var(--d-canvas);
+      color: var(--d-text);
+    }
+    .phone.camera {
+      background: #05070B;
+      color: #FFFFFF;
+    }
+
+    /* Status bar */
+    .statusbar {
+      height: 30px;
+      padding: 8px 20px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+    .notch {
+      width: 12px; height: 12px;
+      background: #0B0F17;
+      border-radius: 50%;
+      border: 1.5px solid #1E2534;
+    }
+
+    /* App Bar */
+    .appbar {
+      height: 52px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-mark {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: var(--l-brand);
+      display: flex; align-items: center; justify-content: center;
+      color: #FFFFFF;
+    }
+    .dark .logo-mark { background: var(--d-brand-fill); }
+    .app-title {
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .icon-btn {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--l-text-sec);
+    }
+    .dark .icon-btn { color: var(--d-text-sec); }
+
+    .scroll-body {
+      flex: 1;
+      overflow: hidden;
+      padding: 4px 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Search Pill */
+    .search-pill {
+      height: 44px;
+      border-radius: 12px;
+      background: var(--l-muted);
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--l-text-ter);
+      border: 1px solid transparent;
+    }
+    .dark .search-pill {
+      background: var(--d-muted);
+      color: var(--d-text-ter);
+    }
+
+    /* Primary Actions Row */
+    .action-row {
+      display: flex;
+      gap: 10px;
+    }
+    .btn-primary {
+      flex: 3;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--l-brand);
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .dark .btn-primary { background: var(--d-brand-fill); }
+    .btn-tonal {
+      flex: 2;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--l-surface);
+      border: 1px solid var(--l-border);
+      color: var(--l-text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .dark .btn-tonal {
+      background: var(--d-surface);
+      border-color: var(--d-border);
+      color: var(--d-text);
+    }
+
+    /* Draft Banner */
+    .draft-card {
+      background: var(--l-warn-bg);
+      border: 1px solid var(--l-warn-bd);
+      border-radius: 14px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .dark .draft-card {
+      background: rgba(180, 83, 9, 0.14);
+      border-color: rgba(251, 191, 36, 0.35);
+    }
+    .draft-dot {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: rgba(180, 83, 9, 0.14);
+      color: var(--l-warn);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .dark .draft-dot { color: #FBBF24; }
+    .draft-btn {
+      padding: 6px 11px;
+      border-radius: 8px;
+      background: #FFFFFF;
+      border: 1px solid var(--l-warn-bd);
+      color: var(--l-warn);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .dark .draft-btn {
+      background: var(--d-surface);
+      border-color: rgba(251, 191, 36, 0.35);
+      color: #FBBF24;
+    }
+
+    /* Section Header */
+    .sec-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sec-title {
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+    .sec-link {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--l-brand);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .dark .sec-link { color: var(--d-brand); }
+
+    /* Quick Modes 4-Col Grid */
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .quick-tile {
+      background: var(--l-surface);
+      border: 1px solid var(--l-border);
+      border-radius: 14px;
+      padding: 10px 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .dark .quick-tile {
+      background: var(--d-surface);
+      border-color: var(--d-border);
+    }
+    .quick-well {
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: var(--l-tint);
+      color: var(--l-brand);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .dark .quick-well {
+      background: var(--d-tint);
+      color: var(--d-brand);
+    }
+    .quick-lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--l-text-sec);
+    }
+    .dark .quick-lbl { color: var(--d-text-sec); }
+
+    /* Document List Cards */
+    .doc-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .doc-card {
+      background: var(--l-surface);
+      border: 1px solid var(--l-border);
+      border-radius: 14px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .dark .doc-card {
+      background: var(--d-surface);
+      border-color: var(--d-border);
+    }
+    .paper-thumb {
+      width: 42px;
+      height: 54px;
+      border-radius: 6px;
+      background: #FFFFFF;
+      border: 1px solid #D5DAE3;
+      padding: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .paper-line { height: 2.5px; background: #CBD5E1; border-radius: 2px; }
+    .paper-line.bold { height: 4px; background: #1E293B; width: 70%; }
+    .paper-line.accent { background: #1E40AF; width: 45%; }
+    .paper-line.short { width: 55%; }
+    .doc-meta { flex: 1; min-width: 0; }
+    .doc-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .doc-sub {
+      font-size: 11.5px;
+      color: var(--l-text-sec);
+      font-variant-numeric: tabular-nums;
+      margin-top: 3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dark .doc-sub { color: var(--d-text-sec); }
+    .tag-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+    /* Bottom Bar */
+    .bottom-bar {
+      height: 64px;
+      background: var(--l-surface);
+      border-top: 1px solid var(--l-border);
+      display: grid;
+      grid-template-columns: 1fr 1fr auto 1fr 1fr;
+      align-items: center;
+      padding: 0 6px;
+      flex-shrink: 0;
+    }
+    .dark .bottom-bar {
+      background: var(--d-surface);
+      border-top-color: var(--d-border);
+    }
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      font-size: 10.5px;
+      font-weight: 500;
+      color: var(--l-text-sec);
+    }
+    .dark .nav-item { color: var(--d-text-sec); }
+    .nav-item.active {
+      color: var(--l-brand);
+      font-weight: 600;
+    }
+    .dark .nav-item.active { color: var(--d-brand); }
+    .nav-pill {
+      padding: 3px 12px;
+      border-radius: 999px;
+    }
+    .nav-item.active .nav-pill { background: var(--l-tint); }
+    .dark .nav-item.active .nav-pill { background: var(--d-tint); }
+    .scan-trigger {
+      width: 52px;
+      height: 44px;
+      border-radius: 14px;
+      background: var(--l-brand);
+      color: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 6px;
+    }
+    .dark .scan-trigger { background: var(--d-brand-fill); }
+
+    /* Document Library Specific */
+    .chip-rail {
+      display: flex;
+      gap: 7px;
+      overflow: hidden;
+    }
+    .chip {
+      height: 32px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: var(--l-surface);
+      border: 1px solid var(--l-border);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--l-text-sec);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .dark .chip {
+      background: var(--d-surface);
+      border-color: var(--d-border);
+      color: var(--d-text-sec);
+    }
+    .chip.selected {
+      background: var(--l-tint);
+      border-color: rgba(30, 64, 175, 0.3);
+      color: var(--l-brand);
+      font-weight: 600;
+    }
+    .dark .chip.selected {
+      background: var(--d-tint);
+      border-color: rgba(96, 165, 250, 0.4);
+      color: var(--d-brand);
+    }
+    .folder-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .folder-card {
+      background: var(--l-surface);
+      border: 1px solid var(--l-border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .dark .folder-card {
+      background: var(--d-surface);
+      border-color: var(--d-border);
+    }
+    .doc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .grid-card {
+      background: var(--l-surface);
+      border: 1px solid var(--l-border);
+      border-radius: 14px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .dark .grid-card {
+      background: var(--d-surface);
+      border-color: var(--d-border);
+    }
+    .grid-thumb {
+      height: 128px;
+      background: #FFFFFF;
+      border: 1px solid #D5DAE3;
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      position: relative;
+    }
+    .pdf-badge {
+      position: absolute;
+      top: 6px; left: 6px;
+      background: rgba(17, 24, 39, 0.78);
+      color: #FFFFFF;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* Camera Studio */
+    .cam-view {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at 50% 42%, #242A35 0%, #10141B 65%, #06080C 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 12px 14px;
+    }
+    .cam-top-hud {
+      background: rgba(17, 24, 39, 0.72);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 999px;
+      height: 44px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .auto-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(45, 212, 191, 0.16);
+      border: 1px solid rgba(45, 212, 191, 0.45);
+      color: #2DD4BF;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .quad-paper {
+      width: 248px;
+      height: 332px;
+      margin: 0 auto;
+      background: #F8FAFC;
+      border-radius: 3px;
+      position: relative;
+      transform: perspective(600px) rotateX(4deg) rotateY(-3deg);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.65);
+      padding: 18px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      color: #1E293B;
+    }
+    .quad-overlay {
+      position: absolute;
+      inset: -4px;
+      border: 2.5px solid #2DD4BF;
+      background: rgba(45, 212, 191, 0.08);
+      border-radius: 4px;
+    }
+    .quad-dot {
+      position: absolute;
+      width: 12px; height: 12px;
+      background: #2DD4BF;
+      border: 2px solid #FFFFFF;
+      border-radius: 50%;
+    }
+    .cam-status {
+      align-self: center;
+      background: rgba(17, 24, 39, 0.8);
+      border: 1px solid rgba(45, 212, 191, 0.4);
+      color: #F3F4F6;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .cam-bottom {
+      background: rgba(11, 15, 23, 0.92);
+      padding: 12px 18px 20px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .mode-reel {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #9CA3AF;
+    }
+    .mode-reel .active {
+      color: #2DD4BF;
+      border-bottom: 2px solid #2DD4BF;
+      padding-bottom: 3px;
+    }
+    .shutter-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .stack-thumb {
+      width: 48px; height: 48px;
+      border-radius: 10px;
+      background: #FFFFFF;
+      border: 2px solid rgba(255,255,255,0.35);
+      position: relative;
+      padding: 5px;
+    }
+    .stack-badge {
+      position: absolute;
+      top: -6px; right: -6px;
+      background: #2563EB;
+      color: #FFFFFF;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1.5px solid #0B0F17;
+    }
+    .shutter-outer {
+      width: 68px; height: 68px;
+      border-radius: 50%;
+      border: 3px solid #FFFFFF;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .shutter-inner {
+      width: 54px; height: 54px;
+      border-radius: 50%;
+      background: #FFFFFF;
+    }
+
+    /* Editor Studio */
+    .editor-canvas {
+      flex: 1;
+      background: #0F141E;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      padding: 20px;
+    }
+    .editor-paper {
+      width: 244px;
+      height: 334px;
+      background: #FFFFFF;
+      border-radius: 4px;
+      padding: 18px;
+      color: #111827;
+      box-shadow: 0 20px 44px rgba(0,0,0,0.45);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .loupe {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      width: 78px;
+      height: 78px;
+      border-radius: 50%;
+      border: 3px solid #2DD4BF;
+      background: #FFFFFF;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .loupe-crosshair {
+      width: 18px; height: 18px;
+      border: 1.5px solid #1E40AF;
+      border-radius: 50%;
+    }
+    .compare-pill {
+      position: absolute;
+      bottom: 14px;
+      right: 16px;
+      background: rgba(17, 24, 39, 0.78);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #FFFFFF;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 999px;
+    }
+    .editor-dock {
+      background: var(--d-surface);
+      border-top: 1px solid var(--d-border);
+      padding: 12px 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .filter-strip {
+      display: flex;
+      gap: 8px;
+      overflow: hidden;
+    }
+    .filter-thumb-card {
+      width: 58px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .filter-thumb-box {
+      width: 54px; height: 64px;
+      border-radius: 8px;
+      background: #FFFFFF;
+      border: 1.5px solid #334155;
+      padding: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .filter-thumb-card.active .filter-thumb-box {
+      border: 2px solid #2DD4BF;
+    }
+    .filter-lbl {
+      font-size: 10px;
+      font-weight: 600;
+      color: #9CA3AF;
+    }
+    .filter-thumb-card.active .filter-lbl { color: #2DD4BF; }
+    .editor-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-top: 1px solid var(--d-border);
+      padding-top: 10px;
+    }
+
+    /* PDF Viewer */
+    .viewer-canvas {
+      flex: 1;
+      background: #ECEFF4;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+    .dark .viewer-canvas { background: #0B0F17; }
+    .pdf-page {
+      background: #FFFFFF;
+      color: #111827;
+      border: 1px solid #D5DAE3;
+      border-radius: 4px;
+      padding: 18px 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .page-pill {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(17, 24, 39, 0.85);
+      color: #FFFFFF;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-variant-numeric: tabular-nums;
+    }
+    .viewer-dock {
+      height: 62px;
+      background: var(--l-surface);
+      border-top: 1px solid var(--l-border);
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      align-items: center;
+      padding: 0 6px;
+    }
+    .dark .viewer-dock {
+      background: var(--d-surface);
+      border-top-color: var(--d-border);
+    }
+  </style>
+</head>
+<body>
+
+  <header class="board-header">
+    <div>
+      <div class="board-title">Scaneliq — "Precision Paper" UI/UX Prototypes</div>
+      <div class="board-subtitle">
+        Original visual identity & screen architecture combining Adobe Scan's calm paper-first ergonomics with CamScanner's deep utility workflows — zero rainbow icon clutter, zero neon cyan, zero ads or watermarks.
+      </div>
+    </div>
+    <div class="token-pills">
+      <span class="token-pill"><span class="swatch" style="background:#1E40AF"></span>Cobalt Ink #1E40AF</span>
+      <span class="token-pill"><span class="swatch" style="background:#0D9488"></span>Optical Emerald #0D9488</span>
+      <span class="token-pill"><span class="swatch" style="background:#F6F7F9"></span>Archival Canvas #F6F7F9</span>
+      <span class="token-pill"><span class="swatch" style="background:#0B0F17"></span>Obsidian Dark #0B0F17</span>
+    </div>
+  </header>
+
+  <main class="grid">
+
+    <!-- 1. HOME DASHBOARD (LIGHT) -->
+    <section class="screen-wrap">
+      <div class="screen-label">1. Home Dashboard — Precision Light</div>
+      <div class="phone">
+        <div class="statusbar">
+          <span>9:41</span>
+          <div class="notch"></div>
+          <span>5G 92%</span>
+        </div>
+        <div class="appbar">
+          <div class="brand-row">
+            <div class="logo-mark">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7V5a2 2 0 0 1 2-2h2M20 7V5a2 2 0 0 0-2-2h-2M4 17v2a2 2 0 0 0 2 2h2M20 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 12h10"/></svg>
+            </div>
+            <span class="app-title">Scaneliq</span>
+          </div>
+          <div class="brand-row">
+            <div class="icon-btn" title="Vault Status">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <div class="scroll-body">
+          <div class="search-pill">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span>Search docs, OCR text, tags…</span>
+          </div>
+
+          <div class="action-row">
+            <div class="btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+              Scan Document
+            </div>
+            <div class="btn-tonal">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Import
+            </div>
+          </div>
+
+          <div class="draft-card">
+            <div class="draft-dot">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:12.5px; font-weight:700;">Unfinished Draft</div>
+              <div style="font-size:11px; color:var(--l-text-sec);">Lease_Agreement · 3 pages</div>
+            </div>
+            <div class="draft-btn">Resume</div>
+          </div>
+
+          <div class="sec-head">
+            <span class="sec-title">Quick Modes</span>
+            <span class="sec-link">All Tools →</span>
+          </div>
+          <div class="quick-grid">
+            <div class="quick-tile">
+              <div class="quick-well">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="12" height="16" rx="2"/><path d="M8 2h10a2 2 0 0 1 2 2v14"/></svg>
+              </div>
+              <span class="quick-lbl">Batch</span>
+            </div>
+            <div class="quick-tile">
+              <div class="quick-well">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2"/><path d="M14 10h4M14 14h3"/></svg>
+              </div>
+              <span class="quick-lbl">ID Card</span>
+            </div>
+            <div class="quick-tile">
+              <div class="quick-well">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              </div>
+              <span class="quick-lbl">Book</span>
+            </div>
+            <div class="quick-tile">
+              <div class="quick-well">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8M8 11h8M8 15h4"/></svg>
+              </div>
+              <span class="quick-lbl">Receipt</span>
+            </div>
+          </div>
+
+          <div class="sec-head">
+            <span class="sec-title">Recent Scans</span>
+            <span class="sec-link">See all →</span>
+          </div>
+
+          <div class="doc-list">
+            <div class="doc-card">
+              <div class="paper-thumb">
+                <div class="paper-line accent"></div>
+                <div class="paper-line bold"></div>
+                <div class="paper-line"></div>
+                <div class="paper-line"></div>
+                <div class="paper-line short"></div>
+                <div class="paper-line"></div>
+              </div>
+              <div class="doc-meta">
+                <div class="doc-name">FY2026_Tax_Summary.pdf</div>
+                <div class="doc-sub">
+                  <span class="tag-dot" style="background:#059669"></span>
+                  <span>8 pages · 1.8 MB · Today</span>
+                </div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--l-text-ter)" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+
+            <div class="doc-card">
+              <div class="paper-thumb">
+                <div class="paper-line bold"></div>
+                <div class="paper-line"></div>
+                <div class="paper-line short"></div>
+                <div style="margin-top:4px; height:14px; border:1px solid #CBD5E1; border-radius:2px;"></div>
+              </div>
+              <div class="doc-meta">
+                <div class="doc-name">NID_Smart_Card_2in1</div>
+                <div class="doc-sub">
+                  <span class="tag-dot" style="background:#1E40AF"></span>
+                  <span>1 page · PDF · Yesterday</span>
+                </div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--l-text-ter)" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+
+            <div class="doc-card">
+              <div class="paper-thumb">
+                <div class="paper-line bold"></div>
+                <div class="paper-line"></div>
+                <div class="paper-line"></div>
+                <div class="paper-line short"></div>
+              </div>
+              <div class="doc-meta">
+                <div class="doc-name">বাংলা_দলিল_Registry_Scan</div>
+                <div class="doc-sub">
+                  <span class="tag-dot" style="background:#7C3AED"></span>
+                  <span>12 pages · OCR · Nov 15</span>
+                </div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--l-text-ter)" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <nav class="bottom-bar">
+          <div class="nav-item active"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z"/></svg></div>Home</div>
+          <div class="nav-item"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>Docs</div>
+          <div class="scan-trigger"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>
+          <div class="nav-item"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>Tools</div>
+          <div class="nav-item"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>Settings</div>
+        </nav>
+      </div>
+      <div class="screen-caption">Restrained Cobalt CTA, crisp A4 paper thumbnails, 4-col neutral mode wells, solid center scan pill.</div>
+    </section>
+
+    <!-- 2. HOME DASHBOARD (OBSIDIAN DARK) -->
+    <section class="screen-wrap">
+      <div class="screen-label">2. Home Dashboard — Obsidian Dark</div>
+      <div class="phone dark">
+        <div class="statusbar">
+          <span>9:41</span>
+          <div class="notch"></div>
+          <span>5G 92%</span>
+        </div>
+        <div class="appbar">
+          <div class="brand-row">
+            <div class="logo-mark">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7V5a2 2 0 0 1 2-2h2M20 7V5a2 2 0 0 0-2-2h-2M4 17v2a2 2 0 0 0 2 2h2M20 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 12h10"/></svg>
+            </div>
+            <span class="app-title">Scaneliq</span>
+          </div>
+          <div class="icon-btn">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+        </div>
+
+        <div class="scroll-body">
+          <div class="search-pill">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span>Search docs, OCR text, tags…</span>
+          </div>
+
+          <div class="action-row">
+            <div class="btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+              Scan Document
+            </div>
+            <div class="btn-tonal">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Import
+            </div>
+          </div>
+
+          <div class="sec-head">
+            <span class="sec-title">Quick Modes</span>
+            <span class="sec-link">All Tools →</span>
+          </div>
+          <div class="quick-grid">
+            <div class="quick-tile"><div class="quick-well"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="12" height="16" rx="2"/><path d="M8 2h10a2 2 0 0 1 2 2v14"/></svg></div><span class="quick-lbl">Batch</span></div>
+            <div class="quick-tile"><div class="quick-well"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2"/></svg></div><span class="quick-lbl">ID Card</span></div>
+            <div class="quick-tile"><div class="quick-well"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div><span class="quick-lbl">Book</span></div>
+            <div class="quick-tile"><div class="quick-well"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2"/></svg></div><span class="quick-lbl">Receipt</span></div>
+          </div>
+
+          <div class="sec-head">
+            <span class="sec-title">Recent Scans</span>
+            <span class="sec-link">See all →</span>
+          </div>
+
+          <div class="doc-list">
+            <div class="doc-card">
+              <div class="paper-thumb"><div class="paper-line accent"></div><div class="paper-line bold"></div><div class="paper-line"></div><div class="paper-line short"></div></div>
+              <div class="doc-meta">
+                <div class="doc-name">FY2026_Tax_Summary.pdf</div>
+                <div class="doc-sub"><span class="tag-dot" style="background:#34D399"></span>8 pages · 1.8 MB · Today</div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--d-text-ter)" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+            <div class="doc-card">
+              <div class="paper-thumb"><div class="paper-line bold"></div><div class="paper-line"></div><div class="paper-line"></div></div>
+              <div class="doc-meta">
+                <div class="doc-name">Vendor_Contract_Signed</div>
+                <div class="doc-sub"><span class="tag-dot" style="background:#60A5FA"></span>4 pages · Encrypted · Nov 17</div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--d-text-ter)" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+            <div class="doc-card">
+              <div class="paper-thumb"><div class="paper-line bold"></div><div class="paper-line short"></div><div class="paper-line"></div></div>
+              <div class="doc-meta">
+                <div class="doc-name">Unimart_Receipt_Nov16</div>
+                <div class="doc-sub"><span class="tag-dot" style="background:#FBBF24"></span>1 page · ৳1,450 · Nov 16</div>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--d-text-ter)" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <nav class="bottom-bar">
+          <div class="nav-item active"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z"/></svg></div>Home</div>
+          <div class="nav-item"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>Docs</div>
+          <div class="scan-trigger"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>
+          <div class="nav-item"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>Tools</div>
+          <div class="nav-item"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>Settings</div>
+        </nav>
+      </div>
+      <div class="screen-caption">Obsidian slate surfaces (#0B0F17 / #141923) with soft #60A5FA ink — replacing garish #00F0FF neon cyan.</div>
+    </section>
+
+    <!-- 3. SCANNER CAMERA STUDIO -->
+    <section class="screen-wrap">
+      <div class="screen-label">3. Unified Camera Studio</div>
+      <div class="phone camera">
+        <div class="statusbar"><span>9:41</span><div class="notch"></div><span>5G 92%</span></div>
+        <div class="cam-view">
+          <div class="cam-top-hud">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <div class="auto-pill"><span style="width:7px;height:7px;border-radius:50%;background:#2DD4BF;"></span>Auto Capture</div>
+            <div style="display:flex; gap:14px; align-items:center;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+            </div>
+          </div>
+
+          <div class="quad-paper">
+            <div class="quad-overlay">
+              <span class="quad-dot" style="top:-6px;left:-6px;"></span>
+              <span class="quad-dot" style="top:-6px;right:-6px;"></span>
+              <span class="quad-dot" style="bottom:-6px;left:-6px;"></span>
+              <span class="quad-dot" style="bottom:-6px;right:-6px;"></span>
+            </div>
+            <div style="font-size:11px;font-weight:800;color:#1E40AF;">INVOICE #INV-2026-841</div>
+            <div style="font-size:9px;color:#475569;">Dhaka Logistics Ltd. · Nov 18, 2026</div>
+            <div style="height:1px;background:#CBD5E1;margin:4px 0;"></div>
+            <div class="paper-line" style="width:92%"></div>
+            <div class="paper-line" style="width:84%"></div>
+            <div class="paper-line" style="width:88%"></div>
+            <div class="paper-line" style="width:65%"></div>
+            <div style="margin-top:auto;border-top:1px solid #CBD5E1;padding-top:8px;display:flex;justify-content:space-between;font-size:10px;font-weight:700;">
+              <span>Total (VAT Incl.)</span><span>৳ 14,850.00</span>
+            </div>
+          </div>
+
+          <div class="cam-status">Document aligned · Capturing…</div>
+        </div>
+
+        <div class="cam-bottom">
+          <div class="mode-reel">
+            <span>Whiteboard</span>
+            <span>Book</span>
+            <span class="active">Document</span>
+            <span>ID Card</span>
+            <span>Receipt</span>
+          </div>
+          <div class="shutter-row">
+            <div class="stack-thumb">
+              <div class="paper-line bold"></div>
+              <div class="paper-line" style="margin-top:4px;"></div>
+              <div class="paper-line short" style="margin-top:3px;"></div>
+              <span class="stack-badge">3</span>
+            </div>
+            <div class="shutter-outer"><div class="shutter-inner"></div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+              <div style="width:48px;height:36px;border-radius:10px;background:#2563EB;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">Next →</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-caption">Edge-to-edge #000 viewfinder, Optical Emerald (#2DD4BF) boundary lock, thumb-zone mode reel & batch stack.</div>
+    </section>
+
+    <!-- 4. PAGE STUDIO EDITOR -->
+    <section class="screen-wrap">
+      <div class="screen-label">4. Page Studio Editor (Loupe + Live Thumbs)</div>
+      <div class="phone dark">
+        <div class="statusbar"><span>9:41</span><div class="notch"></div><span>5G 92%</span></div>
+        <div class="appbar" style="background:var(--d-surface); border-bottom:1px solid var(--d-border);">
+          <span style="font-size:14px;color:var(--d-text-sec);">Cancel</span>
+          <span class="app-title" style="font-size:16px;">Page 2 of 4</span>
+          <span style="font-size:14px;font-weight:700;color:var(--d-emerald);">Done</span>
+        </div>
+
+        <div class="editor-canvas">
+          <div class="editor-paper">
+            <div class="quad-overlay" style="border-width:2px;">
+              <span class="quad-dot" style="top:-6px;left:-6px;"></span>
+              <span class="quad-dot" style="top:-6px;right:-6px;"></span>
+              <span class="quad-dot" style="bottom:-6px;left:-6px;"></span>
+              <span class="quad-dot" style="bottom:-6px;right:-6px;"></span>
+            </div>
+            <div style="font-size:11px;font-weight:700;">Quarterly Balance Sheet</div>
+            <div class="paper-line"></div>
+            <div class="paper-line"></div>
+            <div class="paper-line short"></div>
+            <div class="paper-line"></div>
+            <div class="paper-line"></div>
+            <div style="margin-top:8px;width:90px;height:28px;border:1px solid #93C5FD;background:#EFF6FF;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#1E40AF;font-weight:700;">Blue Ink Stamp</div>
+          </div>
+
+          <div class="loupe">
+            <div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,#E2E8F0 0,#E2E8F0 1px,transparent 1px,transparent 14px);"></div>
+            <div class="loupe-crosshair"></div>
+          </div>
+          <div class="compare-pill">👁 Hold to Compare</div>
+        </div>
+
+        <div class="editor-dock">
+          <div class="filter-strip">
+            <div class="filter-thumb-card">
+              <div class="filter-thumb-box" style="background:#CBD5E1;"><div class="paper-line bold"></div><div class="paper-line"></div></div>
+              <span class="filter-lbl">Original</span>
+            </div>
+            <div class="filter-thumb-card active">
+              <div class="filter-thumb-box"><div class="paper-line accent"></div><div class="paper-line bold"></div><div class="paper-line"></div></div>
+              <span class="filter-lbl">Magic Color</span>
+            </div>
+            <div class="filter-thumb-card">
+              <div class="filter-thumb-box"><div class="paper-line bold" style="background:#000"></div><div class="paper-line" style="background:#000"></div></div>
+              <span class="filter-lbl">Crisp B&W</span>
+            </div>
+            <div class="filter-thumb-card">
+              <div class="filter-thumb-box" style="background:#F1F5F9;"><div class="paper-line bold"></div><div class="paper-line"></div></div>
+              <span class="filter-lbl">Adaptive</span>
+            </div>
+            <div class="filter-thumb-card">
+              <div class="filter-thumb-box" style="background:#E2E8F0;"><div class="paper-line"></div><div class="paper-line"></div></div>
+              <span class="filter-lbl">Grayscale</span>
+            </div>
+          </div>
+
+          <div class="editor-tabs">
+            <div class="nav-item active" style="color:#2DD4BF;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>Crop</div>
+            <div class="nav-item"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/></svg>Enhance</div>
+            <div class="nav-item"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="12" y1="21" x2="12" y2="12"/></svg>Adjust</div>
+            <div class="nav-item"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/></svg>Clean</div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-caption">1.8× corner magnifying loupe + 7 live thumbnail previews (replacing separate Filters/Binarize math tabs).</div>
+    </section>
+
+    <!-- 5. DOCUMENT LIBRARY (GRID & FOLDERS) -->
+    <section class="screen-wrap">
+      <div class="screen-label">5. Document Library — Precision Light</div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><div class="notch"></div><span>5G 92%</span></div>
+        <div class="appbar">
+          <span class="app-title">Documents</span>
+          <div style="display:flex;gap:4px;">
+            <div class="icon-btn"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div>
+            <div class="icon-btn"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg></div>
+            <div class="icon-btn"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
+          </div>
+        </div>
+
+        <div class="scroll-body">
+          <div class="search-pill">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <span>Search titles, OCR text, tags…</span>
+          </div>
+
+          <div class="chip-rail">
+            <span class="chip selected">All (42)</span>
+            <span class="chip">Starred</span>
+            <span class="chip">PDFs</span>
+            <span class="chip">Tags ▾</span>
+          </div>
+
+          <div class="folder-strip">
+            <div class="folder-card">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#EEF2FF" stroke="#1E40AF" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <div><div style="font-size:12.5px;font-weight:600;">Taxes 2026</div><div style="font-size:10.5px;color:var(--l-text-sec);">14 files</div></div>
+            </div>
+            <div class="folder-card">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#EEF2FF" stroke="#1E40AF" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <div><div style="font-size:12.5px;font-weight:600;">Identity & IDs</div><div style="font-size:10.5px;color:var(--l-text-sec);">6 files</div></div>
+            </div>
+          </div>
+
+          <div class="doc-grid">
+            <div class="grid-card">
+              <div class="grid-thumb">
+                <span class="pdf-badge">PDF · 8</span>
+                <div style="margin-top:14px;" class="paper-line accent"></div>
+                <div class="paper-line bold"></div>
+                <div class="paper-line"></div>
+                <div class="paper-line"></div>
+                <div class="paper-line short"></div>
+              </div>
+              <div>
+                <div class="doc-name" style="font-size:12.5px;">FY2026_Tax_Summary</div>
+                <div class="doc-sub" style="font-size:10.5px;">Today · 1.8 MB</div>
+              </div>
+            </div>
+            <div class="grid-card">
+              <div class="grid-thumb">
+                <span class="pdf-badge">OCR · 12</span>
+                <div style="margin-top:14px;" class="paper-line bold"></div>
+                <div class="paper-line"></div>
+                <div class="paper-line"></div>
+                <div class="paper-line short"></div>
+              </div>
+              <div>
+                <div class="doc-name" style="font-size:12.5px;">বাংলা_দলিল_Registry</div>
+                <div class="doc-sub" style="font-size:10.5px;">Nov 15 · 4.1 MB</div>
+              </div>
+            </div>
+            <div class="grid-card">
+              <div class="grid-thumb" style="height:86px;">
+                <span class="pdf-badge">2-in-1</span>
+                <div style="margin-top:14px;" class="paper-line bold"></div>
+                <div class="paper-line"></div>
+              </div>
+              <div class="doc-name" style="font-size:12.5px;">Passport_Scan</div>
+            </div>
+            <div class="grid-card">
+              <div class="grid-thumb" style="height:86px;">
+                <span class="pdf-badge">RECEIPT</span>
+                <div style="margin-top:14px;" class="paper-line bold"></div>
+                <div class="paper-line short"></div>
+              </div>
+              <div class="doc-name" style="font-size:12.5px;">Unimart_Receipt</div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="bottom-bar">
+          <div class="nav-item"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5z"/></svg></div>Home</div>
+          <div class="nav-item active"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>Docs</div>
+          <div class="scan-trigger"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>
+          <div class="nav-item"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>Tools</div>
+          <div class="nav-item"><div class="nav-pill"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>Settings</div>
+        </nav>
+      </div>
+      <div class="screen-caption">Clean 3-icon AppBar, collapsed filter/tag dropdown rail (reclaiming 40% space), crisp 2-col A4 paper grid.</div>
+    </section>
+
+    <!-- 6. PDF VIEWER WITH ERGONOMIC DOCK -->
+    <section class="screen-wrap">
+      <div class="screen-label">6. PDF Viewer & Bottom Action Dock</div>
+      <div class="phone">
+        <div class="statusbar"><span>9:41</span><div class="notch"></div><span>5G 92%</span></div>
+        <div class="appbar" style="background:var(--l-surface); border-bottom:1px solid var(--l-border);">
+          <div class="brand-row" style="min-width:0; flex:1;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+            <span class="app-title" style="font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">FY2026_Tax_Summary.pdf</span>
+          </div>
+          <div style="display:flex;gap:2px;">
+            <div class="icon-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
+            <div class="icon-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></div>
+          </div>
+        </div>
+
+        <div class="viewer-canvas">
+          <div class="pdf-page">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:13px;font-weight:800;color:#1E40AF;">ANNUAL TAX STATEMENT</span>
+              <span style="font-size:10px;color:#64748B;">FY 2025–2026</span>
+            </div>
+            <div style="height:1px;background:#E2E8F0;margin:4px 0;"></div>
+            <div style="font-size:10.5px;color:#334155;line-height:1.5;">
+              Prepared for local archival storage. Selectable OCR text layer embedded cleanly across all 8 pages.
+            </div>
+            <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+              <div style="display:flex;justify-content:space-between;font-size:10.5px;"><span>Gross Assessable Income</span><strong>$84,200.00</strong></div>
+              <div style="display:flex;justify-content:space-between;font-size:10.5px;"><span>Verified Deductions</span><strong>$12,450.00</strong></div>
+              <div style="height:1px;background:#CBD5E1;"></div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:#1E40AF;"><strong>Net Taxable Balance</strong><strong>$71,750.00</strong></div>
+            </div>
+            <div class="paper-line" style="margin-top:6px;"></div>
+            <div class="paper-line"></div>
+            <div class="paper-line short"></div>
+          </div>
+
+          <div class="pdf-page" style="height:180px;">
+            <div class="paper-line bold"></div>
+            <div class="paper-line"></div>
+            <div class="paper-line"></div>
+            <div class="paper-line short"></div>
+          </div>
+
+          <div class="page-pill">Page 1 of 8 · 100%</div>
+        </div>
+
+        <div class="viewer-dock">
+          <div class="nav-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</div>
+          <div class="nav-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Organize</div>
+          <div class="nav-item active"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>OCR</div>
+          <div class="nav-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16c-.8-.8-.8-2 0-2.8L13.8 2.4c.8-.8 2-.8 2.8 0l5 5c.8.8.8 2 0 2.8L12 20"/></svg>Sign</div>
+          <div class="nav-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>More</div>
+        </div>
+      </div>
+      <div class="screen-caption">Ergonomic 5-action bottom dock replacing the cramped 10-item text PopupMenu.</div>
+    </section>
+
+  </main>
+
+</body>
+</html>

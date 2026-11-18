@@ -313,6 +313,9 @@ enum PageFilter {
   whiteboard,
   enhancedText,
   colorBoost,
+  autoEnhance,
+  lighten,
+  darken,
 }
 
 enum BinarizationMode { none, otsu, sauvola }
@@ -474,6 +477,7 @@ class EditRecipe {
   final PageFilter filter;
   final double brightness;
   final double contrast;
+  final double sharpness;
   final double cropLeft;
   final double cropTop;
   final double cropRight;
@@ -489,6 +493,7 @@ class EditRecipe {
     this.filter = PageFilter.original,
     this.brightness = 0.0,
     this.contrast = 1.0,
+    this.sharpness = 0.0,
     this.cropLeft = 0.0,
     this.cropTop = 0.0,
     this.cropRight = 1.0,
@@ -515,6 +520,7 @@ class EditRecipe {
       filter == PageFilter.original &&
       brightness == 0.0 &&
       contrast == 1.0 &&
+      sharpness == 0.0 &&
       !hasCrop &&
       !hasPerspective &&
       binarization == BinarizationMode.none &&
@@ -526,6 +532,7 @@ class EditRecipe {
     PageFilter? filter,
     double? brightness,
     double? contrast,
+    double? sharpness,
     double? cropLeft,
     double? cropTop,
     double? cropRight,
@@ -542,6 +549,7 @@ class EditRecipe {
       filter: filter ?? this.filter,
       brightness: brightness ?? this.brightness,
       contrast: contrast ?? this.contrast,
+      sharpness: sharpness ?? this.sharpness,
       cropLeft: cropLeft ?? this.cropLeft,
       cropTop: cropTop ?? this.cropTop,
       cropRight: cropRight ?? this.cropRight,
@@ -562,6 +570,7 @@ class EditRecipe {
       'filter': filter.name,
       'brightness': brightness,
       'contrast': contrast,
+      'sharpness': sharpness,
       'cropLeft': cropLeft,
       'cropTop': cropTop,
       'cropRight': cropRight,
@@ -599,6 +608,7 @@ class EditRecipe {
       ),
       brightness: (map['brightness'] as num?)?.toDouble() ?? 0.0,
       contrast: (map['contrast'] as num?)?.toDouble() ?? 1.0,
+      sharpness: (map['sharpness'] as num?)?.toDouble() ?? 0.0,
       cropLeft: (map['cropLeft'] as num?)?.toDouble() ?? 0.0,
       cropTop: (map['cropTop'] as num?)?.toDouble() ?? 0.0,
       cropRight: (map['cropRight'] as num?)?.toDouble() ?? 1.0,

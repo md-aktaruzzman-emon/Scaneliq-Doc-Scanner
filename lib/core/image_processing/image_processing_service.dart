@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 import 'package:scaneliq/core/models/document_models.dart';
+import 'package:scaneliq/features/scanner/data/document_edge_detector.dart';
 
 /// Unified image processing engine for Scaneliq.
 /// Provides genuine 4-point perspective homography warp, Otsu & Sauvola binarization,
@@ -11,7 +13,8 @@ import 'package:scaneliq/core/models/document_models.dart';
 class ImageProcessingService {
   /// Master entry point to apply an EditRecipe to an img.Image in strict pipeline order
   static img.Image applyEditRecipe(img.Image source, EditRecipe recipe) {
-    img.Image working = source;
+    // Always copy source pixels first because package:image in-place ops mutate buffers.
+    img.Image working = img.Image.from(source);
 
     // 1. Perspective homography correction (if non-standard convex quad is specified)
     if (recipe.hasPerspective) {
@@ -68,6 +71,15 @@ class ImageProcessingService {
       case PageFilter.colorBoost:
         working = applyColorBoost(working);
         break;
+      case PageFilter.autoEnhance:
+        working = applyAutoEnhance(working);
+        break;
+      case PageFilter.lighten:
+        working = applyLighten(working);
+        break;
+      case PageFilter.darken:
+        working = applyDarken(working);
+        break;
       case PageFilter.original:
         break;
     }
@@ -91,6 +103,11 @@ class ImageProcessingService {
         brightness: 1.0 + recipe.brightness,
         contrast: recipe.contrast,
       );
+    }
+
+    // 9. Edge & text sharpness convolution (unsharp boost)
+    if (recipe.sharpness > 0.001) {
+      working = applySharpness(working, recipe.sharpness);
     }
 
     return working;
@@ -601,6 +618,193 @@ class ImageProcessingService {
   static img.Image applyEnhancedText(img.Image src) {
     final gray = img.grayscale(src);
     return img.adjustColor(gray, brightness: 1.1, contrast: 1.45);
+  }
+
+  /// Auto preset: Inspects tonal dynamic range & illumination to apply balanced correction
+  static img.Image applyAutoEnhance(img.Image src) {
+    final hist = List<int>.filled(256, 0);
+    int total = 0;
+    double lumaSum = 0;
+
+    final int stepY = math.max(1, src.height ~/ 48);
+    final int stepX = math.max(1, src.width ~/ 48);
+    for (int y = 0; y < src.height; y += stepY) {
+      for (int x = 0; x < src.width; x += stepX) {
+        final p = src.getPixel(x, y);
+        final int lum = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b)
+            .round()
+            .clamp(0, 255);
+        hist[lum]++;
+        lumaSum += lum;
+        total++;
+      }
+    }
+
+    final double mean = total > 0 ? lumaSum / total : 140.0;
+    int cum = 0;
+    int p10 = 0;
+    int p90 = 255;
+    for (int i = 0; i < 256; i++) {
+      cum += hist[i];
+      if (cum <= total * 0.10) p10 = i;
+      if (cum <= total * 0.90) p90 = i;
+    }
+
+    img.Image working = src;
+    // Uneven lighting or compressed dynamic range benefits from illumination leveling.
+    if (mean < 138.0 || (p90 - p10) < 110) {
+      working = applyShadowCorrection(working);
+    }
+    return applyMagicColor(working);
+  }
+
+  /// Lighten preset: Gently lifts shadows and midtone exposure for dim captures
+  static img.Image applyLighten(img.Image src) {
+    return img.adjustColor(
+      img.Image.from(src),
+      brightness: 1.24,
+      contrast: 1.08,
+    );
+  }
+
+  /// Darken preset: Deepens ink density and reduces washed-out paper highlights
+  static img.Image applyDarken(img.Image src) {
+    return img.adjustColor(
+      img.Image.from(src),
+      brightness: 0.84,
+      contrast: 1.24,
+    );
+  }
+
+  /// 3x3 high-boost convolution sharpening for crisp printed text & line work
+  static img.Image applySharpness(img.Image src, double amount) {
+    final double clamped = amount.clamp(0.0, 1.0);
+    if (clamped <= 0.001 || src.width < 3 || src.height < 3) return src;
+
+    final double k = clamped * 0.48;
+    final dst = img.Image(width: src.width, height: src.height);
+    final int w = src.width;
+    final int h = src.height;
+
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        if (x == 0 || y == 0 || x == w - 1 || y == h - 1) {
+          dst.setPixel(x, y, src.getPixel(x, y));
+          continue;
+        }
+        final c = src.getPixel(x, y);
+        final up = src.getPixel(x, y - 1);
+        final dn = src.getPixel(x, y + 1);
+        final lf = src.getPixel(x - 1, y);
+        final rt = src.getPixel(x + 1, y);
+
+        final double centerW = 1.0 + 4.0 * k;
+        final int nr = (c.r * centerW - k * (up.r + dn.r + lf.r + rt.r))
+            .round()
+            .clamp(0, 255);
+        final int ng = (c.g * centerW - k * (up.g + dn.g + lf.g + rt.g))
+            .round()
+            .clamp(0, 255);
+        final int nb = (c.b * centerW - k * (up.b + dn.b + lf.b + rt.b))
+            .round()
+            .clamp(0, 255);
+        dst.setPixelRgb(x, y, nr, ng, nb);
+      }
+    }
+    return dst;
+  }
+
+  /// Attempts real image-based quadrilateral page corner detection on [src].
+  /// Returns `null` when no distinct rectangular paper boundary exists.
+  static PerspectiveQuad? autoDetectDocumentQuad(img.Image src) {
+    if (src.width < 16 || src.height < 16) return null;
+    const maxDim = 128;
+    final img.Image working;
+    if (src.width > maxDim || src.height > maxDim) {
+      working = src.width >= src.height
+          ? img.copyResize(src, width: maxDim)
+          : img.copyResize(src, height: maxDim);
+    } else {
+      working = src;
+    }
+
+    final int w = working.width;
+    final int h = working.height;
+    final luma = Uint8List(w * h);
+    for (int y = 0; y < h; y++) {
+      final int row = y * w;
+      for (int x = 0; x < w; x++) {
+        final p = working.getPixel(x, y);
+        luma[row + x] = ((77 * p.r.toInt() + 150 * p.g.toInt() + 29 * p.b.toInt()) >>
+                8)
+            .clamp(0, 255);
+      }
+    }
+
+    final frame = CameraFrameData(width: w, height: h, lumaBytes: luma);
+    const detector = DocumentEdgeDetector();
+    final res = detector.detect(frame);
+    if (res.quad != null && res.quad!.isValidConvex()) {
+      return res.quad;
+    }
+    return null;
+  }
+
+  /// Auto-detects document corners asynchronously inside an isolate.
+  static Future<PerspectiveQuad?> autoDetectDocumentQuadFromFile(
+    File file,
+  ) async {
+    if (!await file.exists()) return null;
+    final bytes = await file.readAsBytes();
+    return Isolate.run(() {
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) return null;
+      return autoDetectDocumentQuad(decoded);
+    });
+  }
+
+  /// Processes an image file off the main UI isolate using [Isolate.run].
+  static Future<Uint8List> processImageFileToBytesInIsolate(
+    File file,
+    EditRecipe recipe, {
+    int quality = 90,
+    int? maxDimension,
+  }) async {
+    final bytes = await file.readAsBytes();
+    return processEncodedSourceBytesInIsolate(
+      bytes,
+      recipe,
+      quality: quality,
+      maxDimension: maxDimension,
+    );
+  }
+
+  /// Processes encoded image bytes off the main UI isolate via [Isolate.run].
+  static Future<Uint8List> processEncodedSourceBytesInIsolate(
+    Uint8List sourceBytes,
+    EditRecipe recipe, {
+    int quality = 88,
+    int? maxDimension,
+  }) {
+    final recipeMap = recipe.toMap();
+    return Isolate.run(() {
+      final decoded = img.decodeImage(sourceBytes);
+      if (decoded == null) {
+        throw Exception('Failed to decode image bytes');
+      }
+
+      img.Image working = decoded;
+      if (maxDimension != null &&
+          (working.width > maxDimension || working.height > maxDimension)) {
+        working = working.width >= working.height
+            ? img.copyResize(working, width: maxDimension)
+            : img.copyResize(working, height: maxDimension);
+      }
+
+      final parsedRecipe = EditRecipe.fromMap(recipeMap);
+      final processed = applyEditRecipe(working, parsedRecipe);
+      return Uint8List.fromList(img.encodeJpg(processed, quality: quality));
+    });
   }
 
   // ===========================================================================

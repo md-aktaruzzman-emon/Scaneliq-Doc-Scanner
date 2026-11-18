@@ -3,10 +3,15 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:scaneliq/core/models/document_models.dart';
-import 'package:scaneliq/core/theme/app_theme.dart';
-import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
+import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
+import 'package:scaneliq/core/theme/scaneliq_typography.dart';
+import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
+import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/pdf/data/advanced_pdf_service.dart';
 
+/// Concept A Interactive PDF Page Organizer supporting grid/list view switching,
+/// multi-page selection, drag-and-drop reordering, 90-degree rotation,
+/// duplication, confirmed deletion, page extraction, and PDF/image insertion.
 class PdfPageOrganizerScreen extends StatefulWidget {
   final File pdfFile;
   final ScannedDocument? document;
@@ -22,42 +27,38 @@ class PdfPageOrganizerScreen extends StatefulWidget {
 }
 
 class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
+  late File _activePdfFile;
   bool _isLoading = true;
   bool _isProcessing = false;
+  bool _isGridView = true;
   String? _statusMessage;
 
-  // Pages currently in order: list of 1-indexed original page numbers
-  late List<int> _currentPages;
-  // Rotation degrees for each 1-indexed page (0, 90, 180, 270)
+  // Ordered list of 1-indexed source PDF page numbers
+  List<int> _currentPages = [];
   final Map<int, int> _pageRotations = {};
-  // Selected page indices in the _currentPages list
   final Set<int> _selectedIndices = {};
 
   @override
   void initState() {
     super.initState();
+    _activePdfFile = widget.pdfFile;
     _loadPdfPages();
   }
 
   Future<void> _loadPdfPages() async {
     setState(() => _isLoading = true);
     try {
-      final count = await AdvancedPdfService.instance.getPageCount(
-        widget.pdfFile,
-      );
-      setState(() {
-        _currentPages = List<int>.generate(count, (i) => i + 1);
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
+      final count = await AdvancedPdfService.instance.getPageCount(_activePdfFile);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load PDF pages: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() {
+          _currentPages = List<int>.generate(count, (i) => i + 1);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        showScaneliqToast(context, 'Failed to read PDF pages: $e');
       }
     }
   }
@@ -72,172 +73,125 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
     });
   }
 
-  void _selectAll() {
+  void _selectAllOrNone() {
     setState(() {
       if (_selectedIndices.length == _currentPages.length) {
         _selectedIndices.clear();
       } else {
-        _selectedIndices.addAll(List.generate(_currentPages.length, (i) => i));
+        _selectedIndices
+          ..clear()
+          ..addAll(List.generate(_currentPages.length, (i) => i));
       }
     });
   }
 
   void _rotateSelected() {
-    if (_selectedIndices.isEmpty) return;
     setState(() {
       for (final idx in _selectedIndices) {
-        final pNum = _currentPages[idx];
-        final currentAngle = _pageRotations[pNum] ?? 0;
-        _pageRotations[pNum] = (currentAngle + 90) % 360;
+        final origPageNum = _currentPages[idx];
+        final curr = _pageRotations[origPageNum] ?? 0;
+        _pageRotations[origPageNum] = (curr + 90) % 360;
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Rotated ${_selectedIndices.length} page(s) by 90°.'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
   }
 
   Future<void> _deleteSelected() async {
     if (_selectedIndices.isEmpty) return;
-
-    if (_selectedIndices.length == _currentPages.length) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot delete all pages from the PDF.')),
-      );
+    if (_selectedIndices.length >= _currentPages.length) {
+      showScaneliqToast(context, 'A PDF document must retain at least 1 page.');
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showScaneliqConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Selected Pages'),
-        content: Text(
-          'Are you sure you want to remove ${_selectedIndices.length} page(s)? This will not affect the original file until saved.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      title: 'Delete ${_selectedIndices.length} Page(s)?',
+      message: 'Selected pages will be removed from the arranged PDF copy.',
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
+    if (!confirmed || !mounted) return;
 
-    if (confirmed == true) {
-      setState(() {
-        final toRemove = _selectedIndices.map((i) => _currentPages[i]).toSet();
-        _currentPages.removeWhere((p) => toRemove.contains(p));
-        _selectedIndices.clear();
-      });
-    }
+    setState(() {
+      final toRemove = _selectedIndices.toList()..sort((a, b) => b.compareTo(a));
+      for (final idx in toRemove) {
+        _currentPages.removeAt(idx);
+      }
+      _selectedIndices.clear();
+    });
   }
 
   void _duplicateSelected() {
     if (_selectedIndices.isEmpty) return;
     setState(() {
-      // Duplicate each selected page in place
-      final sortedIndices = _selectedIndices.toList()
-        ..sort((a, b) => b.compareTo(a));
-      for (final idx in sortedIndices) {
-        final item = _currentPages[idx];
-        _currentPages.insert(idx + 1, item);
+      final sorted = _selectedIndices.toList()..sort((a, b) => b.compareTo(a));
+      for (final idx in sorted) {
+        _currentPages.insert(idx + 1, _currentPages[idx]);
       }
       _selectedIndices.clear();
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Duplicated selected page(s).'),
-        duration: Duration(seconds: 1),
-      ),
-    );
+    showScaneliqToast(context, 'Duplicated selected page(s).');
   }
 
   Future<void> _extractSelected() async {
     if (_selectedIndices.isEmpty) return;
+    final selectedPages =
+        (_selectedIndices.toList()..sort()).map((i) => _currentPages[i]).toList();
 
-    final selectedPages = _selectedIndices
-        .map((i) => _currentPages[i])
-        .toList();
-    final nameController = TextEditingController(
-      text: 'Extracted_${DateTime.now().millisecondsSinceEpoch}',
+    final ctrl = TextEditingController(
+      text:
+          'Extracted_${widget.document?.title ?? 'Document'}_${DateTime.now().millisecondsSinceEpoch}',
     );
-
-    final confirmed = await showDialog<bool>(
+    final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Extract Pages to New PDF'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Extracting ${selectedPages.length} page(s): ${selectedPages.join(", ")}',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'New PDF Name',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
+        title: Text('Extract ${selectedPages.length} Page(s)'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(labelText: 'Output File Name'),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Extract'),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Extract PDF'),
           ),
         ],
       ),
     );
+    ctrl.dispose();
+    if (name == null || name.isEmpty) return;
 
-    if (confirmed == true) {
-      setState(() {
-        _isProcessing = true;
-        _statusMessage = 'Extracting pages...';
-      });
+    setState(() {
+      _isProcessing = true;
+      _statusMessage = 'Extracting ${selectedPages.length} page(s)...';
+    });
 
-      try {
-        final outName = nameController.text.trim();
-        final extractedFile = await AdvancedPdfService.instance.extractPages(
-          sourcePdf: widget.pdfFile,
-          pageNumbers: selectedPages,
-          outputFileName: outName,
+    try {
+      final outFile = await AdvancedPdfService.instance.extractPages(
+        sourcePdf: _activePdfFile,
+        pageNumbers: selectedPages,
+        outputFileName: name,
+      );
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = null;
+        });
+        showScaneliqToast(
+          context,
+          'Extracted to ${outFile.uri.pathSegments.last}',
         );
-
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _isProcessing = false;
           _statusMessage = null;
         });
-
-        if (mounted) {
-          _showOutputDialog('Pages Extracted Successfully', extractedFile);
-        }
-      } catch (e) {
-        setState(() {
-          _isProcessing = false;
-          _statusMessage = null;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Extraction failed: $e'),
-              backgroundColor: AppColors.error,
-            ),
-          );
-        }
+        showScaneliqToast(context, 'Extraction failed: $e');
       }
     }
   }
@@ -247,10 +201,9 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
     );
-
     if (picked.isEmpty || picked.first.path == null) return;
-    final file = File(picked.first.path!);
 
+    final file = File(picked.first.path!);
     final isPdf = file.path.toLowerCase().endsWith('.pdf');
     final insertPos = _selectedIndices.isNotEmpty
         ? _selectedIndices.first + 1
@@ -258,520 +211,524 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
 
     setState(() {
       _isProcessing = true;
-      _statusMessage = 'Inserting external ${isPdf ? 'PDF' : 'image'}...';
+      _statusMessage = 'Inserting ${isPdf ? 'PDF pages' : 'image'}...';
     });
 
     try {
-      final outName = 'Modified_${DateTime.now().millisecondsSinceEpoch}';
-      File updatedFile;
-      if (isPdf) {
-        updatedFile = await AdvancedPdfService.instance.insertPagesFromPdf(
-          sourcePdf: widget.pdfFile,
-          insertAfterPageIndex1Indexed: insertPos,
-          pdfToInsert: file,
-          outputFileName: outName,
-        );
-      } else {
-        updatedFile = await AdvancedPdfService.instance.insertImageAsPage(
-          sourcePdf: widget.pdfFile,
-          insertAfterPageIndex1Indexed: insertPos,
-          imageFile: file,
-          outputFileName: outName,
-        );
-      }
+      final outName = 'Inserted_${DateTime.now().millisecondsSinceEpoch}';
+      final updatedFile = isPdf
+          ? await AdvancedPdfService.instance.insertPagesFromPdf(
+              sourcePdf: _activePdfFile,
+              insertAfterPageIndex1Indexed: insertPos,
+              pdfToInsert: file,
+              outputFileName: outName,
+            )
+          : await AdvancedPdfService.instance.insertImageAsPage(
+              sourcePdf: _activePdfFile,
+              insertAfterPageIndex1Indexed: insertPos,
+              imageFile: file,
+              outputFileName: outName,
+            );
 
-      final newCount = await AdvancedPdfService.instance.getPageCount(
-        updatedFile,
-      );
-      setState(() {
-        _isProcessing = false;
-        _statusMessage = null;
-        _currentPages = List.generate(newCount, (i) => i + 1);
-        _selectedIndices.clear();
-      });
-
+      final newCount = await AdvancedPdfService.instance.getPageCount(updatedFile);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Inserted into document ($newCount pages total).'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+        setState(() {
+          _activePdfFile = updatedFile;
+          _currentPages = List<int>.generate(newCount, (i) => i + 1);
+          _selectedIndices.clear();
+          _pageRotations.clear();
+          _isProcessing = false;
+          _statusMessage = null;
+        });
+        showScaneliqToast(context, 'Inserted pages ($newCount total).');
       }
     } catch (e) {
-      setState(() {
-        _isProcessing = false;
-        _statusMessage = null;
-      });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Insert failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = null;
+        });
+        showScaneliqToast(context, 'Insert failed: $e');
       }
     }
   }
 
-  Future<void> _saveChanges() async {
-    final nameController = TextEditingController(
-      text: widget.document != null
-          ? '${widget.document!.title}_organized'
-          : 'Organized_${DateTime.now().millisecondsSinceEpoch}',
-    );
+  void _movePage(int fromIdx, int toIdx) {
+    if (fromIdx == toIdx ||
+        fromIdx < 0 ||
+        toIdx < 0 ||
+        fromIdx >= _currentPages.length ||
+        toIdx >= _currentPages.length) {
+      return;
+    }
+    setState(() {
+      final moved = _currentPages.removeAt(fromIdx);
+      _currentPages.insert(toIdx, moved);
+      _selectedIndices.clear();
+    });
+  }
 
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Save Page Organization'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+  Future<void> _saveChanges() async {
+    if (_currentPages.isEmpty) return;
+    setState(() {
+      _isProcessing = true;
+      _statusMessage = 'Saving organized PDF...';
+    });
+
+    try {
+      final baseName = widget.document?.title ?? 'Organized_Document';
+      File outputFile = await AdvancedPdfService.instance.reorderPages(
+        sourcePdf: _activePdfFile,
+        newPageOrder1Indexed: _currentPages,
+        outputFileName: '${baseName}_organized_${DateTime.now().millisecondsSinceEpoch}',
+      );
+
+      final newRotations = <int, int>{};
+      for (int i = 0; i < _currentPages.length; i++) {
+        final deg = _pageRotations[_currentPages[i]] ?? 0;
+        if (deg != 0) newRotations[i + 1] = deg;
+      }
+      if (newRotations.isNotEmpty) {
+        outputFile = await AdvancedPdfService.instance.rotatePages(
+          sourcePdf: outputFile,
+          pageRotationsDegrees: newRotations,
+          outputFileName: '${baseName}_final_${DateTime.now().millisecondsSinceEpoch}',
+        );
+      }
+
+      if (widget.document != null) {
+        try {
+          await AppDatabaseService.instance.saveDocument(
+            widget.document!.copyWith(
+              exportPath: outputFile.path,
+              pageCount: _currentPages.length,
+              modifiedAt: DateTime.now(),
+            ),
+          );
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = null;
+        });
+        Navigator.of(context).pop(outputFile);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = null;
+        });
+        showScaneliqToast(context, 'Failed to save changes: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final hasSelection = _selectedIndices.isNotEmpty;
+
+    return Scaffold(
+      backgroundColor: tokens.bg,
+      appBar: AppBar(
+        backgroundColor: tokens.bg,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: tokens.hairline),
+        ),
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Saving ${_currentPages.length} pages in current visual order.',
+              widget.document?.title ?? 'Organize Pages',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-            if (_pageRotations.isNotEmpty)
-              Text(
-                'Applying ${_pageRotations.length} custom page rotation(s).',
-              ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'PDF Document Name',
-                border: OutlineInputBorder(),
+            Text(
+              '${_currentPages.length} pages · ${hasSelection ? '${_selectedIndices.length} selected' : 'Tap to select'}',
+              style: ScaneliqTypography.monoStyle(
+                color: hasSelection ? tokens.accent : tokens.textSecondary,
+                fontSize: 10.5,
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, null),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, nameController.text.trim()),
-            child: const Text('Save as New PDF'),
-          ),
-        ],
-      ),
-    );
-
-    if (choice == null || choice.isEmpty) return;
-
-    setState(() {
-      _isProcessing = true;
-      _statusMessage = 'Generating organized PDF...';
-    });
-
-    try {
-      // 1. First reorder pages according to current sequence
-      File finalFile = await AdvancedPdfService.instance.reorderPages(
-        sourcePdf: widget.pdfFile,
-        newPageOrder1Indexed: _currentPages,
-        outputFileName: '${choice}_temp',
-      );
-
-      // 2. If any rotations were specified, apply them
-      if (_pageRotations.isNotEmpty) {
-        final mapRotations = <int, int>{};
-        for (int i = 0; i < _currentPages.length; i++) {
-          final origPage = _currentPages[i];
-          if (_pageRotations.containsKey(origPage)) {
-            mapRotations[i + 1] = _pageRotations[origPage]!;
-          }
-        }
-        if (mapRotations.isNotEmpty) {
-          final rotated = await AdvancedPdfService.instance.rotatePages(
-            sourcePdf: finalFile,
-            pageRotationsDegrees: mapRotations,
-            outputFileName: choice,
-          );
-          if (finalFile.existsSync()) finalFile.deleteSync();
-          finalFile = rotated;
-        }
-      } else {
-        // Rename temp to final
-        final finalPath = finalFile.path.replaceAll('_temp.pdf', '.pdf');
-        if (finalFile.path != finalPath) {
-          finalFile = await finalFile.rename(finalPath);
-        }
-      }
-
-      setState(() {
-        _isProcessing = false;
-        _statusMessage = null;
-      });
-
-      if (mounted) {
-        _showOutputDialog('PDF Successfully Organized', finalFile);
-      }
-    } catch (e) {
-      setState(() {
-        _isProcessing = false;
-        _statusMessage = null;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Save failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
-  }
-
-  void _showOutputDialog(String title, File file) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text('Saved output:\n${file.path}'),
-        actions: [
-          TextButton.icon(
-            icon: const Icon(Icons.visibility),
-            label: const Text('Open Viewer'),
-            onPressed: () {
-              Navigator.pop(ctx);
-              final doc = ScannedDocument(
-                id: 'org_${DateTime.now().millisecondsSinceEpoch}',
-                title: file.path
-                    .split(Platform.pathSeparator)
-                    .last
-                    .replaceAll('.pdf', ''),
-                createdAt: DateTime.now(),
-                modifiedAt: DateTime.now(),
-                pageCount: _currentPages.length,
-                exportPath: file.path,
-              );
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DocumentViewerScreen(document: doc),
-                ),
-              );
-            },
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.document != null
-              ? widget.document!.title
-              : 'Organize PDF Pages',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
           IconButton(
+            tooltip: _isGridView ? 'List View' : 'Grid View',
+            icon: Icon(
+              _isGridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
+            ),
+            onPressed: () => setState(() => _isGridView = !_isGridView),
+          ),
+          IconButton(
+            tooltip: 'Select All',
             icon: Icon(
               _selectedIndices.length == _currentPages.length &&
                       _currentPages.isNotEmpty
-                  ? Icons.select_all
-                  : Icons.checklist,
+                  ? Icons.deselect_outlined
+                  : Icons.select_all_rounded,
             ),
-            tooltip: 'Select All / None',
-            onPressed: _currentPages.isNotEmpty ? _selectAll : null,
+            onPressed: _currentPages.isNotEmpty ? _selectAllOrNone : null,
           ),
           IconButton(
-            icon: const Icon(Icons.add_to_photos_outlined),
-            tooltip: 'Insert Pages / Image',
+            tooltip: 'Insert PDF or Image',
+            icon: const Icon(Icons.add_box_outlined),
             onPressed: _isProcessing ? null : _insertExternalFile,
           ),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.check, size: 18),
-            label: const Text('Save'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandPrimary,
-              foregroundColor: Colors.white,
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: tokens.accent,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 34),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              onPressed: _isProcessing || _currentPages.isEmpty
+                  ? null
+                  : _saveChanges,
+              child: const Text('Save'),
             ),
-            onPressed: _isProcessing || _currentPages.isEmpty
-                ? null
-                : _saveChanges,
           ),
-          const SizedBox(width: 8),
         ],
       ),
       body: Stack(
         children: [
           if (_isLoading)
-            const Center(child: CircularProgressIndicator())
+            Center(child: CircularProgressIndicator(color: tokens.accent))
           else if (_currentPages.isEmpty)
             const Center(child: Text('No pages remaining in document.'))
+          else if (_isGridView)
+            GridView.builder(
+              padding: const EdgeInsets.all(14),
+              itemCount: _currentPages.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 0.78,
+              ),
+              itemBuilder: (ctx, i) => _buildGridCard(tokens, i),
+            )
           else
-            Column(
-              children: [
-                // Info & Selection bar
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  color: isDark
-                      ? AppColors.surface2Dark
-                      : AppColors.surface2Light,
-                  child: Row(
-                    children: [
-                      Text(
-                        '${_currentPages.length} Pages · Drag to reorder',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (_selectedIndices.isNotEmpty)
-                        Text(
-                          '${_selectedIndices.length} selected',
-                          style: const TextStyle(
-                            color: AppColors.brandPrimary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-
-                // Reorderable Pages Grid
-                Expanded(
-                  child: ReorderableListView(
-                    padding: const EdgeInsets.all(12),
-                    onReorderItem: (oldIdx, newIdx) {
-                      setState(() {
-                        final item = _currentPages.removeAt(oldIdx);
-                        _currentPages.insert(newIdx, item);
-                        _selectedIndices.clear();
-                      });
-                    },
-                    children: [
-                      for (int i = 0; i < _currentPages.length; i++)
-                        _buildPageCard(
-                          key: ValueKey('page_${_currentPages[i]}_$i'),
-                          displayIndex: i + 1,
-                          originalPageNum: _currentPages[i],
-                          isSelected: _selectedIndices.contains(i),
-                          onTap: () => _toggleSelectPage(i),
-                          rotation: _pageRotations[_currentPages[i]] ?? 0,
-                          isDark: isDark,
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+            ReorderableListView.builder(
+              padding: const EdgeInsets.all(14),
+              itemCount: _currentPages.length,
+              onReorderItem: (oldIdx, newIdx) {
+                _movePage(oldIdx, newIdx);
+              },
+              itemBuilder: (ctx, i) => _buildListCard(tokens, i),
             ),
 
           if (_isProcessing)
             Container(
               color: Colors.black54,
-              child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text(
-                          _statusMessage ?? 'Processing PDF...',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
+              alignment: Alignment.center,
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: tokens.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: tokens.hairline),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: tokens.accent),
+                    const SizedBox(height: 12),
+                    Text(
+                      _statusMessage ?? 'Updating PDF...',
+                      style: Theme.of(context).textTheme.titleSmall,
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
         ],
       ),
-
-      // Bottom Action Toolbar for Selected Pages
-      bottomNavigationBar: _selectedIndices.isNotEmpty
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 4,
-                    offset: Offset(0, -2),
-                  ),
-                ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: tokens.surface,
+          border: Border(top: BorderSide(color: tokens.hairline)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: SafeArea(
+          top: false,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _OrganizerAction(
+                icon: Icons.rotate_right_rounded,
+                label: 'Rotate 90°',
+                enabled: hasSelection,
+                onTap: _rotateSelected,
               ),
-              child: SafeArea(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.rotate_right_rounded),
-                      tooltip: 'Rotate 90°',
-                      onPressed: _rotateSelected,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.control_point_duplicate_rounded),
-                      tooltip: 'Duplicate',
-                      onPressed: _duplicateSelected,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.file_upload_outlined),
-                      tooltip: 'Extract Pages',
-                      onPressed: _extractSelected,
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: AppColors.error,
-                      ),
-                      tooltip: 'Delete Pages',
-                      onPressed: _deleteSelected,
-                    ),
-                  ],
-                ),
+              _OrganizerAction(
+                icon: Icons.content_copy_outlined,
+                label: 'Duplicate',
+                enabled: hasSelection,
+                onTap: _duplicateSelected,
               ),
-            )
-          : null,
+              _OrganizerAction(
+                icon: Icons.file_upload_outlined,
+                label: 'Extract',
+                enabled: hasSelection,
+                onTap: _extractSelected,
+              ),
+              _OrganizerAction(
+                icon: Icons.delete_outline_rounded,
+                label: 'Delete',
+                enabled: hasSelection,
+                color: tokens.danger,
+                onTap: _deleteSelected,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildPageCard({
-    required Key key,
-    required int displayIndex,
-    required int originalPageNum,
-    required bool isSelected,
-    required VoidCallback onTap,
-    required int rotation,
-    required bool isDark,
-  }) {
-    return Card(
-      key: key,
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isSelected
-            ? const BorderSide(color: AppColors.brandPrimary, width: 2)
-            : BorderSide.none,
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            children: [
-              // Checkbox
-              Icon(
-                isSelected ? Icons.check_circle : Icons.circle_outlined,
-                color: isSelected ? AppColors.brandPrimary : Colors.grey,
-                size: 22,
-              ),
-              const SizedBox(width: 14),
+  Widget _buildGridCard(ScaneliqTokens tokens, int index) {
+    final origPage = _currentPages[index];
+    final isSelected = _selectedIndices.contains(index);
+    final rotation = _pageRotations[origPage] ?? 0;
 
-              // Page thumbnail placeholder / icon
-              Container(
-                width: 44,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppColors.brandPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _toggleSelectPage(index),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: tokens.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? tokens.accent : tokens.hairline,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: tokens.paperShadow,
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isSelected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 19,
+                  color: isSelected ? tokens.accent : tokens.textTertiary,
                 ),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.description_outlined,
-                        size: 20,
-                        color: AppColors.brandPrimary,
-                      ),
-                      Text(
-                        '$displayIndex',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.brandPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-
-              // Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Page $displayIndex',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                const Spacer(),
+                if (rotation != 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: tokens.accentSoft,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '$rotation°',
+                      style: ScaneliqTypography.monoStyle(
+                        color: tokens.accent,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    Text(
-                      'Original Page: #$originalPageNum',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Transform.rotate(
+                angle: rotation * 3.14159265 / 180.0,
+                child: _buildPagePreviewTile(tokens, index + 1, origPage),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Page ${index + 1}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: index > 0 ? () => _movePage(index, index - 1) : null,
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Icon(
+                          Icons.chevron_left_rounded,
+                          size: 18,
+                          color: index > 0
+                              ? tokens.textPrimary
+                              : tokens.textTertiary.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: index < _currentPages.length - 1
+                          ? () => _movePage(index, index + 1)
+                          : null,
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          size: 18,
+                          color: index < _currentPages.length - 1
+                              ? tokens.textPrimary
+                              : tokens.textTertiary.withValues(alpha: 0.4),
+                        ),
                       ),
                     ),
                   ],
                 ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListCard(ScaneliqTokens tokens, int index) {
+    final origPage = _currentPages[index];
+    final isSelected = _selectedIndices.contains(index);
+    final rotation = _pageRotations[origPage] ?? 0;
+
+    return Card(
+      key: ValueKey('org_list_${origPage}_$index'),
+      color: tokens.surface,
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isSelected ? tokens.accent : tokens.hairline,
+          width: isSelected ? 2 : 1,
+        ),
+      ),
+      child: ListTile(
+        onTap: () => _toggleSelectPage(index),
+        leading: Icon(
+          isSelected
+              ? Icons.check_circle_rounded
+              : Icons.radio_button_unchecked_rounded,
+          color: isSelected ? tokens.accent : tokens.textTertiary,
+        ),
+        title: Text('Page ${index + 1}'),
+        subtitle: Text(
+          'Source page #$origPage${rotation != 0 ? ' · Rotated $rotation°' : ''}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        trailing: Icon(Icons.drag_handle_rounded, color: tokens.textTertiary),
+      ),
+    );
+  }
+
+  Widget _buildPagePreviewTile(
+    ScaneliqTokens tokens,
+    int displayIndex,
+    int origPageNum,
+  ) {
+    final pages = widget.document?.pages ?? const [];
+    final modelIdx = origPageNum - 1;
+    final imgPath = (modelIdx >= 0 && modelIdx < pages.length)
+        ? (pages[modelIdx].processedPath ?? pages[modelIdx].originalPath)
+        : null;
+    final file = imgPath != null ? File(imgPath) : null;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: tokens.surfaceSubtle,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: tokens.paperBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: file != null && file.existsSync()
+          ? Image.file(file, fit: BoxFit.cover, cacheWidth: 260)
+          : Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.description_outlined,
+                    size: 28,
+                    color: tokens.accent,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'P$displayIndex',
+                    style: ScaneliqTypography.monoStyle(
+                      color: tokens.textSecondary,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
+            ),
+    );
+  }
+}
 
-              // Rotation indicator if rotated
-              if (rotation != 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.rotate_90_degrees_ccw,
-                        size: 14,
-                        color: Colors.amber,
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        '$rotation°',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber,
-                        ),
-                      ),
-                    ],
-                  ),
+class _OrganizerAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool enabled;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _OrganizerAction({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final effectiveColor = enabled
+        ? (color ?? tokens.textPrimary)
+        : tokens.textTertiary.withValues(alpha: 0.4);
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: enabled ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: effectiveColor),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: ScaneliqTypography.bodyFontFamily,
+                  color: effectiveColor,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
                 ),
-
-              // Drag handle
-              const Icon(Icons.drag_handle, color: Colors.grey),
+              ),
             ],
           ),
         ),

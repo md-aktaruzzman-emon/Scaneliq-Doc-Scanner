@@ -1,28 +1,38 @@
 import 'dart:io';
 
 import 'package:camera/camera.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:scaneliq/core/image_processing/image_processing_service.dart';
-import 'package:scaneliq/core/models/document_models.dart';
-import 'package:scaneliq/core/storage/app_storage_service.dart';
-import 'package:scaneliq/core/theme/app_theme.dart';
-import 'package:scaneliq/features/editor/presentation/review_pages_screen.dart';
-import 'package:scaneliq/features/pdf/data/pdf_service.dart';
+import 'package:scaneliq/core/navigation/app_router.dart';
+import 'package:scaneliq/core/theme/scaneliq_colors.dart';
+import 'package:scaneliq/core/theme/scaneliq_typography.dart';
+import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
+import 'package:scaneliq/features/scanner/data/camera_studio_controller.dart';
+import 'package:scaneliq/features/scanner/data/document_edge_detector.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
-import 'package:uuid/uuid.dart';
+import 'package:scaneliq/features/scanner/presentation/scanner_studio_provider.dart';
+import 'package:scaneliq/features/scanner/presentation/widgets/camera_studio_overlays.dart';
 
-enum ScanMode { document, batch, idCard, questionSet, book, whiteboard }
+export 'package:scaneliq/features/scanner/presentation/scanner_studio_provider.dart'
+    show ScanMode;
 
+/// Concept A Always-Dark Optical Camera Studio (`#090A0D`).
+///
+/// Supports Auto/Manual capture, genuine pure-Dart luma edge detection,
+/// multi-page capture sessions, gallery import, retake replacement, flash/grid/lens
+/// controls, and safe lifecycle transitions.
 class ContinuousCameraScreen extends ConsumerStatefulWidget {
   final ScanMode mode;
   final String? initialTitle;
+  final String? retakePageId;
+  final bool initialAutoMode;
 
   const ContinuousCameraScreen({
     super.key,
     this.mode = ScanMode.batch,
     this.initialTitle,
+    this.retakePageId,
+    this.initialAutoMode = true,
   });
 
   @override
@@ -32,705 +42,1015 @@ class ContinuousCameraScreen extends ConsumerStatefulWidget {
 
 class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
     with WidgetsBindingObserver {
-  CameraController? _cameraController;
-  List<CameraDescription> _cameras = [];
-  bool _isCameraInitialized = false;
-  bool _isCapturing = false;
-  bool _flashOn = false;
-  final int _selectedCameraIndex = 0;
-  String? _errorMessage;
-
-  // ID Card sub-step: 0 = front, 1 = back
-  int _idCardStep = 0;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initCameras();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final sessionNotifier = ref.read(scanSessionProvider.notifier);
+      if (widget.initialTitle != null &&
+          widget.initialTitle!.trim().isNotEmpty) {
+        sessionNotifier.updateTitle(widget.initialTitle!.trim());
+      }
+      final studio = ref.read(scannerStudioProvider.notifier);
+      studio.onAutoCaptured = _handleActionOutcome;
+      studio.startSession(
+        mode: widget.mode,
+        retakePageId: widget.retakePageId,
+        autoMode: widget.initialAutoMode,
+      );
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _cameraController?.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
-    if (state == AppLifecycleState.inactive) {
-      _cameraController?.dispose();
-    } else if (state == AppLifecycleState.resumed) {
-      _initCameraController(_cameras[_selectedCameraIndex]);
+    ref.read(scannerStudioProvider.notifier).handleAppLifecycleState(state);
+  }
+
+  Future<void> _handleCapturePressed() async {
+    final outcome = await ref
+        .read(scannerStudioProvider.notifier)
+        .capturePhoto();
+    if (!mounted) return;
+    _handleActionOutcome(outcome);
+  }
+
+  Future<void> _handleGalleryImport() async {
+    final outcome = await ref
+        .read(scannerStudioProvider.notifier)
+        .importFromGallery();
+    if (!mounted) return;
+    _handleActionOutcome(outcome);
+  }
+
+  Future<void> _launchMlKitFallbackScanner() async {
+    final success = await ref
+        .read(scanSessionProvider.notifier)
+        .startScannerCapture();
+    if (!mounted) return;
+    if (success) {
+      _finishToReview();
     }
   }
 
-  Future<void> _initCameras() async {
-    try {
-      _cameras = await availableCameras();
-      if (_cameras.isEmpty) {
-        setState(() {
-          _errorMessage = 'No camera found on this device.';
-        });
-        return;
-      }
-      await _initCameraController(_cameras[_selectedCameraIndex]);
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Camera initialization failed: $e';
-      });
-    }
-  }
-
-  Future<void> _initCameraController(CameraDescription description) async {
-    final controller = CameraController(
-      description,
-      ResolutionPreset.high,
-      enableAudio: false,
-    );
-
-    try {
-      await controller.initialize();
-      if (!mounted) return;
-      setState(() {
-        _cameraController = controller;
-        _isCameraInitialized = true;
-        _errorMessage = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = 'Could not access camera: $e';
-        _isCameraInitialized = false;
-      });
-    }
-  }
-
-  Future<void> _toggleFlash() async {
-    if (_cameraController == null) return;
-    try {
-      final newMode = _flashOn ? FlashMode.off : FlashMode.torch;
-      await _cameraController!.setFlashMode(newMode);
-      setState(() {
-        _flashOn = !_flashOn;
-      });
-    } catch (_) {}
-  }
-
-  Future<void> _capturePhoto() async {
-    if (_cameraController == null ||
-        !_cameraController!.value.isInitialized ||
-        _isCapturing) {
-      return;
-    }
-
-    setState(() {
-      _isCapturing = true;
-    });
-
-    try {
-      final XFile picture = await _cameraController!.takePicture();
-      final File imageFile = File(picture.path);
-
-      if (await imageFile.exists()) {
-        if (widget.mode == ScanMode.book) {
-          // F-07: Split open book spread down center spine into Left and Right pages
-          final splitPages = await ImageProcessingService.splitBookSpreadFile(
-            spreadFile: imageFile,
-            outputDir: AppStorageService.instance.originalsDir,
-            baseId: const Uuid().v4(),
-          );
-          await ref.read(scanSessionProvider.notifier).importFiles(splitPages);
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Book spread split into Left & Right pages (2 pages added)!',
-                ),
-                backgroundColor: AppColors.success,
-                duration: Duration(seconds: 2),
-              ),
-            );
-          }
-        } else {
-          final EditRecipe recipe;
-          if (widget.mode == ScanMode.whiteboard) {
-            recipe = const EditRecipe(filter: PageFilter.whiteboard);
-          } else if (widget.mode == ScanMode.questionSet) {
-            recipe = const EditRecipe(
-              filter: PageFilter.blackAndWhite,
-              binarization: BinarizationMode.otsu,
-            );
-          } else {
-            recipe = const EditRecipe();
-          }
-
-          await ref.read(scanSessionProvider.notifier).importFiles([
-            imageFile,
-          ], defaultRecipe: recipe);
-
-          if (widget.mode == ScanMode.idCard) {
-            if (_idCardStep == 0) {
-              setState(() {
-                _idCardStep = 1;
-              });
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Front side captured! Now flip the card and scan Back side.',
-                    ),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
-            } else {
-              // F-06: Both sides captured: execute 2-in-1 card stitching automatically
-              final session = ref.read(scanSessionProvider);
-              if (session.pages.length >= 2) {
-                final frontPage = session.pages[session.pages.length - 2];
-                final backPage = session.pages[session.pages.length - 1];
-                final frontFile = File(
-                  frontPage.processedPath ?? frontPage.originalPath,
-                );
-                final backFile = File(
-                  backPage.processedPath ?? backPage.originalPath,
-                );
-
-                final stitchedJpg = await PdfService.stitchIdCard2In1(
-                  frontImage: frontFile,
-                  backImage: backFile,
-                  baseTitle: '${session.title}_2in1',
-                );
-
-                await ref
-                    .read(scanSessionProvider.notifier)
-                    .replaceWithSinglePage(stitchedJpg);
-              }
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Combined Front & Back into 2-in-1 ID Card Sheet!',
-                    ),
-                    backgroundColor: AppColors.success,
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-                Future.delayed(const Duration(milliseconds: 600), () {
-                  if (mounted) {
-                    _finishScan();
-                  }
-                });
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Capture failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isCapturing = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _importFromGallery() async {
-    try {
-      final pickedFiles = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-      );
-
-      if (pickedFiles.isNotEmpty) {
-        final files = pickedFiles
-            .where((p) => p.path != null)
-            .map((p) => File(p.path!))
-            .toList();
-
-        if (files.isNotEmpty) {
-          if (widget.mode == ScanMode.book) {
-            // Split imported book spreads
-            int totalPages = 0;
-            for (final f in files) {
-              final splitPages =
-                  await ImageProcessingService.splitBookSpreadFile(
-                    spreadFile: f,
-                    outputDir: AppStorageService.instance.originalsDir,
-                    baseId: const Uuid().v4(),
-                  );
-              totalPages += await ref
-                  .read(scanSessionProvider.notifier)
-                  .importFiles(splitPages);
-            }
-            if (totalPages > 0 && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Imported and split spreads into $totalPages book pages.',
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            }
-          } else {
-            final EditRecipe recipe;
-            if (widget.mode == ScanMode.whiteboard) {
-              recipe = const EditRecipe(filter: PageFilter.whiteboard);
-            } else if (widget.mode == ScanMode.questionSet) {
-              recipe = const EditRecipe(
-                filter: PageFilter.blackAndWhite,
-                binarization: BinarizationMode.otsu,
-              );
-            } else {
-              recipe = const EditRecipe();
-            }
-
-            final count = await ref
-                .read(scanSessionProvider.notifier)
-                .importFiles(files, defaultRecipe: recipe);
-
-            if (count > 0 && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Imported $count ${count == 1 ? 'image' : 'images'} successfully.',
-                  ),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
-            }
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Import failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
-  }
-
-  void _finishScan() {
-    final session = ref.read(scanSessionProvider);
-    if (session.pages.isEmpty) {
+  void _handleActionOutcome(StudioActionOutcome outcome) {
+    if (!mounted) return;
+    if (outcome.message != null && outcome.message!.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please capture at least one page before finishing.'),
+        SnackBar(
+          content: Text(outcome.message!),
+          backgroundColor: outcome.isError
+              ? const Color(0xFFDC2626)
+              : const Color(0xFF15171C),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: outcome.isError ? 3 : 2),
         ),
       );
-      return;
     }
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const ReviewPagesScreen()),
-    );
+    if (outcome.shouldNavigateToReview) {
+      Future<void>.delayed(const Duration(milliseconds: 220), () {
+        if (mounted) _finishToReview();
+      });
+    }
   }
 
-  String _getModeTitle() {
-    switch (widget.mode) {
-      case ScanMode.document:
-        return 'Document Scan';
-      case ScanMode.batch:
-        return 'Batch Photo Scan';
-      case ScanMode.idCard:
-        return _idCardStep == 0 ? 'ID Card — Front' : 'ID Card — Back';
-      case ScanMode.questionSet:
-        return 'Question Set Scanner';
-      case ScanMode.book:
-        return 'Book Scanner';
-      case ScanMode.whiteboard:
-        return 'Whiteboard Scanner';
+  void _finishToReview() {
+    final session = ref.read(scanSessionProvider);
+    if (session.pages.isEmpty) {
+      showScaneliqToast(context, 'Capture or import at least 1 page first.');
+      return;
     }
+    if (widget.retakePageId != null) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    navigateToReviewPages(context, replace: true);
+  }
+
+  void _openCameraSettingsSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: ScaneliqColorPalette.cameraStageBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => Consumer(
+        builder: (ctx, sheetRef, _) {
+          final studio = sheetRef.watch(scannerStudioProvider);
+          final notifier = sheetRef.read(scannerStudioProvider.notifier);
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Camera Studio Settings',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Resolution, boundary capture, and fallback engine',
+                    style: TextStyle(color: Color(0xFF9CA0AB), fontSize: 12.5),
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    activeTrackColor: const Color(0xFF0052FF),
+                    title: const Text(
+                      'Attach Detected Corners on Capture',
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    subtitle: const Text(
+                      'Non-destructively save detected page quad to EditRecipe',
+                      style: TextStyle(color: Color(0xFF9CA0AB), fontSize: 12),
+                    ),
+                    value: studio.autoApplyDetectedQuad,
+                    onChanged: notifier.setAutoApplyDetectedQuad,
+                  ),
+                  const Divider(color: Color(0xFF222632), height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Capture Resolution',
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                      SegmentedButton<ResolutionPreset>(
+                        style: ButtonStyle(
+                          foregroundColor: WidgetStateProperty.resolveWith(
+                            (states) => states.contains(WidgetState.selected)
+                                ? Colors.white
+                                : const Color(0xFF9CA0AB),
+                          ),
+                          backgroundColor: WidgetStateProperty.resolveWith(
+                            (states) => states.contains(WidgetState.selected)
+                                ? const Color(0xFF0052FF)
+                                : const Color(0xFF15171C),
+                          ),
+                          side: const WidgetStatePropertyAll(
+                            BorderSide(color: Color(0xFF222632)),
+                          ),
+                        ),
+                        segments: const [
+                          ButtonSegment(
+                            value: ResolutionPreset.medium,
+                            label: Text('720p', style: TextStyle(fontSize: 12)),
+                          ),
+                          ButtonSegment(
+                            value: ResolutionPreset.high,
+                            label: Text('High', style: TextStyle(fontSize: 12)),
+                          ),
+                          ButtonSegment(
+                            value: ResolutionPreset.veryHigh,
+                            label: Text('Max', style: TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                        selected: {studio.resolutionPreset},
+                        onSelectionChanged: (selected) {
+                          if (selected.isNotEmpty) {
+                            notifier.setResolutionPreset(selected.first);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const Divider(color: Color(0xFF222632), height: 20),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.document_scanner_outlined,
+                      color: Color(0xFF3B82F6),
+                    ),
+                    title: const Text(
+                      'Open Google ML Kit Scanner',
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    subtitle: const Text(
+                      'Native Android system scanner with auto-deskew',
+                      style: TextStyle(color: Color(0xFF9CA0AB), fontSize: 12),
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Color(0xFF9CA0AB),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _launchMlKitFallbackScanner();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final studio = ref.watch(scannerStudioProvider);
+    final studioNotifier = ref.read(scannerStudioProvider.notifier);
+    final backend = ref.watch(scannerCameraBackendProvider);
     final session = ref.watch(scanSessionProvider);
     final pageCount = session.pages.length;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(
-          _getModeTitle(),
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              _flashOn ? Icons.flash_on : Icons.flash_off,
-              color: _flashOn ? Colors.amber : Colors.white,
-            ),
-            tooltip: 'Flash / Torch',
-            onPressed: _toggleFlash,
-          ),
-          if (pageCount > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: TextButton.icon(
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  backgroundColor: AppColors.brandPrimary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+    return Theme(
+      data: Theme.of(context).copyWith(brightness: Brightness.dark),
+      child: Scaffold(
+        backgroundColor: ScaneliqColorPalette.cameraStudioBg,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // 1. Top Optical Studio Control Bar
+              _buildTopControlBar(studio, studioNotifier),
+
+              // 2. Main Camera Viewfinder Stage
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: ScaneliqColorPalette.cameraStageBg,
+                        border: Border.all(
+                          color: ScaneliqColorPalette.cameraStageBorder,
+                          width: 1,
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: _buildViewfinderStage(
+                        context,
+                        studio,
+                        studioNotifier,
+                        backend,
+                      ),
+                    ),
                   ),
                 ),
-                onPressed: _finishScan,
-                icon: const Icon(Icons.check, size: 18),
-                label: Text('Finish ($pageCount)'),
+              ),
+
+              // 3. Scan Mode Selector Strip
+              if (widget.retakePageId == null)
+                _buildModeSelectorStrip(studio, studioNotifier)
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    'RETAKE PAGE MODE',
+                    style: ScaneliqTypography.monoStyle(
+                      color: const Color(0xFF3B82F6),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+
+              // 4. Bottom Shutter & Session Dock
+              _buildBottomShutterDock(
+                studio,
+                studioNotifier,
+                session,
+                pageCount,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopControlBar(
+    ScannerStudioState studio,
+    ScannerStudioNotifier notifier,
+  ) {
+    final IconData flashIcon = switch (studio.flashMode) {
+      FlashMode.torch => Icons.flashlight_on_rounded,
+      FlashMode.auto => Icons.flash_auto_rounded,
+      _ => Icons.flash_off_rounded,
+    };
+
+    final bool compact = MediaQuery.sizeOf(context).width < 360;
+    final double iconBtnSize = compact ? 36 : 42;
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 12,
+        vertical: 8,
+      ),
+      child: Row(
+        children: [
+          Semantics(
+            label: 'Close camera',
+            button: true,
+            child: SizedBox(
+              width: iconBtnSize,
+              height: 44,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                tooltip: 'Close camera',
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                onPressed: () => Navigator.of(context).maybePop(),
               ),
             ),
+          ),
+
+          const Spacer(),
+
+          // Auto · Manual interactive capsule toggle
+          if (studio.mode != ScanMode.idCard && studio.mode != ScanMode.book)
+            Semantics(
+              label: studio.isAutoMode
+                  ? 'Auto document detection enabled'
+                  : 'Manual capture mode enabled',
+              button: true,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: notifier.toggleAutoMode,
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 9 : 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: studio.isAutoMode
+                        ? const Color(0x293B82F6)
+                        : const Color(0xFF15171C),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: studio.isAutoMode
+                          ? const Color(0xFF3B82F6)
+                          : const Color(0xFF262A34),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: studio.isAutoMode
+                              ? const Color(0xFF3B82F6)
+                              : const Color(0xFF636773),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        studio.isAutoMode ? 'AUTO' : 'MANUAL',
+                        style: ScaneliqTypography.monoStyle(
+                          color: Colors.white,
+                          fontSize: compact ? 10 : 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          const Spacer(),
+
+          // Flash toggle
+          SizedBox(
+            width: iconBtnSize,
+            height: 42,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              tooltip: 'Flash mode',
+              icon: Icon(
+                flashIcon,
+                color: studio.flashMode == FlashMode.off
+                    ? Colors.white
+                    : const Color(0xFFFBBF24),
+                size: 20,
+              ),
+              onPressed: studio.isReady ? notifier.cycleFlashMode : null,
+            ),
+          ),
+
+          // Rule-of-thirds grid toggle
+          SizedBox(
+            width: iconBtnSize,
+            height: 42,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              tooltip: 'Framing grid',
+              icon: Icon(
+                studio.showGrid ? Icons.grid_on_rounded : Icons.grid_off_rounded,
+                color: studio.showGrid ? const Color(0xFF3B82F6) : Colors.white,
+                size: 19,
+              ),
+              onPressed: notifier.toggleGrid,
+            ),
+          ),
+
+          // Switch camera lens when multiple lenses supported
+          if (studio.canSwitchCamera)
+            SizedBox(
+              width: iconBtnSize,
+              height: 42,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                tooltip: 'Switch camera',
+                icon: const Icon(
+                  Icons.cameraswitch_outlined,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                onPressed: studio.isReady && !studio.isCapturing
+                    ? notifier.switchCamera
+                    : null,
+              ),
+            ),
+
+          // Camera settings popover
+          SizedBox(
+            width: iconBtnSize,
+            height: 42,
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              tooltip: 'Camera settings',
+              icon: const Icon(
+                Icons.tune_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              onPressed: _openCameraSettingsSheet,
+            ),
+          ),
         ],
       ),
-      body: Stack(
-        children: [
-          // Camera Preview
-          if (_isCameraInitialized && _cameraController != null)
-            Center(child: CameraPreview(_cameraController!))
-          else if (_errorMessage != null)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.camera_alt_outlined,
-                      size: 64,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.white70),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: _initCameras,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Retry Camera'),
-                        ),
-                        const SizedBox(width: 12),
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white54),
-                          ),
-                          onPressed: _importFromGallery,
-                          icon: const Icon(Icons.photo_library),
-                          label: const Text('Pick Images'),
-                        ),
-                      ],
-                    ),
-                  ],
+    );
+  }
+
+  Widget _buildViewfinderStage(
+    BuildContext context,
+    ScannerStudioState studio,
+    ScannerStudioNotifier notifier,
+    ScannerCameraBackend backend,
+  ) {
+    if (studio.isPermissionDenied) {
+      return CameraPermissionDeniedStudioView(
+        permanentlyDenied:
+            studio.status == CameraStudioStatus.permissionPermanentlyDenied,
+        message:
+            studio.errorMessage ??
+            'Grant camera access to capture documents in Optical Studio.',
+        onRetryPermission: notifier.initializeCamera,
+        onImportGallery: _handleGalleryImport,
+      );
+    }
+
+    if (studio.status == CameraStudioStatus.noCamera ||
+        studio.status == CameraStudioStatus.error) {
+      return CameraErrorStudioView(
+        title: studio.status == CameraStudioStatus.noCamera
+            ? 'No Camera Detected'
+            : 'Camera Studio Unavailable',
+        message:
+            studio.errorMessage ??
+            'Could not open device camera hardware. Retry or import images from gallery.',
+        onRetry: notifier.initializeCamera,
+        onImportGallery: _handleGalleryImport,
+      );
+    }
+
+    if (!studio.isReady) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                color: Color(0xFF3B82F6),
+                strokeWidth: 2.5,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'INITIALIZING CAMERA STUDIO',
+              style: ScaneliqTypography.monoStyle(
+                color: const Color(0xFF9CA0AB),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (details) {
+            final dx = (details.localPosition.dx / constraints.maxWidth).clamp(
+              0.0,
+              1.0,
+            );
+            final dy = (details.localPosition.dy / constraints.maxHeight).clamp(
+              0.0,
+              1.0,
+            );
+            notifier.focusAt(Offset(dx, dy));
+          },
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Live camera preview maintaining sensor aspect ratio
+              Center(
+                child: AspectRatio(
+                  aspectRatio: backend.previewAspectRatio,
+                  child: backend.buildPreview(context),
                 ),
               ),
-            )
-          else
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
 
-          // ID Card Guide Overlay
-          if (widget.mode == ScanMode.idCard)
-            Center(
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.88,
-                height:
-                    MediaQuery.of(context).size.width *
-                    0.88 *
-                    0.63, // Standard ID-1 aspect ratio
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.brandLight, width: 2.5),
-                  borderRadius: BorderRadius.circular(16),
+              // Rule-of-thirds grid overlay
+              if (studio.showGrid) const RuleOfThirdsGridOverlay(),
+
+              // Genuine document boundary quad overlay (ONLY when real quad detected)
+              if (studio.isAutoMode && studio.detection.quad != null)
+                DocumentBoundaryOverlay(
+                  quad: studio.detection.quad,
+                  stabilityProgress: studio.detection.stabilityProgress,
                 ),
+
+              // Specialized overlay guides for ID Card / Book / Whiteboard
+              SpecializedScanModeGuide(
+                mode: studio.mode,
+                idCardStep: studio.idCardStep,
+              ),
+
+              // Tap-to-focus reticle
+              if (studio.focusIndicatorPoint != null)
+                FocusReticleOverlay(
+                  normalizedPoint: studio.focusIndicatorPoint!,
+                ),
+
+              // Capture shutter visual pulse
+              IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: studio.captureFlashPulse ? 0.35 : 0.0,
+                  duration: const Duration(milliseconds: 120),
+                  child: Container(color: Colors.white),
+                ),
+              ),
+
+              // Live optical detection / mode status guidance pill
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 14,
                 child: Center(
-                  child: Text(
-                    _idCardStep == 0
-                        ? 'Align Front of Card Here'
-                        : 'Align Back of Card Here',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      backgroundColor: Colors.black45,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: _buildDetectionStatusPill(studio),
                 ),
               ),
-            ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
-          // Book Mode Guide Overlay
-          if (widget.mode == ScanMode.book)
-            Center(
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.92,
-                height: MediaQuery.of(context).size.width * 0.92 * 0.75,
+  Widget _buildDetectionStatusPill(ScannerStudioState studio) {
+    final det = studio.detection;
+    final Color indicatorColor = switch (det.status) {
+      DocumentDetectionStatus.readyToCapture => const Color(0xFF34D399),
+      DocumentDetectionStatus.alignedHoldSteady => const Color(0xFF3B82F6),
+      DocumentDetectionStatus.lowLight ||
+      DocumentDetectionStatus.unstableMotion ||
+      DocumentDetectionStatus.partialOrTooClose => const Color(0xFFFBBF24),
+      _ => const Color(0xFF9CA0AB),
+    };
+
+    final String labelText;
+    if (studio.isCapturing) {
+      labelText = 'CAPTURING FRAME...';
+    } else if (studio.isImporting) {
+      labelText = 'IMPORTING GALLERY IMAGES...';
+    } else if (!studio.isAutoMode) {
+      labelText = 'MANUAL MODE · TAP SHUTTER';
+    } else {
+      labelText = det.guidanceText.toUpperCase();
+    }
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 320),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xD9090A0D),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: det.hasValidBoundary
+              ? const Color(0xFF3B82F6)
+              : Colors.white.withValues(alpha: 0.14),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.tealAccent, width: 2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Stack(
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 2,
-                        height: double.infinity,
-                        color: Colors.tealAccent.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    const Positioned(
-                      top: 10,
-                      left: 12,
-                      child: Text(
-                        'Left Page',
-                        style: TextStyle(
-                          color: Colors.white,
-                          backgroundColor: Colors.black45,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const Positioned(
-                      top: 10,
-                      right: 12,
-                      child: Text(
-                        'Right Page',
-                        style: TextStyle(
-                          color: Colors.white,
-                          backgroundColor: Colors.black45,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Padding(
-                        padding: EdgeInsets.only(bottom: 6.0),
-                        child: Text(
-                          'Align book spine with center line',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            backgroundColor: Colors.black54,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  color: indicatorColor,
+                  shape: BoxShape.circle,
                 ),
               ),
-            ),
-
-          // Whiteboard Guide Overlay
-          if (widget.mode == ScanMode.whiteboard)
-            Center(
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.92,
-                height: MediaQuery.of(context).size.width * 0.92 * 0.65,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: Colors.deepPurpleAccent,
-                    width: 2.5,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Align(
-                  alignment: Alignment.topCenter,
-                  child: Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: Text(
-                      'Frame whiteboard inside border · Auto contrast active',
-                      style: TextStyle(
-                        color: Colors.white,
-                        backgroundColor: Colors.black54,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  labelText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ScaneliqTypography.monoStyle(
+                    color: Colors.white,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
+            ],
+          ),
+          if (studio.isAutoMode && det.stabilityProgress > 0) ...[
+            const SizedBox(height: 5),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: det.stabilityProgress.clamp(0.0, 1.0),
+                minHeight: 2.5,
+                backgroundColor: Colors.white12,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF3B82F6),
+                ),
+              ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
 
-          // Bottom Shutter Controls Bar
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              color: Colors.black87,
-              child: SafeArea(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Recent Thumbnail Preview with badge
-                    GestureDetector(
-                      onTap: pageCount > 0 ? _finishScan : null,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Container(
-                            width: 54,
-                            height: 54,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade900,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.white30,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: pageCount > 0
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Image.file(
-                                      File(
-                                        session.pages.last.processedPath ??
-                                            session.pages.last.originalPath,
-                                      ),
-                                      fit: BoxFit.cover,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.photo_library,
-                                    color: Colors.white54,
-                                  ),
-                          ),
-                          if (pageCount > 0)
-                            Positioned(
-                              top: -4,
-                              right: -4,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.brandPrimary,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  '$pageCount',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+  Widget _buildModeSelectorStrip(
+    ScannerStudioState studio,
+    ScannerStudioNotifier notifier,
+  ) {
+    const items = <(ScanMode, String)>[
+      (ScanMode.document, 'Document'),
+      (ScanMode.batch, 'Batch'),
+      (ScanMode.idCard, 'ID Card'),
+      (ScanMode.book, 'Book'),
+      (ScanMode.whiteboard, 'Whiteboard'),
+      (ScanMode.questionSet, 'Questions'),
+    ];
 
-                    // Shutter Button
-                    GestureDetector(
-                      onTap: _isCapturing ? null : _capturePhoto,
-                      child: Container(
-                        width: 76,
-                        height: 76,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 4),
-                        ),
-                        child: Center(
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              color: _isCapturing
-                                  ? Colors.grey
-                                  : AppColors.brandPrimary,
-                              shape: BoxShape.circle,
-                            ),
-                            child: _isCapturing
-                                ? const Center(
-                                    child: SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2.5,
-                                      ),
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.white,
-                                    size: 30,
-                                  ),
-                          ),
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: items.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 18),
+        itemBuilder: (context, index) {
+          final (mode, label) = items[index];
+          final selected = studio.mode == mode;
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: studio.isCapturing ? null : () => notifier.setScanMode(mode),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : const Color(0xFF8C909B),
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  height: 2,
+                  width: selected ? 20 : 0,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBottomShutterDock(
+    ScannerStudioState studio,
+    ScannerStudioNotifier notifier,
+    ScanSessionState session,
+    int pageCount,
+  ) {
+    final bool canCapture =
+        studio.isReady && !studio.isCapturing && !studio.isImporting;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+      decoration: const BoxDecoration(
+        color: ScaneliqColorPalette.cameraStudioBg,
+        border: Border(
+          top: BorderSide(color: Color(0xFF1A1D24), width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Left: Page thumbnail stack (when pages exist) + Gallery Import button
+          Expanded(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (pageCount > 0) ...[
+                  _buildPageThumbnailStack(session, pageCount),
+                  const SizedBox(width: 8),
+                ],
+                Semantics(
+                  label: 'Import from gallery',
+                  button: true,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: studio.isCapturing || studio.isImporting
+                        ? null
+                        : _handleGalleryImport,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: ScaneliqColorPalette.cameraStageBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: ScaneliqColorPalette.cameraStageBorder,
                         ),
                       ),
-                    ),
-
-                    // Gallery Import Action
-                    GestureDetector(
-                      onTap: _importFromGallery,
-                      child: Container(
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white30, width: 1.5),
-                        ),
-                        child: const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
+                      child: studio.isImporting
+                          ? const Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Icon(
                               Icons.photo_library_outlined,
                               color: Colors.white,
-                              size: 22,
+                              size: 21,
                             ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Import',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Center: Precision Shutter Button
+          Semantics(
+            label: 'Capture document page',
+            button: true,
+            child: GestureDetector(
+              onTap: canCapture ? _handleCapturePressed : null,
+              child: SizedBox(
+                width: 74,
+                height: 74,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (studio.isAutoMode &&
+                        studio.detection.stabilityProgress > 0)
+                      SizedBox(
+                        width: 74,
+                        height: 74,
+                        child: CircularProgressIndicator(
+                          value: studio.detection.stabilityProgress,
+                          strokeWidth: 3,
+                          backgroundColor: Colors.white24,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF3B82F6),
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: canCapture ? Colors.white : Colors.white30,
+                            width: 2.5,
+                          ),
                         ),
                       ),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      width: studio.isCapturing ? 50 : 58,
+                      height: studio.isCapturing ? 50 : 58,
+                      decoration: BoxDecoration(
+                        color: canCapture
+                            ? Colors.white
+                            : const Color(0xFF2D313D),
+                        shape: BoxShape.circle,
+                      ),
+                      child: studio.isCapturing
+                          ? const Center(
+                              child: SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                  color: Color(0xFF0052FF),
+                                ),
+                              ),
+                            )
+                          : null,
                     ),
                   ],
                 ),
               ),
             ),
           ),
+
+          // Right: Review / Done CTA or ML Kit fallback shortcut
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: pageCount > 0
+                  ? Semantics(
+                      label: 'Review $pageCount captured pages',
+                      button: true,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0052FF),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                        onPressed:
+                            studio.isCapturing ? null : _finishToReview,
+                        child: Text(
+                          'Review ($pageCount)',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Semantics(
+                      label: 'Auto-scan with ML Kit',
+                      button: true,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: _launchMlKitFallbackScanner,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: ScaneliqColorPalette.cameraStageBg,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: ScaneliqColorPalette.cameraStageBorder,
+                            ),
+                          ),
+                          child: Text(
+                            'ML KIT',
+                            style: ScaneliqTypography.monoStyle(
+                              color: Colors.white70,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPageThumbnailStack(ScanSessionState session, int pageCount) {
+    final lastPage = session.pages.last;
+    final previewFile = File(lastPage.processedPath ?? lastPage.originalPath);
+    final badgeText = pageCount < 10 ? '0$pageCount' : '$pageCount';
+
+    return Semantics(
+      label: 'Preview captured pages stack, $pageCount pages',
+      button: true,
+      child: GestureDetector(
+        onTap: _finishToReview,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 44,
+              height: 54,
+              decoration: BoxDecoration(
+                color: ScaneliqColorPalette.cameraStageBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white38, width: 1.4),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: previewFile.existsSync()
+                  ? Image.file(
+                      previewFile,
+                      fit: BoxFit.cover,
+                      cacheWidth: 160,
+                      errorBuilder: (_, _, _) => const Icon(
+                        Icons.description_outlined,
+                        color: Colors.white54,
+                        size: 20,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.description_outlined,
+                      color: Colors.white54,
+                      size: 20,
+                    ),
+            ),
+            Positioned(
+              top: -5,
+              right: -6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0052FF),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: ScaneliqColorPalette.cameraStudioBg,
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  badgeText,
+                  style: ScaneliqTypography.monoStyle(
+                    color: Colors.white,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

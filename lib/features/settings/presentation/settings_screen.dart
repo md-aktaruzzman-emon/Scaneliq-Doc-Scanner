@@ -3,11 +3,17 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/core/theme/scaneliq_radius.dart';
+import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
+import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
+import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
 import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
+import 'package:scaneliq/core/widgets/scaneliq_mark.dart';
 import 'package:scaneliq/features/cloud_sync/data/cloud_backup_service.dart';
 import 'package:scaneliq/features/cloud_sync/data/device_sync_service.dart';
 import 'package:scaneliq/features/documents/presentation/trash_screen.dart';
@@ -414,563 +420,497 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final storage = AppStorageService.instance;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+    final horizontalPad = ScaneliqSpacing.adaptiveHorizontalPadding(
+      MediaQuery.sizeOf(context).width,
+    );
 
     return Scaffold(
+      backgroundColor: tokens.bg,
       appBar: AppBar(
-        title: const Text(
-          'Settings',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+        backgroundColor: tokens.bg,
+        title: Text('Settings', style: textTheme.headlineMedium),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: tokens.hairline),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        children: [
-          // Branding & About Header
-          _buildSectionHeader('Branding & About', isDark),
-          const SizedBox(height: 10),
-
-          // Brand Card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDark
-                    ? AppColors.borderSubtleDark
-                    : AppColors.borderSubtleLight,
-              ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(horizontalPad, 16, horizontalPad, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Branding & About Header
+            const ScaneliqSectionHeader(
+              title: 'Branding & About',
+              trailing: ScaneliqStatusLabel(text: 'v1.0.0+1'),
             ),
-            child: Row(
-              children: [
-                const ScaneliqLogo(size: 52, borderRadius: 12),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Scaneliq',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'Scan documents. Keep everything organized.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.surface2Dark
-                              : AppColors.brandLight,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'Version 1.0.0',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.brandPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+            const SizedBox(height: 10),
 
-          const SizedBox(height: 22),
-
-          // Privacy & Storage Policy
-          _buildSectionHeader('Privacy & Storage Policy', isDark),
-          const SizedBox(height: 10),
-
-          _buildCardGroup(
-            isDark: isDark,
-            children: [
-              _buildSettingTile(
-                icon: Icons.security_rounded,
-                iconColor: AppColors.success,
-                title: 'Local-First Document Safety',
-                subtitle: 'Scans stay in app-private storage. No automatic uploads or tracking.',
-                isDark: isDark,
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: tokens.surface,
+                borderRadius: ScaneliqRadius.folioBorderRadius,
+                border: Border.all(color: tokens.hairline),
               ),
-              _buildDivider(isDark),
-              _buildSettingTile(
-                icon: Icons.folder_special_rounded,
-                iconColor: AppColors.brandPrimary,
-                title: 'App Storage Paths',
-                subtitle:
-                    'Private on-device sandbox · Tap to view directory details',
-                isDark: isDark,
-                trailing: Icon(
-                  Icons.info_outline_rounded,
-                  size: 20,
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Storage Locations'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Exports Directory:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          SelectableText(
-                            storage.exportsDir.path,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Originals Directory:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          SelectableText(
-                            storage.originalsDir.path,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark
-                                  ? AppColors.textSecondaryDark
-                                  : AppColors.textSecondaryLight,
-                            ),
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Close'),
+              child: Row(
+                children: [
+                  const ScaneliqMark(size: 40),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Scaneliq', style: textTheme.headlineMedium),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Scan documents. Keep everything organized.',
+                          style: textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 8),
+                        const ScaneliqStatusLabel(
+                          text: 'LOCAL-FIRST EDITION',
+                          tone: ScaneliqStatusTone.accent,
                         ),
                       ],
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
-              _buildDivider(isDark),
-              _buildSettingTile(
-                icon: Icons.auto_delete_outlined,
-                iconColor: isDark
-                    ? AppColors.textSecondaryDark
-                    : AppColors.textSecondaryLight,
-                title: 'Trash & Recovery',
-                subtitle: 'View soft-deleted documents with 30-day retention.',
-                isDark: isDark,
-                trailing: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 20,
-                  color: isDark
-                      ? AppColors.textTertiaryDark
-                      : AppColors.textTertiaryLight,
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const TrashScreen()),
-                  );
-                },
+            ),
+
+            const SizedBox(height: 22),
+
+            // Appearance & Theme (Live Connected to themeModeProvider)
+            const ScaneliqSectionHeader(
+              title: 'Appearance',
+              trailing: ScaneliqStatusLabel(
+                text: 'PERSISTENT',
+                tone: ScaneliqStatusTone.accent,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            const _ThemeModeSelectorCard(),
 
-          const SizedBox(height: 22),
+            const SizedBox(height: 22),
 
-          // Supported OCR Languages
-          _buildSectionHeader('Supported OCR Languages', isDark),
-          const SizedBox(height: 10),
-
-          _buildCardGroup(
-            isDark: isDark,
-            children: [
-              _buildSettingTile(
-                icon: Icons.translate_rounded,
-                iconColor: const Color(0xFF4F46E5),
-                title: 'English & Latin Scripts (Active)',
-                subtitle: 'On-device ML Kit text recognition with offline Bangla support architecture.',
-                isDark: isDark,
-                trailing: const Icon(
-                  Icons.check_circle_rounded,
-                  color: AppColors.success,
-                  size: 20,
-                ),
+            // Security & App Lock (F-46)
+            const ScaneliqSectionHeader(
+              title: 'Security & App Lock',
+              trailing: ScaneliqStatusLabel(text: 'PBKDF2 · 100K'),
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.lock_outline_rounded,
+              title: 'App Lock (PIN)',
+              subtitle: _isLockEnabled
+                  ? 'Protected with full-screen security PIN'
+                  : 'Lock Scaneliq with a PIN code',
+              trailing: Switch(
+                value: _isLockEnabled,
+                onChanged: _toggleAppLock,
               ),
-            ],
-          ),
-
-          const SizedBox(height: 22),
-
-          // Security & App Lock (F-46)
-          _buildSectionHeader('Security & App Lock', isDark),
-          const SizedBox(height: 10),
-          _buildCardGroup(
-            isDark: isDark,
-            children: [
-              _buildSettingTile(
-                icon: Icons.lock_outline_rounded,
-                iconColor: AppColors.brandPrimary,
-                title: 'App Lock (PIN)',
-                subtitle: _isLockEnabled
-                    ? 'Protected with 4-digit security PIN'
-                    : 'Lock Scaneliq with a PIN code',
-                isDark: isDark,
+            ),
+            if (_isLockEnabled && _canUseBiometrics)
+              _buildHairlineSettingRow(
+                icon: Icons.fingerprint_rounded,
+                title: 'Biometric Unlock',
+                subtitle: 'Use fingerprint or facial recognition',
                 trailing: Switch(
-                  value: _isLockEnabled,
-                  onChanged: _toggleAppLock,
+                  value: _isBiometricsEnabled,
+                  onChanged: _toggleBiometrics,
                 ),
               ),
-              if (_isLockEnabled && _canUseBiometrics) ...[
-                _buildDivider(isDark),
-                _buildSettingTile(
-                  icon: Icons.fingerprint_rounded,
-                  iconColor: const Color(0xFF10B981),
-                  title: 'Biometric Unlock',
-                  subtitle: 'Use fingerprint or facial recognition',
-                  isDark: isDark,
-                  trailing: Switch(
-                    value: _isBiometricsEnabled,
-                    onChanged: _toggleBiometrics,
-                  ),
-                ),
-              ],
-              if (_isLockEnabled) ...[
-                _buildDivider(isDark),
-                _buildSettingTile(
-                  icon: Icons.password_rounded,
-                  iconColor: AppColors.brandPrimary,
-                  title: 'Change PIN',
-                  subtitle: 'Update your 4-digit security code',
-                  isDark: isDark,
-                  trailing: Icon(
-                    Icons.chevron_right_rounded,
-                    size: 20,
-                    color: isDark
-                        ? AppColors.textTertiaryDark
-                        : AppColors.textTertiaryLight,
-                  ),
-                  onTap: _changePin,
-                ),
-                _buildDivider(isDark),
-                _buildSettingTile(
-                  icon: Icons.timer_outlined,
-                  iconColor: AppColors.brandPrimary,
-                  title: 'Auto-Lock Timeout',
-                  subtitle: _timeoutSeconds == 0
-                      ? 'Immediately on exit'
-                      : 'After ${_timeoutSeconds ~/ 60} min',
-                  isDark: isDark,
-                  trailing: Icon(
-                    Icons.chevron_right_rounded,
-                    size: 20,
-                    color: isDark
-                        ? AppColors.textTertiaryDark
-                        : AppColors.textTertiaryLight,
-                  ),
-                  onTap: _selectTimeout,
-                ),
-              ],
+            if (_isLockEnabled) ...[
+              _buildHairlineSettingRow(
+                icon: Icons.password_rounded,
+                title: 'Change PIN',
+                subtitle: 'Update your security PIN code',
+                trailing: const ScaneliqStatusLabel(text: 'EDIT'),
+                onTap: _changePin,
+              ),
+              _buildHairlineSettingRow(
+                icon: Icons.timer_outlined,
+                title: 'Auto-Lock Timeout',
+                subtitle: _timeoutSeconds == 0
+                    ? 'Immediately on exit'
+                    : 'After ${_timeoutSeconds ~/ 60} min',
+                trailing: const ScaneliqStatusLabel(text: 'TIMER'),
+                onTap: _selectTimeout,
+              ),
             ],
-          ),
 
-          const SizedBox(height: 22),
+            const SizedBox(height: 22),
 
-          // Cloud Backup & Multi-Device Sync (F-42, F-43)
-          _buildSectionHeader('Cloud Backup & Multi-Device Sync', isDark),
-          const SizedBox(height: 10),
-          _buildCardGroup(
-            isDark: isDark,
-            children: [
-              _buildSettingTile(
-                icon: Icons.cloud_upload_outlined,
-                iconColor: const Color(0xFF0284C7),
-                title: 'Create Backup Archive (.scaneliq)',
-                subtitle: _isBackingUp ? 'Packaging database & documents...' : 'Export complete ZIP backup package with SHA-256 verification',
-                isDark: isDark,
-                trailing: _isBackingUp
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        Icons.chevron_right_rounded,
-                        size: 20,
-                        color: isDark
-                            ? AppColors.textTertiaryDark
-                            : AppColors.textTertiaryLight,
+            // Privacy & Storage Policy
+            const ScaneliqSectionHeader(title: 'Privacy & Storage Policy'),
+            _buildHairlineSettingRow(
+              icon: Icons.security_rounded,
+              title: 'Local-First Document Safety',
+              subtitle:
+                  'Scans stay in app-private storage. No automatic uploads or tracking.',
+              trailing: const ScaneliqStatusLabel(
+                text: 'LOCAL',
+                tone: ScaneliqStatusTone.success,
+              ),
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.folder_special_outlined,
+              title: 'App Storage Paths',
+              subtitle:
+                  'Private on-device sandbox · Tap to view directory details',
+              trailing: const ScaneliqStatusLabel(text: 'PATHS'),
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Storage Locations'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Exports Directory:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        SelectableText(
+                          storage.exportsDir.path,
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Originals Directory:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        SelectableText(
+                          storage.originalsDir.path,
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Close'),
                       ),
-                onTap: _isBackingUp ? null : _createBackup,
-              ),
-              _buildDivider(isDark),
-              _buildSettingTile(
-                icon: Icons.cloud_download_outlined,
-                iconColor: const Color(0xFF0284C7),
-                title: 'Restore Backup Archive',
-                subtitle:
-                    'Import documents from .scaneliq backup non-destructively',
-                isDark: isDark,
-                trailing: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 20,
-                  color: isDark
-                      ? AppColors.textTertiaryDark
-                      : AppColors.textTertiaryLight,
-                ),
-                onTap: _restoreBackup,
-              ),
-              _buildDivider(isDark),
-              _buildSettingTile(
-                icon: Icons.sync_lock_rounded,
-                iconColor: const Color(0xFF6366F1),
-                title: 'Encrypted Multi-Device Sync (E2EE)',
-                subtitle: 'Peer-to-peer sync with AES-256 passphrase & LWW conflict resolution',
-                isDark: isDark,
-                trailing: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 20,
-                  color: isDark
-                      ? AppColors.textTertiaryDark
-                      : AppColors.textTertiaryLight,
-                ),
-                onTap: _openSyncModal,
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 22),
-
-          // Scan Quality & Preferences
-          _buildSectionHeader('Scan & PDF Preferences', isDark),
-          const SizedBox(height: 10),
-
-          _buildCardGroup(
-            isDark: isDark,
-            children: [
-              _buildSettingTile(
-                icon: Icons.palette_outlined,
-                iconColor: AppColors.brandPrimary,
-                title: 'Theme Mode',
-                subtitle: 'System default (follows device appearance)',
-                isDark: isDark,
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
+                    ],
                   ),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppColors.surface2Dark
-                        : AppColors.surface2Light,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    isDark ? 'Dark' : 'Light',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+                );
+              },
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.auto_delete_outlined,
+              title: 'Trash & Recovery',
+              subtitle: 'View soft-deleted documents with 30-day retention.',
+              trailing: const ScaneliqStatusLabel(text: '30 DAYS'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TrashScreen()),
+                );
+              },
+            ),
+
+            const SizedBox(height: 22),
+
+            // Cloud Backup & Local E2EE Sync
+            const ScaneliqSectionHeader(
+              title: 'Backup & Encrypted Vault Sync',
+              trailing: ScaneliqStatusLabel(text: 'AES-256'),
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.cloud_upload_outlined,
+              title: 'Create Backup Archive (.scaneliq)',
+              subtitle: _isBackingUp
+                  ? 'Packaging database & documents…'
+                  : 'Export encrypted backup archive with SHA-256 verification',
+              trailing: _isBackingUp
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const ScaneliqStatusLabel(
+                      text: 'EXPORT',
+                      tone: ScaneliqStatusTone.accent,
                     ),
-                  ),
-                ),
-              ),
-              _buildDivider(isDark),
-              _buildSettingTile(
-                icon: Icons.picture_as_pdf_outlined,
-                iconColor: AppColors.brandPrimary,
-                title: 'Default Page Format',
-                subtitle: 'ISO A4 (210 × 297 mm)',
-                isDark: isDark,
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppColors.surface2Dark
-                        : AppColors.surface2Light,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text(
-                    'A4',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-              _buildDivider(isDark),
-              _buildSettingTile(
-                icon: Icons.crop_rotate_outlined,
-                iconColor: AppColors.brandPrimary,
-                title: 'Auto-Crop & Edge Detection',
-                subtitle: 'Google ML Kit on-device boundary detection',
-                isDark: isDark,
-                trailing: const Icon(
-                  Icons.check,
-                  color: AppColors.success,
-                  size: 20,
-                ),
-              ),
-              _buildDivider(isDark),
-              _buildSettingTile(
-                icon: Icons.info_outline_rounded,
-                iconColor: AppColors.brandPrimary,
-                title: 'Open Source Licenses',
-                subtitle: 'View software third-party licenses',
-                isDark: isDark,
-                trailing: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 20,
-                  color: isDark
-                      ? AppColors.textTertiaryDark
-                      : AppColors.textTertiaryLight,
-                ),
-                onTap: () {
-                  showLicensePage(
-                    context: context,
-                    applicationName: 'Scaneliq',
-                    applicationVersion: '1.0.0',
-                    applicationIcon: const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: ScaneliqLogo(size: 48),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+              onTap: _isBackingUp ? null : _createBackup,
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.cloud_download_outlined,
+              title: 'Restore Backup Archive',
+              subtitle:
+                  'Import documents from .scaneliq archive non-destructively',
+              trailing: const ScaneliqStatusLabel(text: 'RESTORE'),
+              onTap: _restoreBackup,
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.sync_lock_outlined,
+              title: 'Encrypted Sync Envelope (Local E2EE)',
+              subtitle:
+                  'Offline device sync package (Cloud remote sync planned)',
+              trailing: const ScaneliqStatusLabel(text: 'LOCAL E2EE'),
+              onTap: _openSyncModal,
+            ),
 
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
+            const SizedBox(height: 22),
 
-  Widget _buildCardGroup({
-    required List<Widget> children,
-    required bool isDark,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surface1Dark : AppColors.surface1Light,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? AppColors.borderSubtleDark
-              : AppColors.borderSubtleLight,
+            // Supported OCR Languages
+            const ScaneliqSectionHeader(title: 'Supported OCR Languages'),
+            _buildHairlineSettingRow(
+              icon: Icons.translate_rounded,
+              title: 'English & Latin Scripts (Active)',
+              subtitle:
+                  'On-device ML Kit text recognition with Indic/Bangla architecture.',
+              trailing: const ScaneliqStatusLabel(
+                text: 'ACTIVE',
+                tone: ScaneliqStatusTone.success,
+              ),
+            ),
+
+            const SizedBox(height: 22),
+
+            // Scan & PDF Defaults
+            const ScaneliqSectionHeader(title: 'Scan & PDF Preferences'),
+            _buildHairlineSettingRow(
+              icon: Icons.picture_as_pdf_outlined,
+              title: 'Default Page Format',
+              subtitle: 'ISO A4 (210 × 297 mm) · Zero watermarks',
+              trailing: const ScaneliqStatusLabel(text: 'ISO A4'),
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.crop_rotate_outlined,
+              title: 'Auto-Crop & Edge Detection',
+              subtitle: 'Google ML Kit on-device boundary detection',
+              trailing: const ScaneliqStatusLabel(
+                text: 'ENABLED',
+                tone: ScaneliqStatusTone.success,
+              ),
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.info_outline_rounded,
+              title: 'Open Source Licenses',
+              subtitle: 'View software third-party licenses',
+              trailing: const ScaneliqStatusLabel(text: 'LICENSES'),
+              onTap: () {
+                showLicensePage(
+                  context: context,
+                  applicationName: 'Scaneliq',
+                  applicationVersion: '1.0.0',
+                  applicationIcon: const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: ScaneliqLogo(size: 48),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
-      child: Column(children: children),
     );
   }
 
-  Widget _buildSettingTile({
+  Widget _buildHairlineSettingRow({
     required IconData icon,
-    required Color iconColor,
     required String title,
     required String subtitle,
     Widget? trailing,
     VoidCallback? onTap,
-    required bool isDark,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: iconColor, size: 20),
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: tokens.hairline, width: 1)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 21, color: tokens.textPrimary),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: textTheme.titleMedium),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: textTheme.bodySmall),
+                ],
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark
-                            ? AppColors.textSecondaryDark
-                            : AppColors.textSecondaryLight,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (trailing != null) ...[const SizedBox(width: 8), trailing],
-            ],
-          ),
+            ),
+            ?trailing,
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildDivider(bool isDark) {
-    return Divider(
-      height: 1,
-      indent: 68,
-      endIndent: 14,
-      color: isDark
-          ? AppColors.borderDark.withValues(alpha: 0.5)
-          : AppColors.borderLight.withValues(alpha: 0.7),
+/// Theme Mode Selector card wired directly to `themeModeProvider`, with a
+/// defensive fallback when mounted outside `ProviderScope` in isolated tests.
+class _ThemeModeSelectorCard extends StatefulWidget {
+  const _ThemeModeSelectorCard();
+
+  @override
+  State<_ThemeModeSelectorCard> createState() => _ThemeModeSelectorCardState();
+}
+
+class _ThemeModeSelectorCardState extends State<_ThemeModeSelectorCard> {
+  ThemeMode _standaloneMode = ThemeMode.system;
+
+  bool _hasProviderScope(BuildContext context) {
+    try {
+      ProviderScope.containerOf(context, listen: false);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_hasProviderScope(context)) {
+      return Consumer(
+        builder: (ctx, ref, _) {
+          final currentMode = ref.watch(themeModeProvider);
+          return _buildSelector(
+            context: ctx,
+            currentMode: currentMode,
+            onSelect: (mode) =>
+                ref.read(themeModeProvider.notifier).setThemeMode(mode),
+          );
+        },
+      );
+    }
+
+    return _buildSelector(
+      context: context,
+      currentMode: _standaloneMode,
+      onSelect: (mode) => setState(() => _standaloneMode = mode),
     );
   }
 
-  Widget _buildSectionHeader(String title, bool isDark) {
-    return Text(
-      title,
-      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+  Widget _buildSelector({
+    required BuildContext context,
+    required ThemeMode currentMode,
+    required ValueChanged<ThemeMode> onSelect,
+  }) {
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+
+    final activeSubtitle = switch (currentMode) {
+      ThemeMode.system => 'System Default (Follows device appearance)',
+      ThemeMode.light => 'Gallery Alabaster (#FAF9F6)',
+      ThemeMode.dark => 'Carbon Studio (#0D0E11)',
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.hairline, width: 1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.palette_outlined, size: 21, color: tokens.textPrimary),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Theme Mode', style: textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text(activeSubtitle, style: textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _ThemeOptionPill(
+                label: 'System Default',
+                selected: currentMode == ThemeMode.system,
+                onTap: () => onSelect(ThemeMode.system),
+              ),
+              const SizedBox(width: 8),
+              _ThemeOptionPill(
+                label: 'Light',
+                selected: currentMode == ThemeMode.light,
+                onTap: () => onSelect(ThemeMode.light),
+              ),
+              const SizedBox(width: 8),
+              _ThemeOptionPill(
+                label: 'Dark',
+                selected: currentMode == ThemeMode.dark,
+                onTap: () => onSelect(ThemeMode.dark),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeOptionPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ThemeOptionPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    return Expanded(
+      child: Material(
+        color: selected ? tokens.accentSoft : tokens.surface,
+        borderRadius: ScaneliqRadius.inputBorderRadius,
+        child: InkWell(
+          borderRadius: ScaneliqRadius.inputBorderRadius,
+          onTap: onTap,
+          child: Container(
+            height: 40,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              borderRadius: ScaneliqRadius.inputBorderRadius,
+              border: Border.all(
+                color: selected ? tokens.accent : tokens.hairline,
+                width: selected ? 1.5 : 1,
+              ),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: selected ? tokens.accent : tokens.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

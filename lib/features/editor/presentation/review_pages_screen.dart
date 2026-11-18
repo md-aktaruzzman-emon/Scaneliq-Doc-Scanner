@@ -1,11 +1,17 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/models/document_models.dart';
-import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/core/theme/scaneliq_colors.dart';
+import 'package:scaneliq/core/theme/scaneliq_radius.dart';
+import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
+import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
+import 'package:scaneliq/core/theme/scaneliq_typography.dart';
+import 'package:scaneliq/core/widgets/scaneliq_buttons.dart';
+import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
+import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/editor/presentation/edit_page_screen.dart';
@@ -13,7 +19,13 @@ import 'package:scaneliq/features/ocr/data/ocr_service.dart';
 import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
+import 'package:scaneliq/features/scanner/presentation/scanner_studio_provider.dart';
 
+/// Concept A (Editorial Gallery Minimal) Captured Pages Review Screen.
+///
+/// Displays a large centered page stage, page index indicator, horizontal
+/// thumbnail strip, Retake, Delete, Add Page, Continue Editing ([EditPageScreen]),
+/// and Finish Capture / Save PDF workflow.
 class ReviewPagesScreen extends ConsumerStatefulWidget {
   const ReviewPagesScreen({super.key});
 
@@ -23,6 +35,7 @@ class ReviewPagesScreen extends ConsumerStatefulWidget {
 
 class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
   late TextEditingController _titleController;
+  int _selectedPageIndex = 0;
   bool _isExporting = false;
 
   @override
@@ -41,15 +54,11 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
   Future<void> _exportAndSavePdf() async {
     final session = ref.read(scanSessionProvider);
     if (session.pages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot export empty document.')),
-      );
+      showScaneliqToast(context, 'Cannot finish empty scan session.');
       return;
     }
 
-    setState(() {
-      _isExporting = true;
-    });
+    setState(() => _isExporting = true);
 
     try {
       final doc = ScannedDocument(
@@ -62,7 +71,6 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         pageCount: session.pages.length,
       );
 
-      // Extract OCR for each page for searchable PDF text layer & library indexing
       final ocrBoxesByPage = <int, List<OcrBoundingBox>>{};
       final ocrTexts = <String>[];
 
@@ -79,7 +87,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
               ocrTexts.add(pageOcr.text.trim());
             }
           } catch (_) {
-            // Non-critical: OCR extraction can fall back gracefully
+            // Non-critical: OCR failure never blocks document PDF export.
           }
         }
       }
@@ -91,7 +99,6 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         ocrBoxesByPage: ocrBoxesByPage.isNotEmpty ? ocrBoxesByPage : null,
       );
 
-      // Save verified export path to database and mark as finalized (not draft)
       final finalizedDoc = doc.copyWith(
         exportPath: pdfFile.path,
         isDraft: false,
@@ -101,7 +108,6 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         session.pages,
       );
 
-      // Persist full-text OCR in SQLite for instant library search
       if (ocrTexts.isNotEmpty) {
         await AppDatabaseService.instance.saveDocumentOcr(
           finalizedDoc.id,
@@ -109,85 +115,113 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         );
       }
 
-      // Invalidate library and draft providers
       ref.invalidate(documentsListProvider);
       ref.invalidate(searchedDocumentsProvider);
       ref.invalidate(latestDraftProvider);
 
-      if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
+      if (!mounted) return;
+      setState(() => _isExporting = false);
 
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.check_circle, color: AppColors.success),
-                SizedBox(width: 8),
-                Text('Saved to Scaneliq'),
-              ],
-            ),
-            content: Text(
-              'PDF document successfully created and saved locally with ${session.pages.length} pages.${ocrTexts.isNotEmpty ? ' Text made searchable.' : ''}',
-            ),
-            actions: [
-              TextButton(
+      await showScaneliqBottomSheet<void>(
+        context: context,
+        builder: (ctx) {
+          final tokens = ctx.tokens;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    color: tokens.success,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Saved to Scaneliq',
+                      style: Theme.of(ctx).textTheme.headlineMedium,
+                    ),
+                  ),
+                  ScaneliqStatusLabel(
+                    text: '${session.pages.length} PAGES',
+                    tone: ScaneliqStatusTone.success,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'PDF saved locally${ocrTexts.isNotEmpty ? ' with searchable OCR text layer.' : '.'}',
+                style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                  color: tokens.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 18),
+              ScaneliqPrimaryButton(
+                label: 'Done',
                 onPressed: () {
                   Navigator.pop(ctx);
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          DocumentViewerScreen(document: finalizedDoc),
+                  Navigator.of(context).pop();
+                },
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: ScaneliqSecondaryButton(
+                      label: 'View PDF',
+                      icon: Icons.picture_as_pdf_outlined,
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                DocumentViewerScreen(document: finalizedDoc),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-                child: const Text('View PDF'),
-              ),
-              TextButton.icon(
-                icon: const Icon(Icons.image),
-                label: const Text('Export Images (JPG)'),
-                onPressed: () async {
-                  await _exportAllPagesAsJpegs(session);
-                },
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  SharePlus.instance.share(
-                    ShareParams(
-                      text: doc.title,
-                      files: [XFile(pdfFile.path, mimeType: 'application/pdf')],
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ScaneliqSecondaryButton(
+                      label: 'Share',
+                      icon: Icons.share_outlined,
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        SharePlus.instance.share(
+                          ShareParams(
+                            text: doc.title,
+                            files: [
+                              XFile(pdfFile.path, mimeType: 'application/pdf'),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-                child: const Text('Share PDF'),
+                  ),
+                ],
               ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx); // Close dialog
-                  Navigator.pop(context); // Return to Home
-                },
-                child: const Text('Done'),
+              const SizedBox(height: 8),
+              Center(
+                child: ScaneliqTextButton(
+                  label: 'Export All Pages as JPEG',
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await _exportAllPagesAsJpegs(session);
+                  },
+                ),
               ),
             ],
-          ),
-        );
-      }
+          );
+        },
+      );
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Export failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        setState(() => _isExporting = false);
+        showScaneliqToast(context, 'Save failed: $e');
       }
     }
   }
@@ -196,9 +230,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
     final session = ref.read(scanSessionProvider);
     if (session.pages.length != 2) return;
 
-    setState(() {
-      _isExporting = true;
-    });
+    setState(() => _isExporting = true);
 
     try {
       final frontFile = File(
@@ -222,27 +254,19 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
           .replaceWithSinglePage(stitchedJpg);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Combined Front & Back into 2-in-1 ID Card Sheet!'),
-            backgroundColor: AppColors.success,
-          ),
+        setState(() => _selectedPageIndex = 0);
+        showScaneliqToast(
+          context,
+          'Combined Front & Back into 2-in-1 ID Card sheet.',
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('ID Card stitching failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        showScaneliqToast(context, 'ID Card stitching failed: $e');
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
+        setState(() => _isExporting = false);
       }
     }
   }
@@ -261,277 +285,243 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Exported ${exportedFiles.length} JPEGs to exports folder.',
-            ),
-            action: SnackBarAction(
-              label: 'Share All',
-              onPressed: () {
-                SharePlus.instance.share(
-                  ShareParams(
-                    text: 'Scaneliq Exported Pages',
-                    files: exportedFiles,
-                  ),
-                );
-              },
-            ),
-          ),
+        showScaneliqToast(
+          context,
+          'Exported ${exportedFiles.length} JPEGs to exports folder.',
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Exporting images failed: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        showScaneliqToast(context, 'Exporting images failed: $e');
       }
     }
   }
 
   void _showAddPagesSheet() {
-    showModalBottomSheet(
+    showScaneliqBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.add_photo_alternate_outlined,
-                      color: AppColors.brandPrimary,
-                    ),
-                    SizedBox(width: 10),
-                    Text(
-                      'Add Pages to Document',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(
-                  Icons.document_scanner_rounded,
-                  color: AppColors.brandPrimary,
-                ),
-                title: const Text('Google ML Kit Document Scanner'),
-                subtitle: const Text(
-                  'Automatic corner boundary detection & deskewing',
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  ref.read(scanSessionProvider.notifier).startScannerCapture();
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.camera_alt_outlined,
-                  color: Color(0xFF2563EB),
-                ),
-                title: const Text('Continuous Camera Mode'),
-                subtitle: const Text(
-                  'Rapid multi-page viewfinder with custom guides',
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const ContinuousCameraScreen(mode: ScanMode.batch),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.photo_library_outlined,
-                  color: Color(0xFF059669),
-                ),
-                title: const Text('Import from Photo Gallery'),
-                subtitle: const Text('Pick existing JPG, PNG, or WebP images'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  final picked = await FilePicker.pickFiles(
-                    type: FileType.custom,
-                    allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-                  );
-                  if (picked.isNotEmpty) {
-                    final files = picked
-                        .where((p) => p.path != null)
-                        .map((p) => File(p.path!))
-                        .toList();
-                    if (files.isNotEmpty) {
-                      await ref
-                          .read(scanSessionProvider.notifier)
-                          .importFiles(files);
-                    }
-                  }
-                },
-              ),
-            ],
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Add Pages', style: Theme.of(ctx).textTheme.headlineMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Append additional scans or gallery photos to this document',
+            style: Theme.of(ctx).textTheme.bodySmall,
           ),
-        ),
+          const SizedBox(height: 12),
+          const ScaneliqHairlineDivider(),
+          ScaneliqContextMenuRow(
+            icon: Icons.camera_alt_outlined,
+            title: 'Scan in Camera Studio',
+            subtitle: 'Continuous multi-page optical capture',
+            onTap: () async {
+              Navigator.pop(ctx);
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const ContinuousCameraScreen(mode: ScanMode.batch),
+                ),
+              );
+            },
+          ),
+          const ScaneliqHairlineDivider(),
+          ScaneliqContextMenuRow(
+            icon: Icons.photo_library_outlined,
+            title: 'Import from Gallery',
+            subtitle: 'Select JPG, PNG, or WebP images',
+            onTap: () async {
+              Navigator.pop(ctx);
+              final result = await ref
+                  .read(galleryImportServiceProvider)
+                  .pickAndValidateImages();
+              if (result.cancelled) return;
+              if (!result.hasAccepted) {
+                if (mounted) {
+                  showScaneliqToast(
+                    context,
+                    result.rejections.isNotEmpty
+                        ? result.rejections.first.reason
+                        : 'No valid images selected.',
+                  );
+                }
+                return;
+              }
+              final count = await ref
+                  .read(scanSessionProvider.notifier)
+                  .importFiles(result.accepted.map((a) => a.file).toList());
+              if (count > 0 && mounted) {
+                final total = ref.read(scanSessionProvider).pages.length;
+                setState(() => _selectedPageIndex = total - 1);
+                showScaneliqToast(context, 'Added $count page(s).');
+              }
+            },
+          ),
+          const ScaneliqHairlineDivider(),
+          ScaneliqContextMenuRow(
+            icon: Icons.document_scanner_outlined,
+            title: 'Google ML Kit Scanner',
+            subtitle: 'Native boundary crop & deskew scanner',
+            onTap: () {
+              Navigator.pop(ctx);
+              ref.read(scanSessionProvider.notifier).startScannerCapture();
+            },
+          ),
+        ],
       ),
     );
   }
 
-  void _showRetakeOptions(DocumentPage page) {
-    showModalBottomSheet(
+  void _showRetakeSheet(DocumentPage page, int pageIndex) {
+    showScaneliqBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 8,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.cameraswitch_outlined,
-                      color: AppColors.brandPrimary,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Retake Page ${page.pageOrder + 1}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(
-                  Icons.document_scanner,
-                  color: AppColors.brandPrimary,
-                ),
-                title: const Text('Scan with Document Scanner'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await ref
-                      .read(scanSessionProvider.notifier)
-                      .retakePage(page.id);
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.photo_library_outlined,
-                  color: Color(0xFF059669),
-                ),
-                title: const Text('Select Replacement from Gallery'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  final picked = await FilePicker.pickFiles(
-                    type: FileType.custom,
-                    allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-                  );
-                  if (picked.isNotEmpty && picked.first.path != null) {
-                    await ref
-                        .read(scanSessionProvider.notifier)
-                        .retakePageWithFile(page.id, File(picked.first.path!));
-                  }
-                },
-              ),
-            ],
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Retake Page ${pageIndex + 1}',
+            style: Theme.of(ctx).textTheme.headlineMedium,
           ),
-        ),
+          const SizedBox(height: 4),
+          Text(
+            'Replace only this page while preserving page order',
+            style: Theme.of(ctx).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          const ScaneliqHairlineDivider(),
+          ScaneliqContextMenuRow(
+            icon: Icons.camera_alt_outlined,
+            title: 'Retake in Camera Studio',
+            subtitle: 'Capture a fresh photo replacement',
+            onTap: () async {
+              Navigator.pop(ctx);
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ContinuousCameraScreen(
+                    mode: ScanMode.document,
+                    retakePageId: page.id,
+                  ),
+                ),
+              );
+            },
+          ),
+          const ScaneliqHairlineDivider(),
+          ScaneliqContextMenuRow(
+            icon: Icons.photo_library_outlined,
+            title: 'Pick Replacement from Gallery',
+            subtitle: 'Select an existing image from device',
+            onTap: () async {
+              Navigator.pop(ctx);
+              final result = await ref
+                  .read(galleryImportServiceProvider)
+                  .pickAndValidateImages();
+              if (result.cancelled) return;
+              if (!result.hasAccepted) {
+                if (mounted) {
+                  showScaneliqToast(
+                    context,
+                    result.rejections.isNotEmpty
+                        ? result.rejections.first.reason
+                        : 'Selected file is invalid.',
+                  );
+                }
+                return;
+              }
+              final ok = await ref
+                  .read(scanSessionProvider.notifier)
+                  .retakePageWithFile(page.id, result.accepted.first.file);
+              if (ok && mounted) {
+                showScaneliqToast(context, 'Page ${pageIndex + 1} updated.');
+              }
+            },
+          ),
+          const ScaneliqHairlineDivider(),
+          ScaneliqContextMenuRow(
+            icon: Icons.document_scanner_outlined,
+            title: 'Retake with ML Kit Scanner',
+            onTap: () async {
+              Navigator.pop(ctx);
+              await ref
+                  .read(scanSessionProvider.notifier)
+                  .retakePage(page.id);
+            },
+          ),
+        ],
       ),
     );
   }
 
   Future<void> _confirmDeletePage(DocumentPage page, int pageIndex) async {
-    final confirm = await showDialog<bool>(
+    final confirm = await showScaneliqConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Page?'),
-        content: Text('Are you sure you want to delete Page ${pageIndex + 1}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+      title: 'Delete Page ${pageIndex + 1}?',
+      message: 'Remove this page from the active scan session.',
+      confirmLabel: 'Delete',
+      isDestructive: true,
+    );
+    if (!confirm || !mounted) return;
+
+    await ref.read(scanSessionProvider.notifier).removePage(page.id);
+    if (!mounted) return;
+    final remaining = ref.read(scanSessionProvider).pages.length;
+    setState(() {
+      if (remaining == 0) {
+        _selectedPageIndex = 0;
+      } else if (_selectedPageIndex >= remaining) {
+        _selectedPageIndex = remaining - 1;
+      }
+    });
+  }
+
+  Future<void> _renameDocumentSheet() async {
+    final controller = TextEditingController(text: _titleController.text);
+    final updated = await showScaneliqBottomSheet<String>(
+      context: context,
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Document Title',
+            style: Theme.of(ctx).textTheme.headlineMedium,
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: AppColors.error),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Title',
+              hintText: 'Scan_Document',
             ),
+            onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+          ),
+          const SizedBox(height: 16),
+          ScaneliqPrimaryButton(
+            label: 'Update Title',
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
           ),
         ],
       ),
     );
-
-    if (confirm == true) {
-      await ref.read(scanSessionProvider.notifier).removePage(page.id);
+    controller.dispose();
+    if (updated != null && updated.isNotEmpty) {
+      _titleController.text = updated;
+      ref.read(scanSessionProvider.notifier).updateTitle(updated);
+      if (mounted) setState(() {});
     }
   }
 
-  void _showImagePreviewDialog(File file, int pageIndex) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(12),
-        child: Stack(
-          alignment: Alignment.topRight,
-          children: [
-            InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 4.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(file, fit: BoxFit.contain),
-              ),
-            ),
-            IconButton(
-              icon: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.close, color: Colors.white, size: 20),
-              ),
-              onPressed: () => Navigator.pop(ctx),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _openPageEditor(DocumentPage page) {
-    Navigator.push(
-      context,
+    final pages = ref.read(scanSessionProvider).pages;
+    final idx = pages.indexWhere((p) => p.id == page.id);
+    Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => EditPageScreen(
           page: page,
+          pages: pages,
+          initialPageIndex: idx >= 0 ? idx : 0,
           onApply: (recipe) {
             ref
                 .read(scanSessionProvider.notifier)
@@ -542,491 +532,578 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
     );
   }
 
-  Future<void> _applyBatchFilter(PageFilter filter) async {
-    setState(() => _isExporting = true);
-    await ref.read(scanSessionProvider.notifier).applyFilterToAllPages(filter);
+  Future<void> _movePageOrder(int currentIndex, int targetIndex) async {
+    final notifier = ref.read(scanSessionProvider.notifier);
+    final adjustedNew =
+        targetIndex > currentIndex ? targetIndex + 1 : targetIndex;
+    await notifier.reorderPages(currentIndex, adjustedNew);
     if (mounted) {
-      setState(() => _isExporting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Applied ${filter.name.toUpperCase()} filter to all pages.',
-          ),
-          duration: const Duration(seconds: 1),
-        ),
-      );
+      setState(() => _selectedPageIndex = targetIndex);
     }
-  }
-
-  Widget _buildQuickFilterChip(String label, PageFilter filter, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: ActionChip(
-        avatar: Icon(icon, size: 14, color: AppColors.brandPrimary),
-        label: Text(label, style: const TextStyle(fontSize: 12)),
-        onPressed: _isExporting ? null : () => _applyBatchFilter(filter),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(scanSessionProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+    final horizontalPad = ScaneliqSpacing.adaptiveHorizontalPadding(
+      MediaQuery.sizeOf(context).width,
+    );
+
+    if (session.pages.isEmpty) {
+      return Scaffold(
+        backgroundColor: tokens.bg,
+        appBar: AppBar(
+          title: const Text('Capture Review'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+        ),
+        body: Padding(
+          padding: EdgeInsets.all(horizontalPad),
+          child: ScaneliqEmptyState(
+            icon: Icons.document_scanner_outlined,
+            title: 'No captured pages yet',
+            description:
+                'Open the Optical Camera Studio or import document images from your device.',
+            primaryActionLabel: 'Open Camera Studio',
+            onPrimaryAction: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    const ContinuousCameraScreen(mode: ScanMode.batch),
+              ),
+            ),
+            secondaryActionLabel: 'Add Pages',
+            onSecondaryAction: _showAddPagesSheet,
+          ),
+        ),
+      );
+    }
+
+    final safeIndex = _selectedPageIndex.clamp(0, session.pages.length - 1);
+    final activePage = session.pages[safeIndex];
+    final activeFile = File(
+      activePage.processedPath ?? activePage.originalPath,
+    );
+    final pageCount = session.pages.length;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Review Pages'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-            tooltip: 'Add More Pages',
-            onPressed: _showAddPagesSheet,
-          ),
-        ],
-      ),
-      body: session.pages.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+      backgroundColor: tokens.bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 1. Minimal Concept A Header
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPad - 8,
+                8,
+                horizontalPad,
+                8,
+              ),
+              child: Row(
                 children: [
-                  const Icon(
-                    Icons.document_scanner,
-                    size: 64,
-                    color: AppColors.textSecondaryLight,
+                  ScaneliqIconButton(
+                    icon: Icons.arrow_back_rounded,
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.of(context).maybePop(),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('No pages captured yet.'),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('Capture Pages'),
-                    onPressed: _showAddPagesSheet,
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: _renameDocumentSheet,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _titleController.text.trim().isEmpty
+                                    ? session.title
+                                    : _titleController.text.trim(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: textTheme.titleMedium,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Icon(
+                              Icons.edit_outlined,
+                              size: 15,
+                              color: tokens.textTertiary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: tokens.accent,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 38),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    onPressed: _isExporting ? null : _exportAndSavePdf,
+                    child: _isExporting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Finish Capture',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ],
               ),
-            )
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: TextField(
-                    controller: _titleController,
-                    decoration: InputDecoration(
-                      labelText: 'Document Name',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.edit_note),
-                    ),
-                    onChanged: (val) {
-                      ref.read(scanSessionProvider.notifier).updateTitle(val);
-                    },
-                  ),
+            ),
+
+            const ScaneliqHairlineDivider(),
+
+            // 2. Large Page Preview Stage
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPad,
+                  vertical: 14,
                 ),
-                if (session.pages.length == 2)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
+                child: Column(
+                  children: [
+                    // Status / Page count bar
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: tokens.surfaceSubtle,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: tokens.hairline),
+                          ),
+                          child: Text(
+                            'PAGE ${_twoDigits(safeIndex + 1)} OF ${_twoDigits(pageCount)}',
+                            style: ScaneliqTypography.monoStyle(
+                              color: tokens.textPrimary,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (activePage.width != null &&
+                                activePage.height != null)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: ScaneliqStatusLabel(
+                                  text:
+                                      '${activePage.width}×${activePage.height}',
+                                  tone: ScaneliqStatusTone.neutral,
+                                ),
+                              ),
+                            ScaneliqStatusLabel(
+                              text: activePage.editRecipe.filter.name
+                                  .toUpperCase(),
+                              tone: activePage.editRecipe.hasPerspective
+                                  ? ScaneliqStatusTone.accent
+                                  : ScaneliqStatusTone.neutral,
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.brandPrimary.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.brandPrimary.withValues(alpha: 0.3),
+
+                    const SizedBox(height: 14),
+
+                    // Large Paper Preview Card
+                    Center(
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          maxWidth: 340,
+                          maxHeight: 370,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(
+                            ScaneliqRadius.paper,
+                          ),
+                          border: Border.all(
+                            color: tokens.paperBorder,
+                            width: 1,
+                          ),
+                          boxShadow: tokens.paperShadow,
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: AspectRatio(
+                          aspectRatio: 0.72,
+                          child: activeFile.existsSync()
+                              ? InteractiveViewer(
+                                  minScale: 1.0,
+                                  maxScale: 3.5,
+                                  child: Image.file(
+                                    activeFile,
+                                    key: ValueKey(
+                                      '${activePage.id}_${activePage.processedPath}_${activePage.originalPath}',
+                                    ),
+                                    fit: BoxFit.contain,
+                                    cacheWidth: 1080,
+                                    errorBuilder: (_, _, _) =>
+                                        _missingPagePlaceholder(tokens),
+                                  ),
+                                )
+                              : _missingPagePlaceholder(tokens),
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.badge_outlined,
-                            color: AppColors.brandPrimary,
-                            size: 28,
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '2-in-1 ID Card Sheet',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  'Combine front & back onto single A4 page',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondaryLight,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          FilledButton.tonal(
-                            onPressed: _isExporting ? null : _stitch2In1IdCard,
-                            child: const Text('Combine'),
-                          ),
-                        ],
-                      ),
                     ),
-                  ),
-                // Quick Batch Filter Preset Bar (F-11, F-12)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+
+                    const SizedBox(height: 14),
+
+                    // Compact Page Stage Controls (Retake, Delete, Continue Editing, Add)
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _ReviewStageActionChip(
+                          icon: Icons.cameraswitch_outlined,
+                          label: 'Retake',
+                          onPressed: () =>
+                              _showRetakeSheet(activePage, safeIndex),
+                        ),
+                        _ReviewStageActionChip(
+                          icon: Icons.tune_rounded,
+                          label: 'Continue Editing',
+                          accent: true,
+                          onPressed: () => _openPageEditor(activePage),
+                        ),
+                        _ReviewStageActionChip(
+                          icon: Icons.add_photo_alternate_outlined,
+                          label: 'Add Page',
+                          onPressed: _showAddPagesSheet,
+                        ),
+                        _ReviewStageActionChip(
+                          icon: Icons.delete_outline_rounded,
+                          label: 'Delete',
+                          destructive: true,
+                          onPressed: () =>
+                              _confirmDeletePage(activePage, safeIndex),
+                        ),
+                      ],
+                    ),
+
+                    // Page Reorder Quick Controls (when multiple pages exist)
+                    if (pageCount > 1) ...[
+                      const SizedBox(height: 10),
                       Row(
-                        children: const [
-                          Icon(
-                            Icons.auto_awesome,
-                            size: 14,
-                            color: AppColors.brandPrimary,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton.icon(
+                            onPressed: safeIndex > 0
+                                ? () => _movePageOrder(safeIndex, safeIndex - 1)
+                                : null,
+                            icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                            label: const Text('Move Left'),
                           ),
-                          SizedBox(width: 6),
-                          Text(
-                            'Apply Filter to All Pages:',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            onPressed: safeIndex < pageCount - 1
+                                ? () => _movePageOrder(safeIndex, safeIndex + 1)
+                                : null,
+                            icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                            label: const Text('Move Right'),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
+                    ],
+
+                    // Contextual 2-in-1 ID Card Combine Banner
+                    if (pageCount == 2) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: tokens.surface,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: tokens.hairline),
+                        ),
                         child: Row(
                           children: [
-                            _buildQuickFilterChip(
-                              'Original',
-                              PageFilter.original,
-                              Icons.photo_outlined,
+                            Icon(
+                              Icons.badge_outlined,
+                              color: tokens.accent,
+                              size: 24,
                             ),
-                            _buildQuickFilterChip(
-                              'Magic Color',
-                              PageFilter.magicColor,
-                              Icons.auto_awesome,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '2-in-1 ID Card Sheet',
+                                    style: textTheme.titleSmall,
+                                  ),
+                                  Text(
+                                    'Merge front & back pages on one A4 sheet',
+                                    style: textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
                             ),
-                            _buildQuickFilterChip(
-                              'Color Boost',
-                              PageFilter.colorBoost,
-                              Icons.palette,
-                            ),
-                            _buildQuickFilterChip(
-                              'B&W High-Contrast',
-                              PageFilter.blackAndWhite,
-                              Icons.contrast,
-                            ),
-                            _buildQuickFilterChip(
-                              'Whiteboard',
-                              PageFilter.whiteboard,
-                              Icons.co_present,
-                            ),
-                            _buildQuickFilterChip(
-                              'Grayscale',
-                              PageFilter.grayscale,
-                              Icons.filter_b_and_w,
-                            ),
-                            _buildQuickFilterChip(
-                              'Enhanced Text',
-                              PageFilter.enhancedText,
-                              Icons.auto_fix_high,
+                            const SizedBox(width: 8),
+                            ScaneliqTextButton(
+                              label: 'Combine',
+                              onPressed:
+                                  _isExporting ? null : _stitch2In1IdCard,
                             ),
                           ],
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '${session.pages.length} Pages (Drag to reorder · Tap to edit)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? AppColors.textSecondaryDark
-                              : AppColors.textSecondaryLight,
-                        ),
-                      ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add page'),
-                        onPressed: _showAddPagesSheet,
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ReorderableListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    itemCount: session.pages.length,
-                    onReorderItem: (oldIndex, newIndex) {
-                      ref
-                          .read(scanSessionProvider.notifier)
-                          .reorderPages(oldIndex, newIndex);
-                    },
-                    itemBuilder: (context, index) {
-                      final page = session.pages[index];
-                      final file = File(
-                        page.processedPath ?? page.originalPath,
-                      );
+              ),
+            ),
 
-                      return Card(
-                        key: ValueKey(page.id),
-                        margin: const EdgeInsets.only(bottom: 12),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: () => _openPageEditor(page),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Row(
+            // 3. Bottom Thumbnail Strip & Primary Save Dock
+            Container(
+              decoration: BoxDecoration(
+                color: tokens.surface,
+                border: Border(
+                  top: BorderSide(color: tokens.hairline, width: 1),
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 82,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: EdgeInsets.symmetric(horizontal: horizontalPad),
+                      itemCount: pageCount + 1,
+                      separatorBuilder: (_, _) => const SizedBox(width: 10),
+                      itemBuilder: (context, index) {
+                        if (index == pageCount) {
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: _showAddPagesSheet,
+                            child: Container(
+                              width: 58,
+                              height: 76,
+                              decoration: BoxDecoration(
+                                color: tokens.surfaceSubtle,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: tokens.hairline),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_rounded,
+                                    color: tokens.accent,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'ADD',
+                                    style: ScaneliqTypography.monoStyle(
+                                      color: tokens.accent,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        final page = session.pages[index];
+                        final file = File(
+                          page.processedPath ?? page.originalPath,
+                        );
+                        final isSelected = index == safeIndex;
+
+                        return GestureDetector(
+                          onTap: () =>
+                              setState(() => _selectedPageIndex = index),
+                          child: Container(
+                            width: 58,
+                            height: 76,
+                            decoration: BoxDecoration(
+                              color: tokens.surfaceSubtle,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected
+                                    ? tokens.accent
+                                    : tokens.hairline,
+                                width: isSelected ? 2.0 : 1.0,
+                              ),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Stack(
+                              fit: StackFit.expand,
                               children: [
-                                GestureDetector(
-                                  onTap: () => _openPageEditor(page),
+                                if (file.existsSync())
+                                  Image.file(
+                                    file,
+                                    fit: BoxFit.cover,
+                                    cacheWidth: 220,
+                                    errorBuilder: (_, _, _) => Icon(
+                                      Icons.description_outlined,
+                                      color: tokens.textTertiary,
+                                      size: 20,
+                                    ),
+                                  )
+                                else
+                                  Icon(
+                                    Icons.description_outlined,
+                                    color: tokens.textTertiary,
+                                    size: 20,
+                                  ),
+                                Positioned(
+                                  top: 4,
+                                  left: 4,
                                   child: Container(
-                                    width: 64,
-                                    height: 80,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 1,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: isDark
-                                          ? AppColors.surface2Dark
-                                          : Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: isSelected
+                                          ? tokens.accent
+                                          : ScaneliqColorPalette.cameraStudioBg
+                                              .withValues(alpha: 0.78),
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
-                                    child: file.existsSync()
-                                        ? ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            child: Image.file(
-                                              file,
-                                              key: ValueKey(
-                                                '${file.path}_${page.editRecipe.filter.name}_${page.editRecipe.rotationDegrees}',
-                                              ),
-                                              fit: BoxFit.cover,
-                                            ),
-                                          )
-                                        : const Icon(Icons.image_not_supported),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Page ${index + 1}',
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Filter: ${page.editRecipe.filter.name.toUpperCase()}'
-                                        '${page.editRecipe.rotationDegrees != 0 ? ' · ${page.editRecipe.rotationDegrees}°' : ''}'
-                                        '${page.editRecipe.hasCrop ? ' · Cropped' : ''}'
-                                        '${page.editRecipe.hasPerspective ? ' · Warped' : ''}'
-                                        '${page.editRecipe.binarization != BinarizationMode.none ? ' · ${page.editRecipe.binarization.name.toUpperCase()}' : ''}'
-                                        '${page.editRecipe.shadowCorrection ? ' · Shadows' : ''}'
-                                        '${page.editRecipe.hasCleanup ? ' · Cleaned' : ''}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isDark
-                                              ? AppColors.textSecondaryDark
-                                              : AppColors.textSecondaryLight,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                FilledButton.tonalIcon(
-                                  icon: const Icon(
-                                    Icons.auto_fix_high,
-                                    size: 16,
-                                  ),
-                                  label: Text(
-                                    page.editRecipe.filter ==
-                                            PageFilter.original
-                                        ? 'Filters'
-                                        : page.editRecipe.filter.name,
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  onPressed: () => _openPageEditor(page),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.cameraswitch_outlined),
-                                  tooltip: 'Retake Page',
-                                  onPressed: () => _showRetakeOptions(page),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    color: AppColors.error,
-                                  ),
-                                  tooltip: 'Delete Page',
-                                  onPressed: () =>
-                                      _confirmDeletePage(page, index),
-                                ),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert, size: 20),
-                                  tooltip: 'Page Options',
-                                  onSelected: (val) async {
-                                    if (val == 'preview_fullscreen') {
-                                      if (file.existsSync()) {
-                                        _showImagePreviewDialog(file, index);
-                                      }
-                                    } else if (val == 'export_jpeg') {
-                                      try {
-                                        final jpegFile =
-                                            await PdfService.exportPageAsJpeg(
-                                              page: page,
-                                              baseName:
-                                                  _titleController.text
-                                                      .trim()
-                                                      .isEmpty
-                                                  ? 'Page_${index + 1}'
-                                                  : _titleController.text
-                                                        .trim(),
-                                            );
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                'JPEG saved: ${jpegFile.path.split(Platform.pathSeparator).last}',
-                                              ),
-                                              action: SnackBarAction(
-                                                label: 'Share',
-                                                onPressed: () {
-                                                  SharePlus.instance.share(
-                                                    ShareParams(
-                                                      text:
-                                                          'Scaneliq Page ${index + 1}',
-                                                      files: [
-                                                        XFile(jpegFile.path),
-                                                      ],
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                'JPEG export failed: $e',
-                                              ),
-                                              backgroundColor: AppColors.error,
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    }
-                                  },
-                                  itemBuilder: (ctx) => const [
-                                    PopupMenuItem(
-                                      value: 'preview_fullscreen',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.fullscreen, size: 20),
-                                          SizedBox(width: 8),
-                                          Text('View Fullscreen'),
-                                        ],
+                                    child: Text(
+                                      _twoDigits(index + 1),
+                                      style: ScaneliqTypography.monoStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                    PopupMenuItem(
-                                      value: 'export_jpeg',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.image_outlined, size: 20),
-                                          SizedBox(width: 8),
-                                          Text('Export as JPEG'),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Icon(
-                                  Icons.drag_handle,
-                                  color: Colors.grey,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    border: Border(
-                      top: BorderSide(
-                        color: isDark
-                            ? AppColors.surface3Dark
-                            : AppColors.surface3Light,
-                      ),
+                        );
+                      },
                     ),
                   ),
-                  child: SafeArea(
-                    child: ElevatedButton.icon(
-                      onPressed: _isExporting ? null : _exportAndSavePdf,
-                      icon: _isExporting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.picture_as_pdf),
-                      label: Text(
-                        _isExporting
-                            ? 'Generating PDF...'
-                            : 'Save PDF to Scaneliq',
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _missingPagePlaceholder(ScaneliqTokens tokens) {
+    return Container(
+      color: tokens.surfaceSubtle,
+      child: Center(
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          size: 36,
+          color: tokens.textTertiary,
+        ),
+      ),
+    );
+  }
+
+  static String _twoDigits(int n) => n < 10 ? '0$n' : '$n';
+}
+
+class _ReviewStageActionChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final bool accent;
+  final bool destructive;
+
+  const _ReviewStageActionChip({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.accent = false,
+    this.destructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final Color fg = destructive
+        ? tokens.danger
+        : accent
+        ? tokens.accent
+        : tokens.textPrimary;
+    final Color bg = destructive
+        ? tokens.dangerSoft
+        : accent
+        ? tokens.accentSoft
+        : tokens.surface;
+    final Color border = destructive
+        ? tokens.danger.withValues(alpha: 0.35)
+        : accent
+        ? tokens.accent.withValues(alpha: 0.4)
+        : tokens.hairline;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: fg),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: fg,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

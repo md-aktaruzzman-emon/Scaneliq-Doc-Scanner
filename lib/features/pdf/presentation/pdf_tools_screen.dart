@@ -8,15 +8,38 @@ import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/core/theme/scaneliq_radius.dart';
+import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
+import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
+import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/pdf/data/advanced_pdf_service.dart';
 import 'package:scaneliq/features/pdf/presentation/pdf_page_organizer_screen.dart';
+import 'package:scaneliq/features/pdf/presentation/widgets/watermark_studio_sheet.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
+enum PdfToolAction {
+  organizePages,
+  extractPages,
+  mergePdfs,
+  splitSinglePages,
+  splitByRanges,
+  stitchLongImage,
+  compressPdf,
+  encryptPdf,
+  unlockPdf,
+  watermarkPdf,
+  annotatePdf,
+  redactPdf,
+  inspectPdf,
+}
+
 class PdfToolsScreen extends StatefulWidget {
-  const PdfToolsScreen({super.key});
+  final PdfToolAction? initialAction;
+
+  const PdfToolsScreen({super.key, this.initialAction});
 
   @override
   State<PdfToolsScreen> createState() => _PdfToolsScreenState();
@@ -25,6 +48,61 @@ class PdfToolsScreen extends StatefulWidget {
 class _PdfToolsScreenState extends State<PdfToolsScreen> {
   bool _isProcessing = false;
   String? _statusMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    final action = widget.initialAction;
+    if (action != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _triggerAction(action);
+      });
+    }
+  }
+
+  void _triggerAction(PdfToolAction action) {
+    switch (action) {
+      case PdfToolAction.organizePages:
+        _organizePages();
+        break;
+      case PdfToolAction.extractPages:
+        _extractPages();
+        break;
+      case PdfToolAction.mergePdfs:
+        _mergePdfs();
+        break;
+      case PdfToolAction.splitSinglePages:
+        _splitPdf();
+        break;
+      case PdfToolAction.splitByRanges:
+        _splitByRanges();
+        break;
+      case PdfToolAction.stitchLongImage:
+        _stitchLongImage();
+        break;
+      case PdfToolAction.compressPdf:
+        _compressPdf();
+        break;
+      case PdfToolAction.encryptPdf:
+        _encryptPdf();
+        break;
+      case PdfToolAction.unlockPdf:
+        _unlockPdf();
+        break;
+      case PdfToolAction.watermarkPdf:
+        _watermarkPdf();
+        break;
+      case PdfToolAction.annotatePdf:
+        _annotatePdf();
+        break;
+      case PdfToolAction.redactPdf:
+        _redactPdf();
+        break;
+      case PdfToolAction.inspectPdf:
+        _inspectPdf();
+        break;
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // 1. PAGE MANAGEMENT & ORGANIZATION
@@ -793,71 +871,15 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
 
       if (picked.isEmpty || picked.first.path == null) return;
       final file = File(picked.first.path!);
+      final totalPages = await AdvancedPdfService.instance.getPageCount(file);
 
       if (!mounted) return;
-      final watermarkController = TextEditingController(text: 'CONFIDENTIAL');
-      WatermarkPosition position = WatermarkPosition.diagonalCenter;
-
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => StatefulBuilder(
-          builder: (dCtx, setDialogState) => AlertDialog(
-            title: const Text('Add PDF Watermark'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: watermarkController,
-                  decoration: const InputDecoration(
-                    labelText: 'Watermark Text',
-                    hintText: 'e.g. CONFIDENTIAL / DRAFT',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<WatermarkPosition>(
-                  initialValue: position,
-                  decoration: const InputDecoration(
-                    labelText: 'Position',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: WatermarkPosition.diagonalCenter,
-                      child: Text('Diagonal Center (-45°)'),
-                    ),
-                    DropdownMenuItem(
-                      value: WatermarkPosition.horizontalCenter,
-                      child: Text('Horizontal Center'),
-                    ),
-                    DropdownMenuItem(
-                      value: WatermarkPosition.headerTop,
-                      child: Text('Header (Top)'),
-                    ),
-                    DropdownMenuItem(
-                      value: WatermarkPosition.footerBottom,
-                      child: Text('Footer (Bottom)'),
-                    ),
-                  ],
-                  onChanged: (val) => setDialogState(() => position = val!),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dCtx, false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(dCtx, true),
-                child: const Text('Apply'),
-              ),
-            ],
-          ),
-        ),
+      final opts = await showWatermarkStudioSheet(
+        context,
+        currentPage: 1,
+        totalPages: totalPages > 0 ? totalPages : 1,
       );
-
-      if (confirmed != true) return;
+      if (opts == null || !mounted) return;
 
       setState(() {
         _isProcessing = true;
@@ -866,12 +888,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
 
       final watermarkedFile = await AdvancedPdfService.instance.addWatermark(
         sourcePdf: file,
-        options: WatermarkOptions(
-          text: watermarkController.text.trim(),
-          position: position,
-          color: const Color(0xFFDC2626),
-          opacity: 0.25,
-        ),
+        options: opts,
         outputFileName: 'Watermarked_${DateTime.now().millisecondsSinceEpoch}',
       );
 
@@ -1324,199 +1341,180 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+    final horizontalPad = ScaneliqSpacing.adaptiveHorizontalPadding(
+      MediaQuery.sizeOf(context).width,
+    );
+
     return Scaffold(
+      backgroundColor: tokens.bg,
       appBar: AppBar(
-        title: const Text(
-          'Advanced PDF Tools',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        backgroundColor: tokens.bg,
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(
+                'PDF Workbench',
+                style: textTheme.headlineMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const ScaneliqStatusLabel(
+              text: 'ON-DEVICE',
+              tone: ScaneliqStatusTone.accent,
+            ),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: tokens.hairline),
         ),
       ),
       body: Stack(
         children: [
           ListView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPad,
+              16,
+              horizontalPad,
+              32,
+            ),
             children: [
-              // Page Management & Organization
-              const Text(
-                'Page Management & Organization',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandPrimary,
-                ),
+              const ScaneliqSectionHeader(
+                title: 'Organize & Structure',
+                trailing: ScaneliqStatusLabel(text: 'IMPLEMENTED'),
               ),
-              const SizedBox(height: 8),
-              _buildToolCard(
+              _buildHairlineToolRow(
                 icon: Icons.dashboard_customize_outlined,
-                color: Colors.teal,
-                title: 'Organize Pages',
-                subtitle: 'Reorder, rotate, delete, duplicate, or insert pages into existing PDF',
+                title: 'Organize & Rotate Pages',
+                subtitle: 'Reorder, rotate, delete, duplicate, or insert pages into PDF',
+                badge: 'ORGANIZE',
                 onTap: _isProcessing ? null : _organizePages,
               ),
-              const SizedBox(height: 10),
-              _buildToolCard(
+              _buildHairlineToolRow(
                 icon: Icons.file_upload_outlined,
-                color: Colors.blue,
                 title: 'Extract Custom Pages',
-                subtitle: 'Extract specific pages or page ranges (e.g. 1, 3, 5-8) into a new PDF',
+                subtitle: 'Extract specific pages or ranges (e.g. 1, 3, 5-8) to new PDF',
+                badge: 'EXTRACT',
                 onTap: _isProcessing ? null : _extractPages,
               ),
-
-              const SizedBox(height: 20),
-
-              // Merge & Split
-              const Text(
-                'Merge & Split',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              _buildToolCard(
-                icon: Icons.call_merge,
-                color: Colors.indigo,
+              _buildHairlineToolRow(
+                icon: Icons.call_merge_rounded,
                 title: 'Merge PDFs',
-                subtitle: 'Combine 2 or more PDF files into a single consolidated document',
+                subtitle: 'Combine 2 or more PDF files into one consolidated document',
+                badge: 'MERGE',
                 onTap: _isProcessing ? null : _mergePdfs,
               ),
-              const SizedBox(height: 10),
-              _buildToolCard(
-                icon: Icons.call_split,
-                color: Colors.orange,
+              _buildHairlineToolRow(
+                icon: Icons.call_split_rounded,
                 title: 'Split into Single Pages',
-                subtitle: 'Deconstruct a multi-page PDF into independent 1-page documents',
+                subtitle: 'Deconstruct a multi-page PDF into independent 1-page files',
+                badge: 'SPLIT',
                 onTap: _isProcessing ? null : _splitPdf,
               ),
-              const SizedBox(height: 10),
-              _buildToolCard(
+              _buildHairlineToolRow(
                 icon: Icons.splitscreen_outlined,
-                color: Colors.deepOrange,
                 title: 'Split by Custom Ranges',
-                subtitle: 'Partition document into multiple separate parts (e.g. 1-2, 3-6)',
+                subtitle: 'Partition a document into parts (e.g. 1-2, 3-6)',
+                badge: 'RANGES',
                 onTap: _isProcessing ? null : _splitByRanges,
               ),
-              const SizedBox(height: 10),
-              _buildToolCard(
+
+              const SizedBox(height: 22),
+              const ScaneliqSectionHeader(
+                title: 'Optimize & Convert',
+                trailing: ScaneliqStatusLabel(
+                  text: 'LOCAL',
+                  tone: ScaneliqStatusTone.success,
+                ),
+              ),
+              _buildHairlineToolRow(
+                icon: Icons.compress_rounded,
+                title: 'Compress PDF',
+                subtitle: 'High Quality, Balanced (200 DPI), or Compact preset compression',
+                badge: 'COMPRESS',
+                tone: ScaneliqStatusTone.success,
+                onTap: _isProcessing ? null : _compressPdf,
+              ),
+              _buildHairlineToolRow(
                 icon: Icons.view_stream_outlined,
-                color: Colors.cyan,
                 title: 'Stitch to Long Image',
-                subtitle: 'Merge multiple receipt/document pages into a continuous vertical image',
+                subtitle: 'Combine receipt or document pages into one vertical JPEG',
+                badge: 'STITCH',
                 onTap: _isProcessing ? null : _stitchLongImage,
               ),
 
-              const SizedBox(height: 20),
-
-              // Compression & Optimization
-              const Text(
-                'Document Optimization',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandPrimary,
-                ),
+              const SizedBox(height: 22),
+              const ScaneliqSectionHeader(
+                title: 'Edit, Sign & Protect',
+                trailing: ScaneliqStatusLabel(text: 'AES-256'),
               ),
-              const SizedBox(height: 8),
-              _buildToolCard(
-                icon: Icons.compress,
-                color: Colors.green,
-                title: 'Compress PDF',
-                subtitle: 'Reduce file size with High Quality, Balanced, or Smaller File presets',
-                onTap: _isProcessing ? null : _compressPdf,
-              ),
-
-              const SizedBox(height: 20),
-
-              // Security & Watermarks
-              const Text(
-                'Security & Watermarks',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              _buildToolCard(
-                icon: Icons.lock_outline,
-                color: Colors.redAccent,
-                title: 'Password Encryption',
-                subtitle: 'Protect sensitive files with industrial AES-256 bit encryption',
-                onTap: _isProcessing ? null : _encryptPdf,
-              ),
-              const SizedBox(height: 10),
-              _buildToolCard(
-                icon: Icons.lock_open_outlined,
-                color: Colors.pink,
-                title: 'Unlock / Remove Password',
-                subtitle: 'Decrypt password-protected document and export an open PDF copy',
-                onTap: _isProcessing ? null : _unlockPdf,
-              ),
-              const SizedBox(height: 10),
-              _buildToolCard(
-                icon: Icons.branding_watermark_outlined,
-                color: Colors.purple,
-                title: 'Add Watermark',
-                subtitle: 'Overlay CONFIDENTIAL, DRAFT, COPY, or custom text across pages',
-                onTap: _isProcessing ? null : _watermarkPdf,
-              ),
-              const SizedBox(height: 10),
-              _buildToolCard(
+              _buildHairlineToolRow(
                 icon: Icons.edit_note_outlined,
-                color: Colors.teal,
                 title: 'Sign & Annotate PDF',
-                subtitle: 'Add stamped approvals, verified notes, or text annotations',
+                subtitle: 'Stamp approvals, verified notes, or text annotations',
+                badge: 'SIGN',
                 onTap: _isProcessing ? null : _annotatePdf,
               ),
-              const SizedBox(height: 10),
-              _buildToolCard(
+              _buildHairlineToolRow(
+                icon: Icons.branding_watermark_outlined,
+                title: 'Add Watermark',
+                subtitle: 'Overlay CONFIDENTIAL, DRAFT, COPY, or custom watermark',
+                badge: 'MARK',
+                onTap: _isProcessing ? null : _watermarkPdf,
+              ),
+              _buildHairlineToolRow(
+                icon: Icons.lock_outline_rounded,
+                title: 'Password Encryption',
+                subtitle: 'Protect sensitive files with AES-256 encryption',
+                badge: 'ENCRYPT',
+                tone: ScaneliqStatusTone.accent,
+                onTap: _isProcessing ? null : _encryptPdf,
+              ),
+              _buildHairlineToolRow(
+                icon: Icons.lock_open_outlined,
+                title: 'Unlock / Remove Password',
+                subtitle: 'Decrypt password-protected PDF to an open local copy',
+                badge: 'UNLOCK',
+                onTap: _isProcessing ? null : _unlockPdf,
+              ),
+              _buildHairlineToolRow(
                 icon: Icons.shield_outlined,
-                color: Colors.black87,
-                title: 'Visual Masking & Metadata Sanitizer',
-                subtitle: 'Blackout sensitive areas and sanitize metadata (Note: visual overlay on vector PDFs)',
+                title: 'Masking & Metadata Sanitizer',
+                subtitle: 'Blackout areas and sanitize metadata (visual overlay on vector PDFs)',
+                badge: 'SANITIZE',
+                tone: ScaneliqStatusTone.warning,
                 onTap: _isProcessing ? null : _redactPdf,
               ),
 
-              const SizedBox(height: 20),
-
-              // Inspection & Details
-              const Text(
-                'Inspection & Details',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              _buildToolCard(
-                icon: Icons.info_outline,
-                color: Colors.blueGrey,
+              const SizedBox(height: 22),
+              const ScaneliqSectionHeader(title: 'Inspection & Details'),
+              _buildHairlineToolRow(
+                icon: Icons.info_outline_rounded,
                 title: 'Inspect PDF Details',
-                subtitle: 'View page count, file size, page dimensions, and security information',
+                subtitle: 'View page count, file size, dimensions, and encryption status',
+                badge: 'INFO',
                 onTap: _isProcessing ? null : _inspectPdf,
               ),
             ],
           ),
           if (_isProcessing)
             Container(
-              color: Colors.black45,
+              color: Colors.black.withValues(alpha: 0.48),
               child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 16),
-                        Text(
-                          _statusMessage ?? 'Processing PDF...',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 32),
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: tokens.surface,
+                    borderRadius: ScaneliqRadius.folioBorderRadius,
+                    border: Border.all(color: tokens.hairline),
+                  ),
+                  child: ScaneliqLoadingIndicator(
+                    message: _statusMessage ?? 'Processing PDF…',
                   ),
                 ),
               ),
@@ -1526,28 +1524,42 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
     );
   }
 
-  Widget _buildToolCard({
+  Widget _buildHairlineToolRow({
     required IconData icon,
-    required Color color,
     required String title,
     required String subtitle,
+    required String badge,
+    ScaneliqStatusTone tone = ScaneliqStatusTone.neutral,
     required VoidCallback? onTap,
   }) {
-    return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(14),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: color),
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: tokens.hairline, width: 1)),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: onTap,
+        child: Row(
+          children: [
+            Icon(icon, size: 21, color: tokens.textPrimary),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: textTheme.titleMedium),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: textTheme.bodySmall),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ScaneliqStatusLabel(text: badge, tone: tone),
+          ],
+        ),
       ),
     );
   }
