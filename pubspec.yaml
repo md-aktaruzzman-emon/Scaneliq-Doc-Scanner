@@ -88,9 +88,9 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
+  # Official Scaneliq master branding asset (previous backup preserved on disk)
   assets:
-    - assets/branding/
+    - assets/branding/scaneliq_logo_master.png
 
 
   # For details regarding adding assets from package dependencies, see
@@ -118,8 +118,8 @@ flutter:
 
 flutter_launcher_icons:
   android: "launcher_icon"
-  ios: true
-  image_path: "assets/branding/scaneliq_logo.png"
-  adaptive_icon_background: "#021642"
-  adaptive_icon_foreground: "assets/branding/scaneliq_symbol.png"
+  ios: false
+  image_path: "assets/branding/scaneliq_logo_master.png"
+  adaptive_icon_background: "#031837"
+  adaptive_icon_foreground: "assets/branding/scaneliq_logo_adaptive_foreground.png"
 

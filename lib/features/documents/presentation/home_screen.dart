@@ -14,7 +14,7 @@ import 'package:scaneliq/core/widgets/scaneliq_bottom_nav.dart';
 import 'package:scaneliq/core/widgets/scaneliq_buttons.dart';
 import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
 import 'package:scaneliq/core/widgets/scaneliq_document_widgets.dart';
-import 'package:scaneliq/core/widgets/scaneliq_mark.dart';
+import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
 import 'package:scaneliq/core/widgets/scaneliq_search_field.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
@@ -313,7 +313,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final tokens = context.tokens;
     final textTheme = Theme.of(context).textTheme;
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final horizontalPad = ScaneliqSpacing.adaptiveHorizontalPadding(screenWidth);
+    final horizontalPad = ScaneliqSpacing.adaptiveHorizontalPadding(
+      screenWidth,
+    );
     final bottomNavInset = _selectionMode ? 80.0 : 92.0;
 
     final allDocsAsync = ref.watch(documentsListProvider);
@@ -674,7 +676,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         Expanded(
           child: Row(
             children: [
-              const ScaneliqMark(size: 26),
+              const ScaneliqLogo(size: 28, borderRadius: 7),
               const SizedBox(width: 10),
               Flexible(
                 child: Text(

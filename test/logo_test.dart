@@ -26,12 +26,12 @@ void main() {
       final logoWidgets = find.byType(ScaneliqLogo);
       expect(logoWidgets, findsNWidgets(3));
 
-      // Verify that the images load the new official PNG asset
+      // Verify that the images load the official master PNG asset
       final imageWidgets = tester.widgetList<Image>(find.byType(Image));
       expect(imageWidgets.length, equals(3));
       for (final img in imageWidgets) {
         final assetImg = img.image as AssetImage;
-        expect(assetImg.assetName, equals('assets/branding/scaneliq_logo.png'));
+        expect(assetImg.assetName, equals(ScaneliqLogo.masterAssetPath));
       }
     });
 
@@ -48,5 +48,28 @@ void main() {
       final clipRRect = tester.widget<ClipRRect>(find.byType(ClipRRect));
       expect(clipRRect.borderRadius, equals(BorderRadius.circular(16)));
     });
+
+    testWidgets(
+      'applies hairline frame cleanly in both light and dark themes',
+      (WidgetTester tester) async {
+        for (final brightness in [Brightness.light, Brightness.dark]) {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: ThemeData(brightness: brightness),
+              home: const Scaffold(
+                body: ScaneliqLogo(size: 48, borderRadius: 12),
+              ),
+            ),
+          );
+
+          expect(find.byType(ScaneliqLogo), findsOneWidget);
+          expect(find.byType(DecoratedBox), findsOneWidget);
+          final box = tester.widget<DecoratedBox>(find.byType(DecoratedBox));
+          final decoration = box.decoration as BoxDecoration;
+          expect(decoration.border, isNotNull);
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
   });
 }

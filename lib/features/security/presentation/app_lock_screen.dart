@@ -6,7 +6,7 @@ import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
 import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
 import 'package:scaneliq/core/widgets/scaneliq_buttons.dart';
 import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
-import 'package:scaneliq/core/widgets/scaneliq_mark.dart';
+import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 import 'package:scaneliq/features/security/data/app_lock_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -29,10 +29,8 @@ class AppLockScreen extends StatefulWidget {
     final result = await Navigator.of(context, rootNavigator: true).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => const AppLockScreen(
-          mode: AppLockMode.unlock,
-          dismissible: false,
-        ),
+        builder: (_) =>
+            const AppLockScreen(mode: AppLockMode.unlock, dismissible: false),
       ),
     );
     return result == true;
@@ -42,10 +40,8 @@ class AppLockScreen extends StatefulWidget {
     final result = await Navigator.of(context, rootNavigator: true).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => const AppLockScreen(
-          mode: AppLockMode.setPin,
-          dismissible: true,
-        ),
+        builder: (_) =>
+            const AppLockScreen(mode: AppLockMode.setPin, dismissible: true),
       ),
     );
     return result == true;
@@ -281,7 +277,10 @@ class _AppLockScreenState extends State<AppLockScreen> {
               ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  minHeight: (constraints.maxHeight - 44).clamp(0, double.infinity),
+                  minHeight: (constraints.maxHeight - 44).clamp(
+                    0,
+                    double.infinity,
+                  ),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -309,7 +308,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 20),
                       child: Column(
                         children: [
-                          const ScaneliqMark(size: 40),
+                          const ScaneliqLogo(size: 48, borderRadius: 12),
                           const SizedBox(height: 16),
                           Text(titleText, style: textTheme.headlineLarge),
                           const SizedBox(height: 6),
@@ -354,7 +353,9 @@ class _AppLockScreenState extends State<AppLockScreen> {
                             children: List.generate(_pinLength, (index) {
                               final filled = index < _enteredPin.length;
                               return Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 8),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
                                 width: 13,
                                 height: 13,
                                 decoration: BoxDecoration(
@@ -537,10 +538,8 @@ class _KeypadDigitButton extends StatelessWidget {
           child: Center(
             child: Text(
               label,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontSize: 21,
-                fontWeight: FontWeight.w600,
-              ),
+              style: Theme.of(context).textTheme.headlineMedium
+                  ?.copyWith(fontSize: 21, fontWeight: FontWeight.w600),
             ),
           ),
         ),

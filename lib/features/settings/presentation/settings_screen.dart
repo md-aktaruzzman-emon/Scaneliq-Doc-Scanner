@@ -13,7 +13,6 @@ import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
 import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
 import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
 import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
-import 'package:scaneliq/core/widgets/scaneliq_mark.dart';
 import 'package:scaneliq/features/cloud_sync/data/cloud_backup_service.dart';
 import 'package:scaneliq/features/cloud_sync/data/device_sync_service.dart';
 import 'package:scaneliq/features/documents/presentation/trash_screen.dart';
@@ -457,7 +456,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               child: Row(
                 children: [
-                  const ScaneliqMark(size: 40),
+                  const ScaneliqLogo(size: 48, borderRadius: 12),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -548,8 +547,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildHairlineSettingRow(
               icon: Icons.security_rounded,
               title: 'Local-First Document Safety',
-              subtitle:
-                  'Scans stay in app-private storage. No automatic uploads or tracking.',
+              subtitle: 'Scans stay in app-private storage. No automatic uploads or tracking.',
               trailing: const ScaneliqStatusLabel(
                 text: 'LOCAL',
                 tone: ScaneliqStatusTone.success,
@@ -669,8 +667,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildHairlineSettingRow(
               icon: Icons.translate_rounded,
               title: 'English & Latin Scripts (Active)',
-              subtitle:
-                  'On-device ML Kit text recognition with Indic/Bangla architecture.',
+              subtitle: 'On-device ML Kit text recognition with Indic/Bangla architecture.',
               trailing: const ScaneliqStatusLabel(
                 text: 'ACTIVE',
                 tone: ScaneliqStatusTone.success,
@@ -697,6 +694,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             _buildHairlineSettingRow(
+              icon: Icons.verified_outlined,
+              title: 'About Scaneliq',
+              subtitle: 'Version 1.0.0+1 · com.scaneliq.scaneliq',
+              trailing: const ScaneliqStatusLabel(text: 'ABOUT'),
+              onTap: () {
+                showAboutDialog(
+                  context: context,
+                  applicationName: 'Scaneliq',
+                  applicationVersion: '1.0.0+1',
+                  applicationIcon: const Padding(
+                    padding: EdgeInsets.all(4.0),
+                    child: ScaneliqLogo(size: 56, borderRadius: 14),
+                  ),
+                  applicationLegalese: 'Local-first document scanner & PDF workspace · com.scaneliq.scaneliq',
+                );
+              },
+            ),
+            _buildHairlineSettingRow(
               icon: Icons.info_outline_rounded,
               title: 'Open Source Licenses',
               subtitle: 'View software third-party licenses',
@@ -708,7 +723,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   applicationVersion: '1.0.0',
                   applicationIcon: const Padding(
                     padding: EdgeInsets.all(8.0),
-                    child: ScaneliqLogo(size: 48),
+                    child: ScaneliqLogo(size: 48, borderRadius: 12),
                   ),
                 );
               },
