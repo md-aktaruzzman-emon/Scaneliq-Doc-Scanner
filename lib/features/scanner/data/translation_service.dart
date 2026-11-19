@@ -208,7 +208,9 @@ class TranslationService {
   }) async {
     pw.Font? unicodeFont;
     try {
-      final data = await rootBundle.load('assets/fonts/NotoSansBengali-Regular.ttf');
+      final data = await rootBundle.load(
+        'assets/fonts/NotoSansBengali-Regular.ttf',
+      );
       unicodeFont = pw.Font.ttf(data);
     } catch (_) {
       final f = File('assets/fonts/NotoSansBengali-Regular.ttf');
@@ -221,7 +223,11 @@ class TranslationService {
       title: 'Scaneliq Translation ($sourceLang -> $targetLang)',
       author: 'Scaneliq',
     );
-    final baseStyle = pw.TextStyle(font: unicodeFont, fontSize: 12, height: 1.5);
+    final baseStyle = pw.TextStyle(
+      font: unicodeFont,
+      fontSize: 12,
+      height: 1.5,
+    );
     final headingStyle = pw.TextStyle(
       font: unicodeFont,
       fontSize: 15,

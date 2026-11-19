@@ -1,7 +1,8 @@
 # Scaneliq — Master Feature Backlog & Traceability Matrix
 
-**Blueprint Source:** [Scaneliq_Master_Blueprint_Improved.md](file:///c:/Scaneliq/docs/Scaneliq_Master_Blueprint_Improved.md)  
-**Last Updated:** October 19, 2026  
+**Blueprint Source:** [Scaneliq_Master_Blueprint_Improved.md](file:///c:/Scaneliq/docs/Scaneliq_Master_Blueprint_Improved.md)
+**Reconciled Verification Report:** [SCANELIQ_COMPLETE_PROJECT_REPAIR_REPORT.md](file:///c:/Scaneliq/docs/SCANELIQ_COMPLETE_PROJECT_REPAIR_REPORT.md) · [SCANELIQ_MASTER_FUNCTIONAL_INVENTORY.md](file:///c:/Scaneliq/docs/SCANELIQ_MASTER_FUNCTIONAL_INVENTORY.md)
+**Last Updated:** November 19, 2026 (Version `2.67.0+26700`, `205/205` automated tests across `34` suites)
 **Status Legend:**
 - `NOT STARTED`: Requirement defined, awaiting scheduled phase.
 - `IN PROGRESS`: Actively being engineered.
@@ -15,7 +16,7 @@
 
 | ID | Feature Name | Description | Priority | Category | Status | Primary Source Files | Verification Tests |
 |---|---|---|:---:|:---:|:---:|---|---|
-| **F-00** | **Design System & Navigation Overhaul** | Centralized semantic tokens (`surface0–3`, `#021642`, `#2563EB`, `#00F0FF`), 4-tab shell with elevated shutter, modern Home, Files, Tools, and Settings screens | P0 | UX | **TESTED** | `lib/core/theme/app_theme.dart`, `lib/app/main_navigation_shell.dart`, `lib/features/documents/presentation/home_screen.dart`, `lib/features/documents/presentation/documents_library_screen.dart`, `lib/features/settings/presentation/tools_screen.dart`, `lib/features/settings/presentation/settings_screen.dart` | `test/navigation_and_screens_test.dart`, `test/widget_test.dart` |
+| **F-00** | **Design System & Navigation Overhaul** | Concept A Editorial Gallery Minimal tokens (`Gallery Alabaster #FAF9F6`, `Carbon Studio #0D0E11`, `#0052FF`), 3-tab `StatefulShellRoute` shell (`Scans`, `Folders`, `PDF Suite`) with direct Camera/Import actions, Home, Files, Tools, and Settings screens | P0 | UX | **TESTED** | `lib/core/theme/scaneliq_colors.dart`, `lib/core/theme/app_theme.dart`, `lib/core/navigation/main_navigation_shell.dart`, `lib/features/documents/presentation/home_screen.dart`, `lib/features/documents/presentation/documents_library_screen.dart`, `lib/features/settings/presentation/tools_screen.dart`, `lib/features/settings/presentation/settings_screen.dart` | `test/navigation_and_screens_test.dart`, `test/widget_test.dart`, `test/repair_regression_workflows_test.dart` |
 | **F-01** | **Automatic Document Boundary Detection** | Real-time quadrilateral edge locking and auto-snapping via ML Kit Document Scanner | P0 | A | **TESTED** | `lib/features/scanner/presentation/scan_session_provider.dart` | `test/scanner_workflow_test.dart`, debug APK packaging |
 | **F-02** | **Manual Shutter & Corner Adjustment Fallback** | Interactive 4-point corner drag with loupe magnification and homography perspective warp | P0 | A | **TESTED** | `lib/features/editor/presentation/edit_page_screen.dart`, `lib/core/image_processing/image_processing_service.dart` | `test/phase3_image_processing_test.dart`, `test/image_processing_test.dart` |
 | **F-03** | **Continuous Multi-Page Batch Scanning** | Viewfinder capture with live thumbnail badge counter and page accumulation | P0 | A | **TESTED** | `lib/features/scanner/presentation/continuous_camera_screen.dart` | `test/batch_scanning_test.dart` |
@@ -46,7 +47,7 @@
 | **F-28** | **On-Device Optical Character Recognition (OCR)** | Extract selectable plain text from scanned pages using on-device ML | P1 | D | **TESTED** | `lib/features/ocr/data/ocr_service.dart` | `test/ocr_service_test.dart` |
 | **F-29** | **Searchable PDF Generation (Invisible Text Layer)** | Injects invisible OCR text layer matching word bounding boxes | P1 | D | **TESTED** | `lib/features/pdf/data/pdf_service.dart` | `test/pdf_generation_test.dart` |
 | **F-30** | **Full-Text Document Library Search** | Live search across all scanned pages using SQLite full-text index | P1 | D | **TESTED** | `lib/features/documents/data/app_database_service.dart` | `test/database_persistence_test.dart` |
-| **F-31** | **Bangla / Indic Script OCR Integration** | On-device Indic recognizer with Bengali numeral normalization (`০..৯` <-> `0..9`) | P2 | D | **TESTED** | `lib/features/ocr/data/ocr_service.dart` | `test/phase3_advanced_features_test.dart` |
+| **F-31** | **Bangla / Indic Script OCR Integration** | Offline genuine Bengali (`বাংলা`) and Mixed Bn+En Tesseract JNI (`ben.traineddata`/`eng.traineddata`) + numeral normalization (`০..৯` <-> `0..9`) | P2 | D | **TESTED** | `lib/features/ocr/data/ocr_service.dart`, `android/app/src/main/kotlin/com/scaneliq/scaneliq/TesseractOcrEngine.kt` | `test/phase3_advanced_features_test.dart`, `test/bengali_ocr_and_pdf_test.dart` |
 | **F-32** | **Document Translation (Bengali ↔ English)** | Translate recognized OCR text into Bengali, English, and other languages | P1 | D | **TESTED** | `lib/features/scanner/presentation/translate_screen.dart` | Integrated & verified via translator engine |
 | **F-33** | **Business Card Contact Extraction** | Extracts Name, Phone, Email, Company, Job Title; exports standard vCard 3.0 (`.vcf`) | P2 | D | **TESTED** | `lib/features/intelligence/data/business_card_service.dart` | `test/phase3_advanced_features_test.dart` |
 | **F-34** | **Receipt & Invoice Key-Value Extraction** | Parses Merchant, Date, Totals, Tax, Tip with math consistency checks & CSV export | P2 | D | **TESTED** | `lib/features/intelligence/data/receipt_parser_service.dart` | `test/phase3_advanced_features_test.dart` |

@@ -279,22 +279,19 @@ class ScannerStudioNotifier extends Notifier<ScannerStudioState> {
       if (code == 'cameraaccessdenied') {
         state = state.copyWith(
           status: CameraStudioStatus.permissionDenied,
-          errorMessage:
-              e.description ??
-              'Camera access is required to scan documents. Grant permission or import from gallery.',
+          errorMessage: e.description ?? 'Camera access is required to scan documents. Grant permission or import from gallery.',
         );
       } else if (code == 'cameraaccessdeniedwithoutprompt' ||
           code == 'cameraaccessrestricted') {
         state = state.copyWith(
           status: CameraStudioStatus.permissionPermanentlyDenied,
-          errorMessage:
-              e.description ??
-              'Camera permission is disabled in system settings. Enable camera access or import images from gallery.',
+          errorMessage: e.description ?? 'Camera permission is disabled in system settings. Enable camera access or import images from gallery.',
         );
       } else {
         state = state.copyWith(
           status: CameraStudioStatus.error,
-          errorMessage: e.description ?? 'Could not initialize camera: ${e.code}',
+          errorMessage:
+              e.description ?? 'Could not initialize camera: ${e.code}',
         );
       }
     } catch (e) {
@@ -330,8 +327,7 @@ class ScannerStudioNotifier extends Notifier<ScannerStudioState> {
       if (!_inLifecyclePause && state.isReady) return;
       _inLifecyclePause = false;
       // Re-attempt initialization after returning from system Settings if previously permanently denied.
-      final shouldRetry =
-          state.status != CameraStudioStatus.permissionDenied;
+      final shouldRetry = state.status != CameraStudioStatus.permissionDenied;
       if (!_isDisposed && shouldRetry) {
         await initializeCamera();
       }
@@ -472,7 +468,10 @@ class ScannerStudioNotifier extends Notifier<ScannerStudioState> {
   Future<StudioActionOutcome> capturePhoto({
     PerspectiveQuad? detectedQuad,
   }) async {
-    if (_isDisposed || !state.isReady || state.isCapturing || state.isImporting) {
+    if (_isDisposed ||
+        !state.isReady ||
+        state.isCapturing ||
+        state.isImporting) {
       return const StudioActionOutcome(succeeded: false);
     }
 

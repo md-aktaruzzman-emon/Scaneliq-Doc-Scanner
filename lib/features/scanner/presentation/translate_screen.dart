@@ -252,13 +252,20 @@ class _TranslateScreenState extends State<TranslateScreen> {
             ),
             child: Row(
               children: [
-                Icon(Icons.offline_pin_outlined, color: tokens.accent, size: 20),
+                Icon(
+                  Icons.offline_pin_outlined,
+                  color: tokens.accent,
+                  size: 20,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Offline Language Packs', style: textTheme.titleSmall),
+                      Text(
+                        'Offline Language Packs',
+                        style: textTheme.titleSmall,
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         'English: ${_enModelReady ? 'Ready' : 'Not downloaded'} · Bengali: ${_bnModelReady ? 'Ready' : 'Not downloaded'}',
@@ -302,7 +309,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
                         .map(
                           (e) => DropdownMenuItem(
                             value: e.key,
-                            child: Text(e.value, overflow: TextOverflow.ellipsis),
+                            child: Text(
+                              e.value,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         )
                         .toList(),
@@ -325,7 +335,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
                         .map(
                           (e) => DropdownMenuItem(
                             value: e.key,
-                            child: Text(e.value, overflow: TextOverflow.ellipsis),
+                            child: Text(
+                              e.value,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         )
                         .toList(),
@@ -353,7 +366,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Original Document Text', style: textTheme.titleMedium),
+                    Text(
+                      'Original Document Text',
+                      style: textTheme.titleMedium,
+                    ),
                     if (_isOcrExtracting)
                       const SizedBox(
                         width: 16,
@@ -362,7 +378,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
                       )
                     else
                       TextButton.icon(
-                        icon: const Icon(Icons.photo_library_outlined, size: 16),
+                        icon: const Icon(
+                          Icons.photo_library_outlined,
+                          size: 16,
+                        ),
                         label: const Text('Scan / Import Pages'),
                         onPressed: _pickImagesAndExtractOcr,
                       ),
@@ -470,7 +489,10 @@ class _TranslateScreenState extends State<TranslateScreen> {
                         },
                       ),
                       OutlinedButton.icon(
-                        icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                        icon: const Icon(
+                          Icons.picture_as_pdf_outlined,
+                          size: 16,
+                        ),
                         label: const Text('Export PDF'),
                         onPressed: () async {
                           final f = await TranslationService.instance

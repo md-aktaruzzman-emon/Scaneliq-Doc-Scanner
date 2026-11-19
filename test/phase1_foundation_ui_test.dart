@@ -117,135 +117,160 @@ void main() {
   });
 
   group('Phase 1 — Design Tokens & Theme Architecture', () {
-    test('Concept A Light (Gallery Alabaster) & Dark (Carbon Studio) palettes', () {
-      expect(ScaneliqColorPalette.light.bg, const Color(0xFFFAF9F6));
-      expect(ScaneliqColorPalette.light.surface, const Color(0xFFFFFFFF));
-      expect(ScaneliqColorPalette.light.surfaceSubtle, const Color(0xFFF2F0EB));
-      expect(ScaneliqColorPalette.light.hairline, const Color(0xFFE6E4DD));
-      expect(ScaneliqColorPalette.light.accent, const Color(0xFF0052FF));
-      expect(ScaneliqColorPalette.light.textPrimary, const Color(0xFF141413));
+    test(
+      'Concept A Light (Gallery Alabaster) & Dark (Carbon Studio) palettes',
+      () {
+        expect(ScaneliqColorPalette.light.bg, const Color(0xFFFAF9F6));
+        expect(ScaneliqColorPalette.light.surface, const Color(0xFFFFFFFF));
+        expect(
+          ScaneliqColorPalette.light.surfaceSubtle,
+          const Color(0xFFF2F0EB),
+        );
+        expect(ScaneliqColorPalette.light.hairline, const Color(0xFFE6E4DD));
+        expect(ScaneliqColorPalette.light.accent, const Color(0xFF0052FF));
+        expect(ScaneliqColorPalette.light.textPrimary, const Color(0xFF141413));
 
-      expect(ScaneliqColorPalette.dark.bg, const Color(0xFF0D0E11));
-      expect(ScaneliqColorPalette.dark.surface, const Color(0xFF15171C));
-      expect(ScaneliqColorPalette.dark.surfaceSubtle, const Color(0xFF1C1F26));
-      expect(ScaneliqColorPalette.dark.hairline, const Color(0xFF23262F));
-      expect(ScaneliqColorPalette.dark.accent, const Color(0xFF3B82F6));
-      expect(ScaneliqColorPalette.dark.textPrimary, const Color(0xFFF4F4F6));
+        expect(ScaneliqColorPalette.dark.bg, const Color(0xFF0D0E11));
+        expect(ScaneliqColorPalette.dark.surface, const Color(0xFF15171C));
+        expect(
+          ScaneliqColorPalette.dark.surfaceSubtle,
+          const Color(0xFF1C1F26),
+        );
+        expect(ScaneliqColorPalette.dark.hairline, const Color(0xFF23262F));
+        expect(ScaneliqColorPalette.dark.accent, const Color(0xFF3B82F6));
+        expect(ScaneliqColorPalette.dark.textPrimary, const Color(0xFFF4F4F6));
 
-      expect(ScaneliqSpacing.unit, 4.0);
-      expect(ScaneliqSpacing.adaptiveHorizontalPadding(320), 16.0);
-      expect(ScaneliqSpacing.adaptiveHorizontalPadding(393), 24.0);
-      expect(ScaneliqRadius.sheet, 3.0);
-      expect(ScaneliqRadius.folio, 14.0);
-      expect(ScaneliqRadius.pill, 999.0);
-      expect(ScaneliqTypography.monoStyle(color: Colors.black).fontSize, 10.5);
-    });
+        expect(ScaneliqSpacing.unit, 4.0);
+        expect(ScaneliqSpacing.adaptiveHorizontalPadding(320), 16.0);
+        expect(ScaneliqSpacing.adaptiveHorizontalPadding(393), 24.0);
+        expect(ScaneliqRadius.sheet, 3.0);
+        expect(ScaneliqRadius.folio, 14.0);
+        expect(ScaneliqRadius.pill, 999.0);
+        expect(
+          ScaneliqTypography.monoStyle(color: Colors.black).fontSize,
+          10.5,
+        );
+      },
+    );
 
-    testWidgets('ThemeExtension exposes exact Light and Dark tokens via context', (
-      tester,
-    ) async {
-      late ScaneliqTokens capturedLight;
-      late ScaneliqTokens capturedDark;
+    testWidgets(
+      'ThemeExtension exposes exact Light and Dark tokens via context',
+      (tester) async {
+        late ScaneliqTokens capturedLight;
+        late ScaneliqTokens capturedDark;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: Builder(
-            builder: (ctx) {
-              capturedLight = ctx.tokens;
-              return const SizedBox.shrink();
-            },
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: Builder(
+              builder: (ctx) {
+                capturedLight = ctx.tokens;
+                return const SizedBox.shrink();
+              },
+            ),
           ),
-        ),
-      );
-      expect(capturedLight.bg, const Color(0xFFFAF9F6));
-      expect(capturedLight.accent, const Color(0xFF0052FF));
+        );
+        expect(capturedLight.bg, const Color(0xFFFAF9F6));
+        expect(capturedLight.accent, const Color(0xFF0052FF));
 
-      await tester.pumpWidget(
-        MaterialApp(
-          key: const ValueKey('dark-theme-check'),
-          theme: AppTheme.darkTheme,
-          home: Builder(
-            builder: (ctx) {
-              capturedDark = ctx.tokens;
-              return const SizedBox.shrink();
-            },
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('dark-theme-check'),
+            theme: AppTheme.darkTheme,
+            home: Builder(
+              builder: (ctx) {
+                capturedDark = ctx.tokens;
+                return const SizedBox.shrink();
+              },
+            ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(capturedDark.bg, const Color(0xFF0D0E11));
-      expect(capturedDark.accent, const Color(0xFF3B82F6));
-    });
+        );
+        await tester.pumpAndSettle();
+        expect(capturedDark.bg, const Color(0xFF0D0E11));
+        expect(capturedDark.accent, const Color(0xFF3B82F6));
+      },
+    );
 
-    testWidgets('Live theme switching toggles Gallery Alabaster and Carbon Studio', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [...buildOverrides()],
-          child: const ScaneliqApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'Live theme switching toggles Gallery Alabaster and Carbon Studio',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [...buildOverrides()],
+            child: const ScaneliqApp(),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      // Initially light under default ThemeMode.system in test harness
-      final initialScaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
-      expect(initialScaffold.backgroundColor, const Color(0xFFFAF9F6));
+        // Initially light under default ThemeMode.system in test harness
+        final initialScaffold = tester.widget<Scaffold>(
+          find.byType(Scaffold).last,
+        );
+        expect(initialScaffold.backgroundColor, const Color(0xFFFAF9F6));
 
-      // Tap header theme toggle button -> Dark (Carbon Studio)
-      await tester.tap(find.byTooltip('Switch theme'));
-      await tester.pumpAndSettle();
+        // Tap header theme toggle button -> Dark (Carbon Studio)
+        await tester.tap(find.byTooltip('Switch theme'));
+        await tester.pumpAndSettle();
 
-      final darkScaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
-      expect(darkScaffold.backgroundColor, const Color(0xFF0D0E11));
+        final darkScaffold = tester.widget<Scaffold>(
+          find.byType(Scaffold).last,
+        );
+        expect(darkScaffold.backgroundColor, const Color(0xFF0D0E11));
 
-      // Tap header theme toggle button again -> Light (Gallery Alabaster)
-      await tester.tap(find.byTooltip('Switch theme'));
-      await tester.pumpAndSettle();
+        // Tap header theme toggle button again -> Light (Gallery Alabaster)
+        await tester.tap(find.byTooltip('Switch theme'));
+        await tester.pumpAndSettle();
 
-      final backToLightScaffold = tester.widget<Scaffold>(
-        find.byType(Scaffold).last,
-      );
-      expect(backToLightScaffold.backgroundColor, const Color(0xFFFAF9F6));
-    });
+        final backToLightScaffold = tester.widget<Scaffold>(
+          find.byType(Scaffold).last,
+        );
+        expect(backToLightScaffold.backgroundColor, const Color(0xFFFAF9F6));
+      },
+    );
   });
 
   group('Phase 1 — Navigation Architecture (go_router & 3-Tab Shell)', () {
-    testWidgets('go_router switches branches and preserves selected tab state', (
-      tester,
-    ) async {
-      final router = createScaneliqRouter();
-      addTearDown(router.dispose);
+    testWidgets(
+      'go_router switches branches and preserves selected tab state',
+      (tester) async {
+        final router = createScaneliqRouter();
+        addTearDown(router.dispose);
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [...buildOverrides()],
-          child: ScaneliqApp(routerOverride: router),
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [...buildOverrides()],
+            child: ScaneliqApp(routerOverride: router),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      expect(router.routeInformationProvider.value.uri.path, AppRoutes.scans);
+        expect(router.routeInformationProvider.value.uri.path, AppRoutes.scans);
 
-      // Navigate via bottom nav bar to Folders
-      await tester.tap(find.text('Folders').last);
-      await tester.pumpAndSettle();
-      expect(router.routeInformationProvider.value.uri.path, AppRoutes.folders);
-      expect(find.text('Search documents...'), findsOneWidget);
+        // Navigate via bottom nav bar to Folders
+        await tester.tap(find.text('Folders').last);
+        await tester.pumpAndSettle();
+        expect(
+          router.routeInformationProvider.value.uri.path,
+          AppRoutes.folders,
+        );
+        expect(find.text('Search documents...'), findsOneWidget);
 
-      // Navigate via bottom nav bar to PDF Suite
-      await tester.tap(find.text('PDF Suite'));
-      await tester.pumpAndSettle();
-      expect(router.routeInformationProvider.value.uri.path, AppRoutes.pdfSuite);
-      expect(find.text('Merge PDF'), findsOneWidget);
+        // Navigate via bottom nav bar to PDF Suite
+        await tester.tap(find.text('PDF Suite'));
+        await tester.pumpAndSettle();
+        expect(
+          router.routeInformationProvider.value.uri.path,
+          AppRoutes.pdfSuite,
+        );
+        expect(find.text('Merge PDF'), findsOneWidget);
 
-      // Navigate back to Scans
-      await tester.tap(find.text('Scans'));
-      await tester.pumpAndSettle();
-      expect(router.routeInformationProvider.value.uri.path, AppRoutes.scans);
-      expect(find.text('Commercial Lease Agreement'), findsOneWidget);
-    });
+        // Navigate back to Scans
+        await tester.tap(find.text('Scans'));
+        await tester.pumpAndSettle();
+        expect(router.routeInformationProvider.value.uri.path, AppRoutes.scans);
+        expect(find.text('Commercial Lease Agreement'), findsOneWidget);
+      },
+    );
 
     testWidgets('Unknown route renders Scaneliq error screen with return CTA', (
       tester,
@@ -300,35 +325,38 @@ void main() {
       expect(find.text('SCAN · 6P'), findsOneWidget);
     });
 
-    testWidgets('Search field filters document stream and clear button resets', (
+    testWidgets(
+      'Search field filters document stream and clear button resets',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [...buildOverrides()],
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              home: const HomeScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'Lease');
+        await tester.pumpAndSettle();
+
+        expect(find.text('Search Results'), findsOneWidget);
+        expect(find.text('Commercial Lease Agreement'), findsWidgets);
+        expect(find.text('Square Pharmaceuticals Invoice #884'), findsNothing);
+
+        // Clear search restores full document list
+        await tester.tap(find.byIcon(Icons.close_rounded));
+        await tester.pumpAndSettle();
+        expect(find.text('Commercial Lease Agreement'), findsWidgets);
+        expect(find.text('Square Pharmaceuticals Invoice #884'), findsWidgets);
+      },
+    );
+
+    testWidgets('Starred scope filters only favorite documents', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [...buildOverrides()],
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: const HomeScreen(),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.enterText(find.byType(TextField), 'Lease');
-      await tester.pumpAndSettle();
-
-      expect(find.text('Search Results'), findsOneWidget);
-      expect(find.text('Commercial Lease Agreement'), findsWidgets);
-      expect(find.text('Square Pharmaceuticals Invoice #884'), findsNothing);
-
-      // Clear search restores full document list
-      await tester.tap(find.byIcon(Icons.close_rounded));
-      await tester.pumpAndSettle();
-      expect(find.text('Commercial Lease Agreement'), findsWidgets);
-      expect(find.text('Square Pharmaceuticals Invoice #884'), findsWidgets);
-    });
-
-    testWidgets('Starred scope filters only favorite documents', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [...buildOverrides()],
@@ -381,7 +409,10 @@ void main() {
                     const SizedBox(height: 8),
                     ScaneliqSecondaryButton(label: 'Cancel', onPressed: () {}),
                     const SizedBox(height: 8),
-                    ScaneliqDestructiveButton(label: 'Delete', onPressed: () {}),
+                    ScaneliqDestructiveButton(
+                      label: 'Delete',
+                      onPressed: () {},
+                    ),
                     const SizedBox(height: 8),
                     const ScaneliqStatusLabel(
                       text: 'OCR · BN',
@@ -413,42 +444,43 @@ void main() {
       expect(find.text('Commercial Lease Agreement'), findsWidgets);
     });
 
-    testWidgets('Home Dashboard adapts to compact phone, 393x852, tablet & a11y scaling without overflow', (
-      tester,
-    ) async {
-      final sizes = <Size>[
-        const Size(320, 640), // Small phone
-        const Size(393, 852), // Primary Concept A reference viewport
-        const Size(768, 1024), // Tablet viewport
-      ];
+    testWidgets(
+      'Home Dashboard adapts to compact phone, 393x852, tablet & a11y scaling without overflow',
+      (tester) async {
+        final sizes = <Size>[
+          const Size(320, 640), // Small phone
+          const Size(393, 852), // Primary Concept A reference viewport
+          const Size(768, 1024), // Tablet viewport
+        ];
 
-      for (final size in sizes) {
-        await tester.binding.setSurfaceSize(size);
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [...buildOverrides()],
-            child: MediaQuery(
-              data: MediaQueryData(
-                size: size,
-                textScaler: size.width == 320
-                    ? const TextScaler.linear(1.35)
-                    : TextScaler.noScaling,
-              ),
-              child: MaterialApp(
-                theme: AppTheme.lightTheme,
-                home: const Scaffold(body: HomeScreen()),
+        for (final size in sizes) {
+          await tester.binding.setSurfaceSize(size);
+          await tester.pumpWidget(
+            ProviderScope(
+              overrides: [...buildOverrides()],
+              child: MediaQuery(
+                data: MediaQueryData(
+                  size: size,
+                  textScaler: size.width == 320
+                      ? const TextScaler.linear(1.35)
+                      : TextScaler.noScaling,
+                ),
+                child: MaterialApp(
+                  theme: AppTheme.lightTheme,
+                  home: const Scaffold(body: HomeScreen()),
+                ),
               ),
             ),
-          ),
-        );
-        await tester.pumpAndSettle();
+          );
+          await tester.pumpAndSettle();
 
-        expect(find.text('Scaneliq'), findsOneWidget);
-        expect(find.text('Commercial Lease Agreement'), findsWidgets);
-        expect(tester.takeException(), isNull);
-      }
+          expect(find.text('Scaneliq'), findsOneWidget);
+          expect(find.text('Commercial Lease Agreement'), findsWidgets);
+          expect(tester.takeException(), isNull);
+        }
 
-      await tester.binding.setSurfaceSize(null);
-    });
+        await tester.binding.setSurfaceSize(null);
+      },
+    );
   });
 }

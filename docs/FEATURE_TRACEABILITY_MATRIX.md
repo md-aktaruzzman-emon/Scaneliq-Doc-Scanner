@@ -1,7 +1,8 @@
 # Scaneliq — Master Feature Traceability Matrix
 
-**Document Version:** 2.0.0  
-**Last Updated:** October 19, 2026  
+**Document Version:** 3.0.0
+**Last Updated:** November 19, 2026 (Post-Repair Verification: `205` tests across `34` suites, `0` analyze issues)
+**Current Repair Ledger:** See [SCANELIQ_MASTER_FUNCTIONAL_INVENTORY.md](file:///c:/Scaneliq/docs/SCANELIQ_MASTER_FUNCTIONAL_INVENTORY.md) & [SCANELIQ_COMPLETE_PROJECT_REPAIR_REPORT.md](file:///c:/Scaneliq/docs/SCANELIQ_COMPLETE_PROJECT_REPAIR_REPORT.md)
 **Status Legend:**
 - `TESTED`: Implemented and verified via automated test suites (unit, widget, integration, or build packaging).
 - `IMPLEMENTED`: Complete in code and connected to workflows; awaiting physical hardware check.
@@ -45,7 +46,7 @@
 | **F-28** | **On-Device Optical Character Recognition (OCR)**<br>Extract selectable plain text from scanned pages using on-device ML | Adobe Scan, Genius Ultra, SwiftScan VIP, CamScanner | D | P1 | Phase 6 | **TESTED** | `google_mlkit_text_recognition`<br>`ocr_service.dart` |
 | **F-29** | **Searchable PDF Generation (Invisible Text Layer)**<br>Injects invisible OCR text layer matching word bounding boxes | Adobe Scan, Google Drive, Genius Ultra, SwiftScan | D | P1 | Phase 6 | **TESTED** | `pdf_service.dart`<br>`test/pdf_generation_test.dart` |
 | **F-30** | **Full-Text Document Library Search**<br>Live search across all scanned pages using SQLite full-text index | Google Drive, OneDrive, Genius Ultra, SwiftScan | D | P1 | Phase 6 | **TESTED** | SQLite `document_ocr` table<br>`app_database_service.dart` |
-| **F-31** | **Bangla / Indic Script OCR Integration**<br>Recognize Bengali text using Tesseract / on-device trained language models | CamScanner (Cloud) | D | P2 | Phase 6 | **TESTED** | Google ML Kit Devanagari/Indic Engine<br>`ocr_service.dart`<br>`test/phase3_advanced_features_test.dart` |
+| **F-31** | **Bangla / Indic Script OCR Integration**<br>Recognize genuine Bengali (`বাংলা`) and Mixed Bn+En offline using bundled `ben.traineddata`/`eng.traineddata` via Android JNI | CamScanner (Cloud) | D | P2 | Phase 6 | **TESTED** | `TesseractOcrEngine.kt` (`tesseract4android:4.9.0`), `assets/tessdata/ben.traineddata`<br>`ocr_service.dart`<br>`test/phase3_advanced_features_test.dart` |
 | **F-32** | **Document Translation (Bengali ↔ English)**<br>Translate recognized OCR text into Bengali, English, and other languages | SwiftScan VIP, CamScanner Pro | D | P1 | Phase 6 | **TESTED** | `translate_screen.dart`<br>`translator` / On-device ML |
 | **F-33** | **Business Card Contact Extraction**<br>Extracts Name, Phone, Email, Company; saves to device Contacts | Adobe Scan, OneDrive, Genius Ultra | D | P2 | Phase 8 | **TESTED** | `business_card_service.dart`<br>`test/phase3_advanced_features_test.dart` |
 | **F-34** | **Receipt & Invoice Key-Value Extraction**<br>Automatically parses Merchant, Date, Tax, Total, and Line Items | CamScanner Pro, Genius Ultra | D | P2 | Phase 8 | **TESTED** | `receipt_parser_service.dart`<br>`test/phase3_advanced_features_test.dart` |

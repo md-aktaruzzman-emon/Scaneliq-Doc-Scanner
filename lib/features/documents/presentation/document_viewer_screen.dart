@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
-import 'package:scaneliq/core/storage/app_storage_service.dart';
+import 'package:scaneliq/core/services/scan_preferences_service.dart';
 import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
 import 'package:scaneliq/core/theme/scaneliq_typography.dart';
 import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
@@ -20,6 +20,7 @@ import 'package:scaneliq/features/pdf/presentation/widgets/pdf_annotation_studio
 import 'package:scaneliq/features/pdf/presentation/widgets/pdf_metadata_and_bookmarks_sheets.dart';
 import 'package:scaneliq/features/pdf/presentation/widgets/signature_studio_sheet.dart';
 import 'package:scaneliq/features/pdf/presentation/widgets/watermark_studio_sheet.dart';
+import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 
 /// Concept A Professional PDF Viewer & Productivity Studio.
 ///
@@ -48,7 +49,8 @@ class DocumentViewerScreen extends StatefulWidget {
 class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   final PdfViewerController _pdfController = PdfViewerController();
   PdfTextSearcher? _textSearcher;
-  final PdfAnnotationController _annotationController = PdfAnnotationController();
+  final PdfAnnotationController _annotationController =
+      PdfAnnotationController();
   final TextEditingController _searchQueryController = TextEditingController();
 
   late ScannedDocument _activeDoc;
@@ -102,10 +104,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
   }
 
   Future<void> _loadInitialMetadata() async {
-    await Future.wait([
-      _refreshPageCountAndTextLayer(),
-      _loadBookmarks(),
-    ]);
+    await Future.wait([_refreshPageCountAndTextLayer(), _loadBookmarks()]);
     await _autoEnsurePdfExists();
   }
 
@@ -173,10 +172,30 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         throw Exception('No scanned pages found for this document.');
       }
 
+      final ocrBoxesByPage = <int, List<OcrBoundingBox>>{};
+      final ocrTexts = <String>[];
+      if (ScanPreferencesService.instance.autoEmbedSearchableOcr) {
+        final script = ScanPreferencesService.instance.defaultOcrScript;
+        for (int i = 0; i < pages.length; i++) {
+          final pFile = File(pages[i].processedPath ?? pages[i].originalPath);
+          if (await pFile.exists()) {
+            try {
+              final res = await OcrService.instance.extractPageOcr(
+                pFile,
+                script: script,
+              );
+              if (res.boxes.isNotEmpty) ocrBoxesByPage[i] = res.boxes;
+              if (res.text.trim().isNotEmpty) ocrTexts.add(res.text.trim());
+            } catch (_) {}
+          }
+        }
+      }
+
       final generatedPdf = await PdfService.generatePdf(
         document: _activeDoc,
         pages: pages,
         customTitle: _activeDoc.title,
+        ocrBoxesByPage: ocrBoxesByPage.isNotEmpty ? ocrBoxesByPage : null,
       );
 
       _activeDoc = _activeDoc.copyWith(
@@ -185,6 +204,13 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         isDraft: false,
       );
       await AppDatabaseService.instance.saveDocument(_activeDoc);
+      if (ocrTexts.isNotEmpty) {
+        await AppDatabaseService.instance.saveDocumentOcr(
+          _activeDoc.id,
+          ocrTexts.join('\n\n'),
+        );
+      }
+      _invalidateLibraryProviders();
       await _refreshPageCountAndTextLayer();
 
       if (mounted) {
@@ -242,7 +268,19 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     return res;
   }
 
-  Future<void> _updateActivePdfFile(File newFile, {String? toastMessage}) async {
+  void _invalidateLibraryProviders() {
+    try {
+      final container = ProviderScope.containerOf(context, listen: false);
+      container.invalidate(documentsListProvider);
+      container.invalidate(searchedDocumentsProvider);
+      container.invalidate(latestDraftProvider);
+    } catch (_) {}
+  }
+
+  Future<void> _updateActivePdfFile(
+    File newFile, {
+    String? toastMessage,
+  }) async {
     final count = await AdvancedPdfService.instance.getPageCount(newFile);
     final texts = await AdvancedPdfService.instance.extractTextByPage(newFile);
     final updatedDoc = _activeDoc.copyWith(
@@ -252,6 +290,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     );
     try {
       await AppDatabaseService.instance.saveDocument(updatedDoc);
+      _invalidateLibraryProviders();
     } catch (_) {}
 
     if (mounted) {
@@ -340,7 +379,9 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           controller: ctrl,
           autofocus: true,
           maxLines: 3,
-          decoration: const InputDecoration(hintText: 'Enter annotation text...'),
+          decoration: const InputDecoration(
+            hintText: 'Enter annotation text...',
+          ),
         ),
         actions: [
           TextButton(
@@ -476,10 +517,8 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     final updatedFile = await Navigator.push<File>(
       context,
       MaterialPageRoute(
-        builder: (_) => PdfPageOrganizerScreen(
-          pdfFile: File(path),
-          document: _activeDoc,
-        ),
+        builder: (_) =>
+            PdfPageOrganizerScreen(pdfFile: File(path), document: _activeDoc),
       ),
     );
     if (updatedFile != null && await updatedFile.exists()) {
@@ -502,7 +541,10 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('OCR Recognition Script', style: Theme.of(ctx).textTheme.headlineMedium),
+          Text(
+            'OCR Recognition Script',
+            style: Theme.of(ctx).textTheme.headlineMedium,
+          ),
           const SizedBox(height: 10),
           ScaneliqContextMenuRow(
             icon: Icons.language_rounded,
@@ -560,7 +602,10 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         _extractedText = full;
       });
       if (full.isEmpty) {
-        showScaneliqToast(context, 'No readable text detected on scanned pages.');
+        showScaneliqToast(
+          context,
+          'No readable text detected on scanned pages.',
+        );
       } else {
         AiDocumentSheet.show(context, text: full);
       }
@@ -621,7 +666,9 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                     RadioListTile(
                       value: PdfCompressionPreset.highQuality,
                       title: Text('High Quality'),
-                      subtitle: Text('Minimal size optimization (~85% quality)'),
+                      subtitle: Text(
+                        'Minimal size optimization (~85% quality)',
+                      ),
                     ),
                     RadioListTile(
                       value: PdfCompressionPreset.balanced,
@@ -631,7 +678,9 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                     RadioListTile(
                       value: PdfCompressionPreset.smallerFile,
                       title: Text('Small File'),
-                      subtitle: Text('Maximum reduction for email/upload (~45%)'),
+                      subtitle: Text(
+                        'Maximum reduction for email/upload (~45%)',
+                      ),
                     ),
                   ],
                 ),
@@ -755,9 +804,10 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         outputFileName:
             '${_activeDoc.title}_protected_${DateTime.now().millisecondsSinceEpoch}',
       );
-      if (mounted) {
-        showScaneliqToast(context, 'Protected PDF saved: ${out.uri.pathSegments.last}');
-      }
+      await _updateActivePdfFile(
+        out,
+        toastMessage: 'Protected PDF saved: ${out.uri.pathSegments.last}',
+      );
     } catch (e) {
       if (mounted) showScaneliqToast(context, 'Protection failed: $e');
     }
@@ -773,9 +823,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           controller: ctrl,
           keyboardType: TextInputType.number,
           autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Page (1 - $_totalPages)',
-          ),
+          decoration: InputDecoration(labelText: 'Page (1 - $_totalPages)'),
         ),
         actions: [
           TextButton(
@@ -803,22 +851,20 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
     int count = 0;
     for (int i = 0; i < _activeDoc.pages.length; i++) {
       final page = _activeDoc.pages[i];
-      final f = File(page.processedPath ?? page.originalPath);
-      if (await f.exists()) {
-        final raw = await f.readAsBytes();
-        final outBytes = await ImageProcessingService.processEncodedSourceBytesInIsolate(
-          raw,
-          page.editRecipe,
+      try {
+        await PdfService.exportPageAsJpeg(
+          page: page.copyWith(pageOrder: i),
+          baseName: _activeDoc.title,
           quality: 92,
         );
-        final outPath =
-            '${AppStorageService.instance.exportsDir.path}/${_activeDoc.title}_p${i + 1}.jpg';
-        await File(outPath).writeAsBytes(outBytes, flush: true);
         count++;
-      }
+      } catch (_) {}
     }
     if (mounted) {
-      showScaneliqToast(context, 'Exported $count JPEG page(s) to Exports folder.');
+      showScaneliqToast(
+        context,
+        'Exported $count JPEG page(s) to Exports folder.',
+      );
     }
   }
 
@@ -1033,7 +1079,8 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                 color: _showThumbnailRail ? tokens.accent : tokens.textPrimary,
               ),
               tooltip: 'Page Thumbnails',
-              onPressed: () => setState(() => _showThumbnailRail = !_showThumbnailRail),
+              onPressed: () =>
+                  setState(() => _showThumbnailRail = !_showThumbnailRail),
             ),
             IconButton(
               icon: const Icon(Icons.bookmark_border_rounded),
@@ -1118,10 +1165,8 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
           Expanded(
             child: Text(
               statusText,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: tokens.textPrimary,
-                fontSize: 12,
-              ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: tokens.textPrimary, fontSize: 12),
             ),
           ),
           if (!_searchHasTextLayer)
@@ -1174,7 +1219,8 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                 : PdfViewer.file(
                     file.path,
                     controller: _pdfController,
-                    passwordProvider: () async => await _promptPassword(context),
+                    passwordProvider: () async =>
+                        await _promptPassword(context),
                     params: PdfViewerParams(
                       panAxis: PanAxis.free,
                       onPageChanged: (page) {
@@ -1200,12 +1246,16 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                                 'PDF preview unavailable: $err',
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: tokens.danger, fontSize: 12),
+                                style: TextStyle(
+                                  color: tokens.danger,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                             TextButton(
-                              onPressed: () =>
-                                  setState(() => _showFallbackImageViewer = true),
+                              onPressed: () => setState(
+                                () => _showFallbackImageViewer = true,
+                              ),
                               child: const Text('Raw Scans'),
                             ),
                           ],
@@ -1232,7 +1282,10 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
             right: 0,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: tokens.surface.withValues(alpha: 0.94),
                   borderRadius: BorderRadius.circular(999),
@@ -1265,13 +1318,20 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                     InkWell(
                       onTap: () {
                         setState(
-                          () => _zoomFactor = (_zoomFactor - 0.25).clamp(0.75, 4.0),
+                          () => _zoomFactor = (_zoomFactor - 0.25).clamp(
+                            0.75,
+                            4.0,
+                          ),
                         );
                         try {
                           if (_pdfController.isReady) _pdfController.zoomDown();
                         } catch (_) {}
                       },
-                      child: Icon(Icons.remove_rounded, size: 17, color: tokens.textPrimary),
+                      child: Icon(
+                        Icons.remove_rounded,
+                        size: 17,
+                        color: tokens.textPrimary,
+                      ),
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -1286,13 +1346,20 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                     InkWell(
                       onTap: () {
                         setState(
-                          () => _zoomFactor = (_zoomFactor + 0.25).clamp(0.75, 4.0),
+                          () => _zoomFactor = (_zoomFactor + 0.25).clamp(
+                            0.75,
+                            4.0,
+                          ),
                         );
                         try {
                           if (_pdfController.isReady) _pdfController.zoomUp();
                         } catch (_) {}
                       },
-                      child: Icon(Icons.add_rounded, size: 17, color: tokens.textPrimary),
+                      child: Icon(
+                        Icons.add_rounded,
+                        size: 17,
+                        color: tokens.textPrimary,
+                      ),
                     ),
                   ],
                 ),
@@ -1310,7 +1377,11 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.picture_as_pdf_outlined, size: 54, color: tokens.textTertiary),
+            Icon(
+              Icons.picture_as_pdf_outlined,
+              size: 54,
+              color: tokens.textTertiary,
+            ),
             const SizedBox(height: 12),
             Text(
               'PDF file not yet exported',
@@ -1337,7 +1408,8 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                   label: const Text('Generate PDF'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: () => setState(() => _showFallbackImageViewer = true),
+                  onPressed: () =>
+                      setState(() => _showFallbackImageViewer = true),
                   icon: const Icon(Icons.photo_library_outlined, size: 18),
                   label: const Text('Raw Scans'),
                 ),
@@ -1401,7 +1473,10 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
                     right: 2,
                     bottom: 2,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
                       decoration: BoxDecoration(
                         color: isActive ? tokens.accent : Colors.black54,
                         borderRadius: BorderRadius.circular(4),
@@ -1495,7 +1570,11 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
               child: Center(
                 child: f.existsSync()
                     ? Image.file(f, fit: BoxFit.contain, cacheWidth: 1600)
-                    : Icon(Icons.broken_image_outlined, color: tokens.textTertiary, size: 42),
+                    : Icon(
+                        Icons.broken_image_outlined,
+                        color: tokens.textTertiary,
+                        size: 42,
+                      ),
               ),
             );
           },

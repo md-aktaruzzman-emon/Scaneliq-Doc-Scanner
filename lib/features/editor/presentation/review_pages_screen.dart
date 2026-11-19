@@ -3,7 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
+import 'package:scaneliq/core/services/scan_preferences_service.dart';
+import 'package:scaneliq/core/services/smart_filename_service.dart';
+import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/scaneliq_colors.dart';
 import 'package:scaneliq/core/theme/scaneliq_radius.dart';
 import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
@@ -20,6 +24,7 @@ import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 import 'package:scaneliq/features/scanner/presentation/scanner_studio_provider.dart';
+import 'package:uuid/uuid.dart';
 
 /// Concept A (Editorial Gallery Minimal) Captured Pages Review Screen.
 ///
@@ -37,12 +42,23 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
   late TextEditingController _titleController;
   int _selectedPageIndex = 0;
   bool _isExporting = false;
+  bool _isBatchFiltering = false;
+
+  late PdfQualityPreset _qualityPreset;
+  late PdfPageFormatOption _pageFormatOption;
+  late OcrScript _ocrScript;
+  late bool _embedSearchableOcr;
 
   @override
   void initState() {
     super.initState();
     final session = ref.read(scanSessionProvider);
     _titleController = TextEditingController(text: session.title);
+    final prefs = ScanPreferencesService.instance;
+    _qualityPreset = prefs.qualityPreset;
+    _pageFormatOption = prefs.pageFormat;
+    _ocrScript = prefs.defaultOcrScript;
+    _embedSearchableOcr = prefs.autoEmbedSearchableOcr;
   }
 
   @override
@@ -74,20 +90,25 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
       final ocrBoxesByPage = <int, List<OcrBoundingBox>>{};
       final ocrTexts = <String>[];
 
-      for (int i = 0; i < session.pages.length; i++) {
-        final page = session.pages[i];
-        final imageFile = File(page.processedPath ?? page.originalPath);
-        if (imageFile.existsSync()) {
-          try {
-            final pageOcr = await OcrService.instance.extractPageOcr(imageFile);
-            if (pageOcr.boxes.isNotEmpty) {
-              ocrBoxesByPage[i] = pageOcr.boxes;
+      if (_embedSearchableOcr) {
+        for (int i = 0; i < session.pages.length; i++) {
+          final page = session.pages[i];
+          final imageFile = File(page.processedPath ?? page.originalPath);
+          if (imageFile.existsSync()) {
+            try {
+              final pageOcr = await OcrService.instance.extractPageOcr(
+                imageFile,
+                script: _ocrScript,
+              );
+              if (pageOcr.boxes.isNotEmpty) {
+                ocrBoxesByPage[i] = pageOcr.boxes;
+              }
+              if (pageOcr.text.trim().isNotEmpty) {
+                ocrTexts.add(pageOcr.text.trim());
+              }
+            } catch (_) {
+              // Non-critical: OCR failure never blocks document PDF export.
             }
-            if (pageOcr.text.trim().isNotEmpty) {
-              ocrTexts.add(pageOcr.text.trim());
-            }
-          } catch (_) {
-            // Non-critical: OCR failure never blocks document PDF export.
           }
         }
       }
@@ -97,6 +118,8 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         pages: session.pages,
         customTitle: doc.title,
         ocrBoxesByPage: ocrBoxesByPage.isNotEmpty ? ocrBoxesByPage : null,
+        qualityPreset: _qualityPreset,
+        pageFormatOption: _pageFormatOption,
       );
 
       final finalizedDoc = doc.copyWith(
@@ -153,9 +176,8 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
               const SizedBox(height: 10),
               Text(
                 'PDF saved locally${ocrTexts.isNotEmpty ? ' with searchable OCR text layer.' : '.'}',
-                style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                  color: tokens.textSecondary,
-                ),
+                style: Theme.of(ctx).textTheme.bodyMedium
+                    ?.copyWith(color: tokens.textSecondary),
               ),
               const SizedBox(height: 18),
               ScaneliqPrimaryButton(
@@ -443,9 +465,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
             title: 'Retake with ML Kit Scanner',
             onTap: () async {
               Navigator.pop(ctx);
-              await ref
-                  .read(scanSessionProvider.notifier)
-                  .retakePage(page.id);
+              await ref.read(scanSessionProvider.notifier).retakePage(page.id);
             },
           ),
         ],
@@ -484,7 +504,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Document Title',
+            'Document Title & Smart Naming',
             style: Theme.of(ctx).textTheme.headlineMedium,
           ),
           const SizedBox(height: 12),
@@ -496,6 +516,43 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
               hintText: 'Scan_Document',
             ),
             onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              ActionChip(
+                label: const Text('+ Smart Template'),
+                onPressed: () {
+                  controller.text = SmartFilenameService.generateFilename(
+                    template:
+                        ScanPreferencesService.instance.smartFilenameTemplate,
+                    title: controller.text,
+                    category: 'Scan',
+                    extension: '',
+                  );
+                },
+              ),
+              ActionChip(
+                label: const Text('+ [Date]'),
+                onPressed: () {
+                  controller.text = SmartFilenameService.generateFilename(
+                    template: '${controller.text.trim()}_[Date]',
+                    extension: '',
+                  );
+                },
+              ),
+              ActionChip(
+                label: const Text('+ [Time]'),
+                onPressed: () {
+                  controller.text = SmartFilenameService.generateFilename(
+                    template: '${controller.text.trim()}_[Time]',
+                    extension: '',
+                  );
+                },
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           ScaneliqPrimaryButton(
@@ -510,6 +567,156 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
       _titleController.text = updated;
       ref.read(scanSessionProvider.notifier).updateTitle(updated);
       if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _openExportOptionsSheet() async {
+    var q = _qualityPreset;
+    var fmt = _pageFormatOption;
+    var scr = _ocrScript;
+    var embedOcr = _embedSearchableOcr;
+
+    final applied = await showScaneliqBottomSheet<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'PDF Export Options',
+              style: Theme.of(sheetCtx).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<PdfQualityPreset>(
+              initialValue: q,
+              decoration: const InputDecoration(
+                labelText: 'Export Quality & DPI',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final preset in PdfQualityPreset.values)
+                  DropdownMenuItem(value: preset, child: Text(preset.label)),
+              ],
+              onChanged: (v) {
+                if (v != null) setSheetState(() => q = v);
+              },
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<PdfPageFormatOption>(
+              initialValue: fmt,
+              decoration: const InputDecoration(
+                labelText: 'Paper Size',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final item in PdfPageFormatOption.values)
+                  DropdownMenuItem(value: item, child: Text(item.label)),
+              ],
+              onChanged: (v) {
+                if (v != null) setSheetState(() => fmt = v);
+              },
+            ),
+            const SizedBox(height: 10),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Embed Searchable OCR Layer'),
+              subtitle: const Text('Makes text selectable and FTS-searchable'),
+              value: embedOcr,
+              onChanged: (v) => setSheetState(() => embedOcr = v),
+            ),
+            if (embedOcr)
+              DropdownButtonFormField<OcrScript>(
+                initialValue: scr,
+                decoration: const InputDecoration(
+                  labelText: 'OCR Recognition Language',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: OcrScript.latin,
+                    child: Text('English / Latin'),
+                  ),
+                  DropdownMenuItem(
+                    value: OcrScript.bengali,
+                    child: Text('Bengali (বাংলা)'),
+                  ),
+                  DropdownMenuItem(
+                    value: OcrScript.mixedBengaliEnglish,
+                    child: Text('Mixed বাংলা + English'),
+                  ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setSheetState(() => scr = v);
+                },
+              ),
+            const SizedBox(height: 14),
+            ScaneliqPrimaryButton(
+              label: 'Apply Export Settings',
+              onPressed: () => Navigator.pop(ctx, true),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (applied == true && mounted) {
+      setState(() {
+        _qualityPreset = q;
+        _pageFormatOption = fmt;
+        _ocrScript = scr;
+        _embedSearchableOcr = embedOcr;
+      });
+    }
+  }
+
+  Future<void> _applyBatchFilterPreset(PageFilter filter) async {
+    if (_isBatchFiltering) return;
+    final pages = ref.read(scanSessionProvider).pages;
+    if (pages.isEmpty) return;
+    setState(() => _isBatchFiltering = true);
+    try {
+      await ref
+          .read(scanSessionProvider.notifier)
+          .applyFilterToPages(pages.map((p) => p.id).toSet(), filter);
+      if (mounted) {
+        showScaneliqToast(
+          context,
+          'Applied ${filter.name} filter to ${pages.length} page(s).',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBatchFiltering = false);
+    }
+  }
+
+  Future<void> _splitCurrentPageBookSpread(DocumentPage page) async {
+    final file = File(page.originalPath);
+    if (!await file.exists()) return;
+    setState(() => _isExporting = true);
+    try {
+      final splits = await ImageProcessingService.splitBookSpreadFile(
+        spreadFile: file,
+        outputDir: AppStorageService.instance.tempDir,
+        baseId: const Uuid().v4(),
+      );
+      final added = await ref
+          .read(scanSessionProvider.notifier)
+          .importFiles(splits);
+      for (final f in splits) {
+        try {
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+      if (mounted && added > 0) {
+        showScaneliqToast(
+          context,
+          'Split book spread and added $added Left/Right page(s).',
+        );
+      }
+    } catch (e) {
+      if (mounted) showScaneliqToast(context, 'Book split failed: $e');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 
@@ -534,8 +741,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
 
   Future<void> _movePageOrder(int currentIndex, int targetIndex) async {
     final notifier = ref.read(scanSessionProvider.notifier);
-    final adjustedNew =
-        targetIndex > currentIndex ? targetIndex + 1 : targetIndex;
+    final adjustedNew = targetIndex > currentIndex
+        ? targetIndex + 1
+        : targetIndex;
     await notifier.reorderPages(currentIndex, adjustedNew);
     if (mounted) {
       setState(() => _selectedPageIndex = targetIndex);
@@ -566,8 +774,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
           child: ScaneliqEmptyState(
             icon: Icons.document_scanner_outlined,
             title: 'No captured pages yet',
-            description:
-                'Open the Optical Camera Studio or import document images from your device.',
+            description: 'Open the Optical Camera Studio or import document images from your device.',
             primaryActionLabel: 'Open Camera Studio',
             onPrimaryAction: () => Navigator.of(context).push(
               MaterialPageRoute(
@@ -804,6 +1011,19 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                           onPressed: _showAddPagesSheet,
                         ),
                         _ReviewStageActionChip(
+                          icon: Icons.tune_outlined,
+                          label:
+                              '${_qualityPreset.shortName} · ${_pageFormatOption.shortBadge}',
+                          onPressed: _openExportOptionsSheet,
+                        ),
+                        _ReviewStageActionChip(
+                          icon: Icons.chrome_reader_mode_outlined,
+                          label: 'Split Spread',
+                          onPressed: _isExporting
+                              ? () {}
+                              : () => _splitCurrentPageBookSpread(activePage),
+                        ),
+                        _ReviewStageActionChip(
                           icon: Icons.delete_outline_rounded,
                           label: 'Delete',
                           destructive: true,
@@ -811,6 +1031,32 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                               _confirmDeletePage(activePage, safeIndex),
                         ),
                       ],
+                    ),
+
+                    const SizedBox(height: 10),
+                    // Quick Batch Filter Presets Bar
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final preset in const [
+                            (PageFilter.original, 'Original'),
+                            (PageFilter.magicColor, 'Magic Color'),
+                            (PageFilter.blackAndWhite, 'Crisp B&W'),
+                            (PageFilter.grayscale, 'Grayscale'),
+                            (PageFilter.whiteboard, 'Whiteboard'),
+                          ])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ActionChip(
+                                label: Text(preset.$2),
+                                onPressed: _isBatchFiltering
+                                    ? null
+                                    : () => _applyBatchFilterPreset(preset.$1),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
 
                     // Page Reorder Quick Controls (when multiple pages exist)
@@ -823,7 +1069,10 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                             onPressed: safeIndex > 0
                                 ? () => _movePageOrder(safeIndex, safeIndex - 1)
                                 : null,
-                            icon: const Icon(Icons.chevron_left_rounded, size: 18),
+                            icon: const Icon(
+                              Icons.chevron_left_rounded,
+                              size: 18,
+                            ),
                             label: const Text('Move Left'),
                           ),
                           const SizedBox(width: 8),
@@ -831,7 +1080,10 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                             onPressed: safeIndex < pageCount - 1
                                 ? () => _movePageOrder(safeIndex, safeIndex + 1)
                                 : null,
-                            icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                            icon: const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 18,
+                            ),
                             label: const Text('Move Right'),
                           ),
                         ],
@@ -877,8 +1129,9 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                             const SizedBox(width: 8),
                             ScaneliqTextButton(
                               label: 'Combine',
-                              onPressed:
-                                  _isExporting ? null : _stitch2In1IdCard,
+                              onPressed: _isExporting
+                                  ? null
+                                  : _stitch2In1IdCard,
                             ),
                           ],
                         ),
@@ -999,7 +1252,7 @@ class _ReviewPagesScreenState extends ConsumerState<ReviewPagesScreen> {
                                       color: isSelected
                                           ? tokens.accent
                                           : ScaneliqColorPalette.cameraStudioBg
-                                              .withValues(alpha: 0.78),
+                                                .withValues(alpha: 0.78),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(

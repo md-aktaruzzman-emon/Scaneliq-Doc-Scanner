@@ -197,7 +197,9 @@ class AppLockService {
     final storedHash = await _secureStore.read(_prefPinHash);
     _hasPinCached = storedHash != null && storedHash.isNotEmpty;
     final lockoutStr = await _secureStore.read(_prefLockoutUntilEpoch);
-    _lockoutUntilEpochCached = lockoutStr == null ? null : int.tryParse(lockoutStr);
+    _lockoutUntilEpochCached = lockoutStr == null
+        ? null
+        : int.tryParse(lockoutStr);
   }
 
   // ---------------------------------------------------------------------------

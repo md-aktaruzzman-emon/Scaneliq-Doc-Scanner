@@ -240,7 +240,9 @@ class ReceiptParserService {
     }
 
     double? parseDecimalAmount(String str) {
-      final matches = RegExp(r'\d+(?:,\d{3})*(?:\.\d{2})').allMatches(str).toList();
+      final matches = RegExp(r'\d+(?:,\d{3})*(?:\.\d{2})')
+          .allMatches(str)
+          .toList();
       if (matches.isEmpty) return null;
       final cleaned = matches.last.group(0)!.replaceAll(',', '');
       return double.tryParse(cleaned);
@@ -280,7 +282,8 @@ class ReceiptParserService {
       } else if (amt != null && amt > 0) {
         int qty = 1;
         double? unitPrice;
-        final qtyMatch = RegExp(r'(\d+)\s*[xX×]\s*(\d+(?:\.\d{2})?)').firstMatch(line);
+        final qtyMatch = RegExp(r'(\d+)\s*[xX×]\s*(\d+(?:\.\d{2})?)')
+            .firstMatch(line);
         if (qtyMatch != null) {
           qty = int.tryParse(qtyMatch.group(1)!) ?? 1;
           unitPrice = double.tryParse(qtyMatch.group(2)!);

@@ -219,7 +219,10 @@ class _DocumentsLibraryScreenState
       );
       _invalidateAll();
       if (mounted) {
-        showScaneliqToast(context, 'Created folder "${controller.text.trim()}"');
+        showScaneliqToast(
+          context,
+          'Created folder "${controller.text.trim()}"',
+        );
       }
     }
   }
@@ -937,7 +940,8 @@ class _DocumentsLibraryScreenState
           _selectedTagIds.isEmpty) {
         // At vault root without active filter, keep unfiled docs or show all cleanly
       }
-      if (_selectedCategory == FileCategoryFilter.favorites && !doc.isFavorite) {
+      if (_selectedCategory == FileCategoryFilter.favorites &&
+          !doc.isFavorite) {
         return false;
       }
       if (_selectedCategory == FileCategoryFilter.pdfs &&
@@ -1216,7 +1220,9 @@ class _DocumentsLibraryScreenState
                                   ),
                                   decoration: BoxDecoration(
                                     border: Border(
-                                      bottom: BorderSide(color: tokens.hairline),
+                                      bottom: BorderSide(
+                                        color: tokens.hairline,
+                                      ),
                                     ),
                                   ),
                                   child: Row(
@@ -1263,10 +1269,8 @@ class _DocumentsLibraryScreenState
                         4,
                       ),
                       child: ScaneliqSectionHeader(
-                        title:
-                            _currentFolder?.name ?? 'All Vault Documents',
-                        actionLabel:
-                            visibleDocs.isNotEmpty && !_isSelectionMode
+                        title: _currentFolder?.name ?? 'All Vault Documents',
+                        actionLabel: visibleDocs.isNotEmpty && !_isSelectionMode
                             ? 'Batch Select'
                             : null,
                         onAction: () {

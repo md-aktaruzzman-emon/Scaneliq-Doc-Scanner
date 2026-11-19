@@ -6,6 +6,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/navigation/app_router.dart';
 import 'package:scaneliq/core/navigation/main_navigation_shell.dart';
+import 'package:scaneliq/core/services/scan_preferences_service.dart';
+import 'package:scaneliq/core/services/smart_filename_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
 import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
@@ -18,8 +20,10 @@ import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
 import 'package:scaneliq/core/widgets/scaneliq_search_field.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
+import 'package:scaneliq/features/documents/data/batch_merge_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
 import 'package:scaneliq/features/documents/presentation/documents_library_screen.dart';
+import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 import 'package:scaneliq/features/scanner/presentation/scanner_studio_provider.dart';
@@ -140,18 +144,235 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.invalidate(searchedDocumentsProvider);
   }
 
+  void _invalidateAll() {
+    ref.invalidate(documentsListProvider);
+    ref.invalidate(searchedDocumentsProvider);
+    ref.invalidate(foldersListProvider(null));
+    ref.invalidate(latestDraftProvider);
+    ref.invalidate(tagsListProvider);
+  }
+
   Future<void> _shareDocument(ScannedDocument doc) async {
-    final hasExport =
-        doc.exportPath != null && File(doc.exportPath!).existsSync();
-    if (hasExport) {
+    String? path = doc.exportPath;
+    if (path == null || !File(path).existsSync()) {
+      final fullDoc = await AppDatabaseService.instance.getDocument(doc.id);
+      if (fullDoc != null && fullDoc.pages.isNotEmpty) {
+        if (mounted) {
+          showScaneliqToast(context, 'Preparing PDF for sharing…');
+        }
+        try {
+          final generated = await PdfService.generatePdf(
+            document: fullDoc,
+            pages: fullDoc.pages,
+            customTitle: fullDoc.title,
+          );
+          path = generated.path;
+          await AppDatabaseService.instance.saveDocument(
+            fullDoc.copyWith(exportPath: path, isDraft: false),
+          );
+          _invalidateAll();
+        } catch (e) {
+          if (mounted) {
+            showScaneliqToast(context, 'Could not build PDF for sharing: $e');
+          }
+          return;
+        }
+      }
+    }
+    if (path != null && File(path).existsSync()) {
       SharePlus.instance.share(
-        ShareParams(text: doc.title, files: [XFile(doc.exportPath!)]),
+        ShareParams(
+          text: doc.title,
+          files: [XFile(path, mimeType: 'application/pdf')],
+        ),
       );
       return;
     }
     if (mounted) {
-      showScaneliqToast(context, 'Save as PDF first to share "${doc.title}".');
+      showScaneliqToast(
+        context,
+        'No pages available to share for "${doc.title}".',
+      );
     }
+  }
+
+  Future<void> _renameDocumentWithSmartNaming(ScannedDocument doc) async {
+    final controller = TextEditingController(text: doc.title);
+    final confirmed = await showScaneliqBottomSheet<bool>(
+      context: context,
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Rename Document',
+            style: Theme.of(ctx).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Document Title'),
+          ),
+          const SizedBox(height: 10),
+          ScaneliqSecondaryButton(
+            label: 'Apply Smart Filename Template',
+            icon: Icons.auto_fix_high_outlined,
+            onPressed: () {
+              final categoryName = doc.tags.isNotEmpty
+                  ? doc.tags.first.name
+                  : 'Scan';
+              controller.text = SmartFilenameService.generateFilename(
+                template: ScanPreferencesService.instance.smartFilenameTemplate,
+                title: doc.title,
+                category: categoryName,
+                extension: '',
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ScaneliqSecondaryButton(
+                  label: 'Cancel',
+                  onPressed: () => Navigator.pop(ctx, false),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ScaneliqPrimaryButton(
+                  label: 'Save Title',
+                  onPressed: () => Navigator.pop(ctx, true),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    final updatedTitle = controller.text.trim();
+    controller.dispose();
+    if (confirmed == true && updatedTitle.isNotEmpty) {
+      await AppDatabaseService.instance.renameDocument(doc.id, updatedTitle);
+      _invalidateAll();
+    }
+  }
+
+  Future<void> _showMoveToFolderSheet(List<String> docIds) async {
+    final hierarchy = await AppDatabaseService.instance.getFolderHierarchy();
+    if (!mounted) return;
+
+    await showScaneliqBottomSheet<void>(
+      context: context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Move ${docIds.length} ${docIds.length == 1 ? 'Document' : 'Documents'}',
+            style: Theme.of(ctx).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.45,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ScaneliqContextMenuRow(
+                    icon: Icons.home_work_outlined,
+                    title: 'Vault Root (No Folder)',
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await AppDatabaseService.instance.moveDocumentsToFolder(
+                        docIds,
+                        null,
+                      );
+                      setState(() {
+                        _selectedDocIds.clear();
+                        _selectionMode = false;
+                      });
+                      _invalidateAll();
+                    },
+                  ),
+                  for (final entry in hierarchy)
+                    ScaneliqContextMenuRow(
+                      icon: Icons.folder_outlined,
+                      title: '${'  ' * entry.depth}${entry.folder.name}',
+                      subtitle: entry.depth > 0 ? entry.breadcrumbPath : null,
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        await AppDatabaseService.instance.moveDocumentsToFolder(
+                          docIds,
+                          entry.folder.id,
+                        );
+                        setState(() {
+                          _selectedDocIds.clear();
+                          _selectionMode = false;
+                        });
+                        _invalidateAll();
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _batchMergeSelected(List<ScannedDocument> visibleDocs) async {
+    final selectedDocs = visibleDocs
+        .where((d) => _selectedDocIds.contains(d.id))
+        .toList();
+    if (selectedDocs.length < 2) {
+      showScaneliqToast(context, 'Select at least 2 documents to merge.');
+      return;
+    }
+    try {
+      final merged = await BatchMergeService.instance.mergeDocuments(
+        sourceDocuments: selectedDocs,
+        outputTitle: SmartFilenameService.generateFilename(
+          template: ScanPreferencesService.instance.smartFilenameTemplate,
+          title: 'Merged',
+          category: 'Merge',
+          extension: '',
+        ),
+      );
+      setState(() {
+        _selectedDocIds.clear();
+        _selectionMode = false;
+      });
+      _invalidateAll();
+      if (mounted) {
+        showScaneliqToast(
+          context,
+          'Merged PDF "${merged.title}" saved.',
+          actionLabel: 'View',
+          onAction: () => _openDocument(merged),
+        );
+      }
+    } catch (e) {
+      if (mounted) showScaneliqToast(context, 'Merge failed: $e');
+    }
+  }
+
+  Future<void> _discardDraft(ScannedDocument draft) async {
+    final confirmed = await showScaneliqConfirmDialog(
+      context: context,
+      title: 'Discard Unfinished Draft?',
+      message:
+          'Permanently delete unfinished draft "${draft.title}" and its temporary captured pages?',
+      confirmLabel: 'Discard Draft',
+      isDestructive: true,
+    );
+    if (!confirmed) return;
+    await AppDatabaseService.instance.permanentlyDelete(draft.id);
+    _invalidateAll();
   }
 
   Future<void> _trashDocument(ScannedDocument doc) async {
@@ -270,6 +491,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onTap: () {
               Navigator.of(ctx).pop();
               _shareDocument(doc);
+            },
+          ),
+          ScaneliqContextMenuRow(
+            icon: Icons.drive_file_rename_outline_rounded,
+            title: 'Rename & Smart Name',
+            onTap: () {
+              Navigator.of(ctx).pop();
+              _renameDocumentWithSmartNaming(doc);
+            },
+          ),
+          ScaneliqContextMenuRow(
+            icon: Icons.drive_file_move_outlined,
+            title: 'Move to Folder',
+            onTap: () {
+              Navigator.of(ctx).pop();
+              _showMoveToFolderSheet([doc.id]);
             },
           ),
           ScaneliqContextMenuRow(
@@ -524,6 +761,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         .loadDraftSession(draft);
                                     navigateToReviewPages(context);
                                   },
+                                  onDiscard: () => _discardDraft(draft),
                                 ),
                                 const SizedBox(height: 15),
                                 const ScaneliqHairlineDivider(),
@@ -814,9 +1052,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Row(
             children: [
               ScaneliqTextButton(
-                label: 'Folders',
-                onPressed: count == 0 ? null : _openFoldersDestination,
+                label: 'Move',
+                onPressed: count == 0
+                    ? null
+                    : () => _showMoveToFolderSheet(_selectedDocIds.toList()),
               ),
+              if (count >= 2) ...[
+                const SizedBox(width: 6),
+                ScaneliqTextButton(
+                  label: 'Merge',
+                  onPressed: () => _batchMergeSelected(visibleDocs),
+                ),
+              ],
               const SizedBox(width: 8),
               ScaneliqDestructiveButton(
                 label: 'Trash',

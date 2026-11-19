@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 import 'package:scaneliq/core/config/app_compliance_config.dart';
+import 'package:scaneliq/core/services/scan_preferences_service.dart';
+import 'package:scaneliq/core/services/smart_filename_service.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/core/theme/scaneliq_radius.dart';
@@ -18,6 +20,7 @@ import 'package:scaneliq/features/cloud_sync/data/cloud_backup_service.dart';
 import 'package:scaneliq/features/cloud_sync/data/cloud_transport_service.dart';
 import 'package:scaneliq/features/cloud_sync/data/device_sync_service.dart';
 import 'package:scaneliq/features/documents/presentation/trash_screen.dart';
+import 'package:scaneliq/features/ocr/data/ocr_service.dart';
 import 'package:scaneliq/features/security/data/app_lock_service.dart';
 import 'package:scaneliq/features/security/data/privacy_shield_service.dart';
 import 'package:scaneliq/features/security/presentation/app_lock_dialog.dart';
@@ -38,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final CloudTransportService _cloudTransport = CloudTransportService.instance;
   final DeviceSyncService _syncService = DeviceSyncService.instance;
   final SubscriptionService _subs = SubscriptionService.instance;
+  final ScanPreferencesService _scanPrefs = ScanPreferencesService.instance;
 
   bool _isLockEnabled = false;
   bool _isBiometricsEnabled = false;
@@ -49,6 +53,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _timeoutSeconds = 0;
   bool _isBackingUp = false;
 
+  PdfQualityPreset _qualityPreset = PdfQualityPreset.balanced200;
+  PdfPageFormatOption _pageFormat = PdfPageFormatOption.a4;
+  OcrScript _defaultOcrScript = OcrScript.latin;
+  bool _autoEmbedOcr = true;
+  String _filenameTemplate = SmartFilenameService.defaultTemplate;
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _lockService.init();
     await _privacyShield.init();
     await _subs.init();
+    await _scanPrefs.init();
     final canBio = await _lockService.canUseBiometrics();
     final schedule = await _cloudTransport.getBackupSchedule();
     final webdav = await _cloudTransport.getWebDavConfig();
@@ -72,6 +83,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _backupSchedule = schedule;
         _isWebDavConfigured = webdav.isConfigured;
         _activeTier = _subs.currentTier;
+        _qualityPreset = _scanPrefs.qualityPreset;
+        _pageFormat = _scanPrefs.pageFormat;
+        _defaultOcrScript = _scanPrefs.defaultOcrScript;
+        _autoEmbedOcr = _scanPrefs.autoEmbedSearchableOcr;
+        _filenameTemplate = _scanPrefs.smartFilenameTemplate;
       });
     }
   }
@@ -80,6 +96,217 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _privacyShield.setEnabled(value);
     if (mounted) {
       setState(() => _isPrivacyShieldEnabled = _privacyShield.isEnabled);
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
+
+  Future<void> _openStorageBreakdownDialog(AppStorageService storage) async {
+    var usage = await storage.calculateStorageBreakdown();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dCtx, setDState) => AlertDialog(
+          title: const Text('Storage Breakdown & Cache'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Originals Vault: ${_formatBytes(usage.originalsBytes)}'),
+                Text('Processed Cache: ${_formatBytes(usage.processedBytes)}'),
+                Text('Exported PDFs: ${_formatBytes(usage.exportsBytes)}'),
+                Text('Temp Files: ${_formatBytes(usage.tempBytes)}'),
+                const Divider(),
+                Text(
+                  'Total Used: ${_formatBytes(usage.totalBytes)}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Exports Directory:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                SelectableText(
+                  storage.exportsDir.path,
+                  style: Theme.of(dCtx).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Originals Directory:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                SelectableText(
+                  storage.originalsDir.path,
+                  style: Theme.of(dCtx).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final freed = await storage.clearTemporaryCache();
+                usage = await storage.calculateStorageBreakdown();
+                setDState(() {});
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Cleared ${_formatBytes(freed)} of temp files (originals preserved).',
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Clear Temp Cache'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectPdfQuality() async {
+    final chosen = await showDialog<PdfQualityPreset>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Default Export Quality'),
+        children: [
+          for (final preset in PdfQualityPreset.values)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, preset),
+              child: Text(preset.label),
+            ),
+        ],
+      ),
+    );
+    if (chosen != null) {
+      await _scanPrefs.setQualityPreset(chosen);
+      if (mounted) setState(() => _qualityPreset = chosen);
+    }
+  }
+
+  Future<void> _selectPageFormat() async {
+    final chosen = await showDialog<PdfPageFormatOption>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Default Page Format'),
+        children: [
+          for (final item in PdfPageFormatOption.values)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, item),
+              child: Text(item.label),
+            ),
+        ],
+      ),
+    );
+    if (chosen != null) {
+      await _scanPrefs.setPageFormat(chosen);
+      if (mounted) setState(() => _pageFormat = chosen);
+    }
+  }
+
+  Future<void> _openOcrScriptPicker() async {
+    final chosen = await showDialog<OcrScript>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Default OCR Script'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, OcrScript.latin),
+            child: const Text('English / Latin'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, OcrScript.bengali),
+            child: const Text('Bengali (বাংলা)'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, OcrScript.mixedBengaliEnglish),
+            child: const Text('Mixed বাংলা + English'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, OcrScript.devanagari),
+            child: const Text('Devanagari'),
+          ),
+        ],
+      ),
+    );
+    if (chosen != null) {
+      await _scanPrefs.setDefaultOcrScript(chosen);
+      if (mounted) setState(() => _defaultOcrScript = chosen);
+    }
+  }
+
+  Future<void> _editSmartFilenameTemplate() async {
+    final ctrl = TextEditingController(text: _filenameTemplate);
+    final updated = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dCtx, setDState) => AlertDialog(
+          title: const Text('Smart Filename Template'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: ctrl,
+                onChanged: (_) => setDState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Template Pattern',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                children: [
+                  for (final preset in const [
+                    SmartFilenameService.defaultTemplate,
+                    SmartFilenameService.templateDateTitle,
+                    SmartFilenameService.templateScanTimestamp,
+                  ])
+                    ActionChip(
+                      label: Text(preset),
+                      onPressed: () => setDState(() => ctrl.text = preset),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Preview: ${SmartFilenameService.previewTemplate(ctrl.text)}',
+                style: Theme.of(dCtx).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dCtx, ctrl.text),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    ctrl.dispose();
+    if (updated != null && updated.trim().isNotEmpty) {
+      await _scanPrefs.setSmartFilenameTemplate(updated);
+      if (mounted) {
+        setState(() => _filenameTemplate = _scanPrefs.smartFilenameTemplate);
+      }
     }
   }
 
@@ -853,54 +1080,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildHairlineSettingRow(
               icon: Icons.folder_special_outlined,
               title: 'App Storage Paths',
-              subtitle:
-                  'Private on-device sandbox · Tap to view directory details',
-              trailing: const ScaneliqStatusLabel(text: 'PATHS'),
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Storage Locations'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Exports Directory:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        SelectableText(
-                          storage.exportsDir.path,
-                          style: Theme.of(ctx).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Originals Directory:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        SelectableText(
-                          storage.originalsDir.path,
-                          style: Theme.of(ctx).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Close'),
-                      ),
-                    ],
-                  ),
-                );
-              },
+              subtitle: 'Live storage breakdown, sandbox directories & safe temp cleanup',
+              trailing: const ScaneliqStatusLabel(text: 'STORAGE'),
+              onTap: () => _openStorageBreakdownDialog(storage),
             ),
             _buildHairlineSettingRow(
               icon: Icons.auto_delete_outlined,
@@ -987,8 +1169,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildHairlineSettingRow(
               icon: Icons.language_rounded,
               title: 'Bengali (বাংলা) & Mixed Bn-En (Active)',
-              subtitle:
-                  'On-device Tesseract LSTM (ben/eng) + NotoSansBengali UTF-8 searchable PDFs.',
+              subtitle: 'On-device Tesseract LSTM (ben/eng) + NotoSansBengali UTF-8 searchable PDFs.',
               trailing: const ScaneliqStatusLabel(
                 text: 'ACTIVE',
                 tone: ScaneliqStatusTone.success,
@@ -1002,8 +1183,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildHairlineSettingRow(
               icon: Icons.picture_as_pdf_outlined,
               title: 'Default Page Format',
-              subtitle: 'ISO A4 (210 × 297 mm) · Zero watermarks',
-              trailing: const ScaneliqStatusLabel(text: 'ISO A4'),
+              subtitle: '${_pageFormat.label} · Zero watermarks',
+              trailing: ScaneliqStatusLabel(text: _pageFormat.shortBadge),
+              onTap: _selectPageFormat,
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.high_quality_outlined,
+              title: 'Default Export Quality',
+              subtitle: '${_qualityPreset.label} · Tap to adjust PDF DPI',
+              trailing: ScaneliqStatusLabel(text: _qualityPreset.shortName),
+              onTap: _selectPdfQuality,
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.badge_outlined,
+              title: 'Smart Filename Template',
+              subtitle: _filenameTemplate,
+              trailing: const ScaneliqStatusLabel(text: 'TEMPLATE'),
+              onTap: _editSmartFilenameTemplate,
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.translate_outlined,
+              title: 'Default OCR Recognition Script',
+              subtitle: 'Current default: ${_defaultOcrScript.name}',
+              trailing: ScaneliqStatusLabel(
+                text: _defaultOcrScript.name.toUpperCase(),
+                tone: ScaneliqStatusTone.accent,
+              ),
+              onTap: _openOcrScriptPicker,
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.find_in_page_outlined,
+              title: 'Auto-Embed Searchable OCR Layer',
+              subtitle:
+                  'Index scanned PDF text layer during export automatically',
+              trailing: Switch(
+                value: _autoEmbedOcr,
+                onChanged: (v) async {
+                  await _scanPrefs.setAutoEmbedSearchableOcr(v);
+                  if (mounted) setState(() => _autoEmbedOcr = v);
+                },
+              ),
             ),
             _buildHairlineSettingRow(
               icon: Icons.crop_rotate_outlined,

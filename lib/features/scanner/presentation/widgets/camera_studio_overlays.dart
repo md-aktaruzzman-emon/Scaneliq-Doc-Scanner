@@ -160,10 +160,7 @@ class SpecializedScanModeGuide extends StatelessWidget {
               height: cardH,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: const Color(0xFF3B82F6),
-                  width: 1.8,
-                ),
+                border: Border.all(color: const Color(0xFF3B82F6), width: 1.8),
                 color: Colors.black.withValues(alpha: 0.14),
               ),
               child: Column(
@@ -312,13 +309,13 @@ class FocusReticleOverlay extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             const size = 56.0;
-            final left =
-                (normalizedPoint.dx * constraints.maxWidth - size / 2).clamp(
+            final left = (normalizedPoint.dx * constraints.maxWidth - size / 2)
+                .clamp(
                   8.0,
                   (constraints.maxWidth - size - 8.0).clamp(8.0, 9999.0),
                 );
-            final top =
-                (normalizedPoint.dy * constraints.maxHeight - size / 2).clamp(
+            final top = (normalizedPoint.dy * constraints.maxHeight - size / 2)
+                .clamp(
                   8.0,
                   (constraints.maxHeight - size - 8.0).clamp(8.0, 9999.0),
                 );
@@ -403,7 +400,10 @@ class CameraPermissionDeniedStudioView extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(999),
@@ -534,7 +534,10 @@ class CameraErrorStudioView extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(999),

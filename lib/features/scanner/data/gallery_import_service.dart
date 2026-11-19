@@ -9,10 +9,7 @@ class GalleryImportRejection {
   final String fileName;
   final String reason;
 
-  const GalleryImportRejection({
-    required this.fileName,
-    required this.reason,
-  });
+  const GalleryImportRejection({required this.fileName, required this.reason});
 }
 
 /// Validated image entry ready to enter a scan session.
@@ -102,7 +99,10 @@ class GalleryImportService {
       final name = file.path.split(Platform.pathSeparator).last;
       if (!await file.exists()) {
         rejections.add(
-          GalleryImportRejection(fileName: name, reason: 'File no longer exists'),
+          GalleryImportRejection(
+            fileName: name,
+            reason: 'File no longer exists',
+          ),
         );
         continue;
       }

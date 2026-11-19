@@ -361,10 +361,7 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
     final double iconBtnSize = compact ? 36 : 42;
 
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 8 : 12,
-        vertical: 8,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12, vertical: 8),
       child: Row(
         children: [
           Semantics(
@@ -466,7 +463,9 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
               padding: EdgeInsets.zero,
               tooltip: 'Framing grid',
               icon: Icon(
-                studio.showGrid ? Icons.grid_on_rounded : Icons.grid_off_rounded,
+                studio.showGrid
+                    ? Icons.grid_on_rounded
+                    : Icons.grid_off_rounded,
                 color: studio.showGrid ? const Color(0xFF3B82F6) : Colors.white,
                 size: 19,
               ),
@@ -537,9 +536,7 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
         title: studio.status == CameraStudioStatus.noCamera
             ? 'No Camera Detected'
             : 'Camera Studio Unavailable',
-        message:
-            studio.errorMessage ??
-            'Could not open device camera hardware. Retry or import images from gallery.',
+        message: studio.errorMessage ?? 'Could not open device camera hardware. Retry or import images from gallery.',
         onRetry: notifier.initializeCamera,
         onImportGallery: _handleGalleryImport,
       );
@@ -634,9 +631,7 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
                 left: 16,
                 right: 16,
                 bottom: 14,
-                child: Center(
-                  child: _buildDetectionStatusPill(studio),
-                ),
+                child: Center(child: _buildDetectionStatusPill(studio)),
               ),
             ],
           ),
@@ -795,9 +790,7 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
       decoration: const BoxDecoration(
         color: ScaneliqColorPalette.cameraStudioBg,
-        border: Border(
-          top: BorderSide(color: Color(0xFF1A1D24), width: 1),
-        ),
+        border: Border(top: BorderSide(color: Color(0xFF1A1D24), width: 1)),
       ),
       child: Row(
         children: [
@@ -938,8 +931,7 @@ class _ContinuousCameraScreenState extends ConsumerState<ContinuousCameraScreen>
                             borderRadius: BorderRadius.circular(999),
                           ),
                         ),
-                        onPressed:
-                            studio.isCapturing ? null : _finishToReview,
+                        onPressed: studio.isCapturing ? null : _finishToReview,
                         child: Text(
                           'Review ($pageCount)',
                           maxLines: 1,

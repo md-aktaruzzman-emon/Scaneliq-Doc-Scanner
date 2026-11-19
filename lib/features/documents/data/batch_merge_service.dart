@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:uuid/uuid.dart';
 import 'package:scaneliq/core/models/document_models.dart';
+import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 
@@ -43,13 +44,29 @@ class BatchMergeService {
 
       for (final p in docPages) {
         final newPageId = const Uuid().v4();
+        // Clone original scan file independently so deleting a source document
+        // later never destroys merged pages (non-destructive isolation).
+        String isolatedOriginalPath = p.originalPath;
+        final srcOrigFile = File(p.originalPath);
+        if (await srcOrigFile.exists()) {
+          final ext = p.originalPath.split('.').last.toLowerCase();
+          final safeExt = ['jpg', 'jpeg', 'png', 'webp'].contains(ext)
+              ? (ext == 'jpeg' ? 'jpg' : ext)
+              : 'jpg';
+          final copied = await AppStorageService.instance.copyToOriginals(
+            newPageId,
+            srcOrigFile,
+            extension: safeExt,
+          );
+          isolatedOriginalPath = copied.path;
+        }
         combinedPages.add(
           DocumentPage(
             id: newPageId,
             documentId: newDocId,
             pageOrder: orderIndex++,
-            originalPath: p.originalPath,
-            processedPath: p.processedPath,
+            originalPath: isolatedOriginalPath,
+            processedPath: null,
             editRecipe: p.editRecipe,
             width: p.width,
             height: p.height,
@@ -80,7 +97,10 @@ class BatchMergeService {
     );
 
     // 4. Save new merged document and pages to database
-    final finalizedDoc = newDoc.copyWith(exportPath: pdfFile.path);
+    final finalizedDoc = newDoc.copyWith(
+      exportPath: pdfFile.path,
+      pages: combinedPages,
+    );
     await AppDatabaseService.instance.saveDocumentWithPages(
       finalizedDoc,
       combinedPages,

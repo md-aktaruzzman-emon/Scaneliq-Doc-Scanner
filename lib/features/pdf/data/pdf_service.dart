@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
+import 'package:scaneliq/core/services/scan_preferences_service.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/features/ocr/data/ocr_service.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
@@ -15,8 +16,15 @@ import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 class _PageProcessingInput {
   final Uint8List rawBytes;
   final EditRecipe recipe;
+  final int jpegQuality;
+  final int maxEdgePx;
 
-  _PageProcessingInput({required this.rawBytes, required this.recipe});
+  _PageProcessingInput({
+    required this.rawBytes,
+    required this.recipe,
+    this.jpegQuality = 85,
+    this.maxEdgePx = 2338,
+  });
 }
 
 /// Container for processed page output from isolate
@@ -42,8 +50,17 @@ List<_PageProcessingOutput> _processPagesInIsolate(
     if (decoded == null) {
       throw Exception('Failed to decode image');
     }
-    final processed = PdfService.applyEditRecipe(decoded, input.recipe);
-    final encoded = Uint8List.fromList(img.encodeJpg(processed, quality: 85));
+    var processed = PdfService.applyEditRecipe(decoded, input.recipe);
+    if (input.maxEdgePx > 0 &&
+        (processed.width > input.maxEdgePx ||
+            processed.height > input.maxEdgePx)) {
+      processed = processed.width >= processed.height
+          ? img.copyResize(processed, width: input.maxEdgePx)
+          : img.copyResize(processed, height: input.maxEdgePx);
+    }
+    final encoded = Uint8List.fromList(
+      img.encodeJpg(processed, quality: input.jpegQuality),
+    );
     outputs.add(
       _PageProcessingOutput(
         jpegBytes: encoded,
@@ -125,7 +142,9 @@ class PdfService {
   static Future<pw.Font?> _loadUnicodeFont() async {
     if (_cachedUnicodeFont != null) return _cachedUnicodeFont;
     try {
-      final data = await rootBundle.load('assets/fonts/NotoSansBengali-Regular.ttf');
+      final data = await rootBundle.load(
+        'assets/fonts/NotoSansBengali-Regular.ttf',
+      );
       _cachedUnicodeFont = pw.Font.ttf(data);
       return _cachedUnicodeFont;
     } catch (_) {
@@ -141,16 +160,46 @@ class PdfService {
     }
   }
 
+  /// Resolves the canonical single-pass source file and recipe for [page].
+  ///
+  /// Always reads [DocumentPage.originalPath] with [DocumentPage.editRecipe] so
+  /// pre-rendered [DocumentPage.processedPath] thumbnails never suffer double
+  /// rotation, double cropping, or stacked adjustments during export.
+  static Future<(File file, EditRecipe recipe)> resolveSinglePassSource(
+    DocumentPage page,
+  ) async {
+    final origFile = File(page.originalPath);
+    if (await origFile.exists()) {
+      return (origFile, page.editRecipe);
+    }
+    if (page.processedPath != null) {
+      final procFile = File(page.processedPath!);
+      if (await procFile.exists()) {
+        return (procFile, const EditRecipe());
+      }
+    }
+    throw Exception(
+      'Page source image file is missing and does not exist at: ${page.originalPath}',
+    );
+  }
+
   /// Generates a validated multi-page PDF with optional Searchable PDF OCR text layer
   static Future<File> generatePdf({
     required ScannedDocument document,
     required List<DocumentPage> pages,
     String? customTitle,
     Map<int, List<OcrBoundingBox>>? ocrBoxesByPage,
+    PdfQualityPreset? qualityPreset,
+    PdfPageFormatOption? pageFormatOption,
   }) async {
     if (pages.isEmpty) {
       throw Exception('Cannot generate PDF: document contains 0 pages');
     }
+
+    final resolvedQuality =
+        qualityPreset ?? ScanPreferencesService.instance.qualityPreset;
+    final resolvedFormatOption =
+        pageFormatOption ?? ScanPreferencesService.instance.pageFormat;
 
     final pdf = pw.Document(
       title: customTitle ?? document.title,
@@ -163,22 +212,24 @@ class PdfService {
         ocrBoxesByPage.values.any(
           (list) => list.any((b) => b.text.runes.any((r) => r > 255)),
         );
-    final pw.Font? unicodeFont = hasUnicodeOcr ? await _loadUnicodeFont() : null;
+    final pw.Font? unicodeFont = hasUnicodeOcr
+        ? await _loadUnicodeFont()
+        : null;
 
-    // Read all page bytes asynchronously from disk
+    // Read canonical original pages asynchronously so EditRecipe applies cleanly once.
     final List<_PageProcessingInput> inputs = [];
     for (int i = 0; i < pages.length; i++) {
-      final page = pages[i];
-      final imagePath = page.processedPath ?? page.originalPath;
-      final file = File(imagePath);
-
-      if (!await file.exists()) {
-        throw Exception('Page ${i + 1} image file is missing at: $imagePath');
-      }
-
-      final bytes = await file.readAsBytes();
+      final (sourceFile, sourceRecipe) = await resolveSinglePassSource(
+        pages[i],
+      );
+      final bytes = await sourceFile.readAsBytes();
       inputs.add(
-        _PageProcessingInput(rawBytes: bytes, recipe: page.editRecipe),
+        _PageProcessingInput(
+          rawBytes: bytes,
+          recipe: sourceRecipe,
+          jpegQuality: resolvedQuality.jpegQuality,
+          maxEdgePx: resolvedQuality.maxEdgePx,
+        ),
       );
     }
 
@@ -189,7 +240,9 @@ class PdfService {
     );
 
     // Build PDF pages with image and searchable OCR text overlay
-    final pageFormat = PdfPageFormat.a4;
+    final pageFormat = resolvedFormatOption == PdfPageFormatOption.letter
+        ? PdfPageFormat.letter
+        : PdfPageFormat.a4;
     final double pageWidth = pageFormat.width;
     final double pageHeight = pageFormat.height;
 
@@ -349,19 +402,15 @@ class PdfService {
   static Future<File> exportPageAsJpeg({
     required DocumentPage page,
     required String baseName,
+    int quality = 90,
   }) async {
-    final imagePath = page.processedPath ?? page.originalPath;
-    final file = File(imagePath);
-
-    if (!await file.exists()) {
-      throw Exception('Page source file does not exist at: $imagePath');
-    }
+    final (sourceFile, sourceRecipe) = await resolveSinglePassSource(page);
 
     final encodedJpeg =
         await ImageProcessingService.processImageFileToBytesInIsolate(
-          file,
-          page.editRecipe,
-          quality: 90,
+          sourceFile,
+          sourceRecipe,
+          quality: quality,
         );
 
     final sanitized = baseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');

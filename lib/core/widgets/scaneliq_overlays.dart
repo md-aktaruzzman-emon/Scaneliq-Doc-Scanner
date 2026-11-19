@@ -50,10 +50,7 @@ Future<T?> showScaneliqBottomSheet<T>({
                   ),
                 ),
               ),
-              Material(
-                type: MaterialType.transparency,
-                child: builder(ctx),
-              ),
+              Material(type: MaterialType.transparency, child: builder(ctx)),
             ],
           ),
         ),

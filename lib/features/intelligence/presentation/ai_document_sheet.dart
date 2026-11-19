@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:scaneliq/core/services/scan_preferences_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/features/intelligence/data/ai_document_service.dart';
 import 'package:scaneliq/features/ocr/data/ocr_service.dart';
@@ -72,7 +73,10 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
   Future<void> _processImage(File file) async {
     setState(() => _isAnalyzing = true);
     try {
-      final ocrText = await OcrService.instance.extractText(file);
+      final ocrText = await OcrService.instance.extractText(
+        file,
+        script: ScanPreferencesService.instance.defaultOcrScript,
+      );
       _analyzeText(ocrText);
     } catch (e) {
       setState(() => _isAnalyzing = false);
@@ -227,7 +231,8 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
                         child: TextField(
                           controller: _vaultQueryCtrl,
                           decoration: const InputDecoration(
-                            hintText: 'e.g. tax invoice, রশিদ, contract date...',
+                            hintText:
+                                'e.g. tax invoice, রশিদ, contract date...',
                             border: OutlineInputBorder(),
                             isDense: true,
                           ),
@@ -236,7 +241,9 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
                       ),
                       const SizedBox(width: 8),
                       IconButton.filled(
-                        onPressed: _isSearchingVault ? null : _searchVaultSemantically,
+                        onPressed: _isSearchingVault
+                            ? null
+                            : _searchVaultSemantically,
                         icon: const Icon(Icons.manage_search_rounded),
                       ),
                     ],
@@ -299,7 +306,10 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
                   if (_entities != null && !_entities!.isEmpty) ...[
                     const Text(
                       'Extracted Dates, Amounts & Entities',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Wrap(
@@ -309,22 +319,40 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
                         for (final d in _entities!.dates)
                           Chip(
                             avatar: const Icon(Icons.event_outlined, size: 14),
-                            label: Text(d, style: const TextStyle(fontSize: 11)),
+                            label: Text(
+                              d,
+                              style: const TextStyle(fontSize: 11),
+                            ),
                           ),
                         for (final a in _entities!.amounts)
                           Chip(
-                            avatar: const Icon(Icons.payments_outlined, size: 14),
-                            label: Text(a, style: const TextStyle(fontSize: 11)),
+                            avatar: const Icon(
+                              Icons.payments_outlined,
+                              size: 14,
+                            ),
+                            label: Text(
+                              a,
+                              style: const TextStyle(fontSize: 11),
+                            ),
                           ),
                         for (final o in _entities!.namesAndOrganizations)
                           Chip(
-                            avatar: const Icon(Icons.business_outlined, size: 14),
-                            label: Text(o, style: const TextStyle(fontSize: 11)),
+                            avatar: const Icon(
+                              Icons.business_outlined,
+                              size: 14,
+                            ),
+                            label: Text(
+                              o,
+                              style: const TextStyle(fontSize: 11),
+                            ),
                           ),
                         for (final id in _entities!.identifiers)
                           Chip(
                             avatar: const Icon(Icons.tag_outlined, size: 14),
-                            label: Text(id, style: const TextStyle(fontSize: 11)),
+                            label: Text(
+                              id,
+                              style: const TextStyle(fontSize: 11),
+                            ),
                           ),
                       ],
                     ),

@@ -147,9 +147,8 @@ class ScaneliqTextButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         minimumSize: const Size(0, 32),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        textStyle: Theme.of(
-          context,
-        ).textTheme.labelMedium?.copyWith(color: resolvedColor),
+        textStyle: Theme.of(context).textTheme.labelMedium
+            ?.copyWith(color: resolvedColor),
       ),
       child: Text(label),
     );
@@ -245,9 +244,8 @@ class ScaneliqDestructiveButton extends StatelessWidget {
           : const SizedBox.shrink(),
       label: Text(
         label,
-        style: Theme.of(
-          context,
-        ).textTheme.labelLarge?.copyWith(color: tokens.danger),
+        style: Theme.of(context).textTheme.labelLarge
+            ?.copyWith(color: tokens.danger),
       ),
     );
   }

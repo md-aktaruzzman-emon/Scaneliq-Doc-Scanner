@@ -135,7 +135,11 @@ void main() {
         title: 'Invoice 1042',
       );
       final imgFile = _createHighResPhotoJpgSync(tempDir, 'scan1.jpg');
-      final scannedPdf = _createImageOnlyPdfSync(tempDir, 'scanned.pdf', imgFile);
+      final scannedPdf = _createImageOnlyPdfSync(
+        tempDir,
+        'scanned.pdf',
+        imgFile,
+      );
 
       final svc = AdvancedPdfService.instance;
       expect(await svc.validatePdf(vectorPdf), isTrue);
@@ -213,7 +217,11 @@ void main() {
             pageIndex: 0,
             x: 0,
             y: 0,
-            points: [Offset(0.15, 0.35), Offset(0.35, 0.40), Offset(0.55, 0.34)],
+            points: [
+              Offset(0.15, 0.35),
+              Offset(0.35, 0.40),
+              Offset(0.55, 0.34),
+            ],
             color: Color(0xFFDC2626),
             strokeWidth: 3.0,
             normalized: true,
@@ -253,7 +261,10 @@ void main() {
       );
 
       expect(annotated.existsSync(), isTrue);
-      expect(await AdvancedPdfService.instance.getPageCount(annotated), equals(2));
+      expect(
+        await AdvancedPdfService.instance.getPageCount(annotated),
+        equals(2),
+      );
       expect(annotated.lengthSync(), greaterThan(src.lengthSync()));
       // Original file remains untouched
       expect(src.readAsBytesSync(), equals(srcBytes));
@@ -425,7 +436,10 @@ void main() {
           ],
         ),
       );
-      expect(smallerResult.compressedSizeBytes, lessThan(smallerResult.originalSizeBytes));
+      expect(
+        smallerResult.compressedSizeBytes,
+        lessThan(smallerResult.originalSizeBytes),
+      );
       expect(smallerResult.percentageReduction, greaterThan(0));
     });
   });
@@ -450,158 +464,173 @@ void main() {
       }
     });
 
-    testWidgets('DocumentViewerScreen renders Concept A Light/Dark themes, search scanned notice, thumbnail strip, annotate toolbar & signature studio', (tester) async {
-      tester.view.physicalSize = const Size(393, 852);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
+    testWidgets(
+      'DocumentViewerScreen renders Concept A Light/Dark themes, search scanned notice, thumbnail strip, annotate toolbar & signature studio',
+      (tester) async {
+        tester.view.physicalSize = const Size(393, 852);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      final imgFile = _createHighResPhotoJpgSync(tempDir, 'scan_ui.jpg');
-      final pdfFile = _createImageOnlyPdfSync(tempDir, 'viewer_doc.pdf', imgFile);
-      final doc = ScannedDocument(
-        id: 'doc_v1',
-        title: 'Rental Agreement',
-        createdAt: DateTime.now(),
-        modifiedAt: DateTime.now(),
-        pageCount: 1,
-        exportPath: pdfFile.path,
-        pages: [
-          DocumentPage(
-            id: 'pv1',
-            documentId: 'doc_v1',
-            pageOrder: 0,
-            originalPath: imgFile.path,
-          ),
-        ],
-      );
-      await tester.runAsync(() => AppDatabaseService.instance.saveDocument(doc));
+        final imgFile = _createHighResPhotoJpgSync(tempDir, 'scan_ui.jpg');
+        final pdfFile = _createImageOnlyPdfSync(
+          tempDir,
+          'viewer_doc.pdf',
+          imgFile,
+        );
+        final doc = ScannedDocument(
+          id: 'doc_v1',
+          title: 'Rental Agreement',
+          createdAt: DateTime.now(),
+          modifiedAt: DateTime.now(),
+          pageCount: 1,
+          exportPath: pdfFile.path,
+          pages: [
+            DocumentPage(
+              id: 'pv1',
+              documentId: 'doc_v1',
+              pageOrder: 0,
+              originalPath: imgFile.path,
+            ),
+          ],
+        );
+        await tester.runAsync(
+          () => AppDatabaseService.instance.saveDocument(doc),
+        );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: ThemeMode.light,
-            home: DocumentViewerScreen(
-              document: doc,
-              pdfCanvasBuilder: (_) => Container(
-                color: Colors.white,
-                alignment: Alignment.center,
-                child: const Text('PDF PAGE RENDER'),
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: ThemeMode.light,
+              home: DocumentViewerScreen(
+                document: doc,
+                pdfCanvasBuilder: (_) => Container(
+                  color: Colors.white,
+                  alignment: Alignment.center,
+                  child: const Text('PDF PAGE RENDER'),
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 80)));
-      await tester.pumpAndSettle();
+        );
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 80)),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text('Rental Agreement'), findsOneWidget);
-      expect(find.text('Annotate'), findsOneWidget);
-      expect(find.text('Sign'), findsOneWidget);
-      expect(find.text('Organize'), findsOneWidget);
-      expect(find.text('OCR'), findsOneWidget);
-      expect(find.text('More'), findsOneWidget);
+        expect(find.text('Rental Agreement'), findsOneWidget);
+        expect(find.text('Annotate'), findsOneWidget);
+        expect(find.text('Sign'), findsOneWidget);
+        expect(find.text('Organize'), findsOneWidget);
+        expect(find.text('OCR'), findsOneWidget);
+        expect(find.text('More'), findsOneWidget);
 
-      // Open Search bar -> scanned PDF shows honest OCR notice once async text-layer inspection completes
-      await tester.tap(find.byTooltip('Search Text'));
-      for (int i = 0; i < 20; i++) {
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
-        await tester.pump();
-        if (find
-            .text('Scanned PDF has no text layer — run OCR to search text.')
-            .evaluate()
-            .isNotEmpty) {
-          break;
+        // Open Search bar -> scanned PDF shows honest OCR notice once async text-layer inspection completes
+        await tester.tap(find.byTooltip('Search Text'));
+        for (int i = 0; i < 20; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 30)),
+          );
+          await tester.pump();
+          if (find
+              .text('Scanned PDF has no text layer — run OCR to search text.')
+              .evaluate()
+              .isNotEmpty) {
+            break;
+          }
         }
-      }
-      expect(
-        find.text('Scanned PDF has no text layer — run OCR to search text.'),
-        findsOneWidget,
-      );
-      await tester.tap(find.byTooltip('Close Search'));
-      await tester.pumpAndSettle();
+        expect(
+          find.text('Scanned PDF has no text layer — run OCR to search text.'),
+          findsOneWidget,
+        );
+        await tester.tap(find.byTooltip('Close Search'));
+        await tester.pumpAndSettle();
 
-      // Toggle Annotate mode -> verifies markup tool buttons appear
-      await tester.tap(find.text('Annotate'));
-      await tester.pumpAndSettle();
-      expect(find.text('Highlight'), findsOneWidget);
-      expect(find.text('Ink Draw'), findsOneWidget);
-      expect(find.text('Text Note'), findsOneWidget);
-      expect(find.text('Shapes'), findsOneWidget);
-      await tester.tap(find.byTooltip('Close Annotate'));
-      await tester.pumpAndSettle();
+        // Toggle Annotate mode -> verifies markup tool buttons appear
+        await tester.tap(find.text('Annotate'));
+        await tester.pumpAndSettle();
+        expect(find.text('Highlight'), findsOneWidget);
+        expect(find.text('Ink Draw'), findsOneWidget);
+        expect(find.text('Text Note'), findsOneWidget);
+        expect(find.text('Shapes'), findsOneWidget);
+        await tester.tap(find.byTooltip('Close Annotate'));
+        await tester.pumpAndSettle();
 
-      // Open Visual Signature Studio
-      await tester.tap(find.text('Sign'));
-      await tester.pumpAndSettle();
-      expect(find.text('Visual Signature Studio'), findsOneWidget);
-      expect(
-        find.textContaining('non-cryptographic'),
-        findsOneWidget,
-      );
-    });
+        // Open Visual Signature Studio
+        await tester.tap(find.text('Sign'));
+        await tester.pumpAndSettle();
+        expect(find.text('Visual Signature Studio'), findsOneWidget);
+        expect(find.textContaining('non-cryptographic'), findsOneWidget);
+      },
+    );
 
-    testWidgets('WatermarkStudioPanel live preview & PdfPageOrganizerScreen grid/list toggle, rotate & delete guard work cleanly', (tester) async {
-      tester.view.physicalSize = const Size(393, 852);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
+    testWidgets(
+      'WatermarkStudioPanel live preview & PdfPageOrganizerScreen grid/list toggle, rotate & delete guard work cleanly',
+      (tester) async {
+        tester.view.physicalSize = const Size(393, 852);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      final multiPdf = _createVectorTextPdfSync(
-        tempDir,
-        'org_test.pdf',
-        pageTexts: ['Page One', 'Page Two', 'Page Three'],
-      );
+        final multiPdf = _createVectorTextPdfSync(
+          tempDir,
+          'org_test.pdf',
+          pageTexts: ['Page One', 'Page Two', 'Page Three'],
+        );
 
-      // 1. Test WatermarkStudioPanel
-      WatermarkOptions? chosen;
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.darkTheme,
-          home: Scaffold(
-            body: WatermarkStudioPanel(
-              currentPage: 1,
-              totalPages: 3,
-              onApply: (opts) => chosen = opts,
+        // 1. Test WatermarkStudioPanel
+        WatermarkOptions? chosen;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: WatermarkStudioPanel(
+                currentPage: 1,
+                totalPages: 3,
+                onApply: (opts) => chosen = opts,
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('DRAFT'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply Watermark to Copy'));
-      await tester.pumpAndSettle();
-      expect(chosen, isNotNull);
-      expect(chosen!.text, equals('DRAFT'));
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('DRAFT'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Apply Watermark to Copy'));
+        await tester.pumpAndSettle();
+        expect(chosen, isNotNull);
+        expect(chosen!.text, equals('DRAFT'));
 
-      // 2. Test PdfPageOrganizerScreen
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: PdfPageOrganizerScreen(pdfFile: multiPdf),
-        ),
-      );
-      for (int i = 0; i < 20; i++) {
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
-        await tester.pump();
-        if (find.text('Page 1').evaluate().isNotEmpty) break;
-      }
+        // 2. Test PdfPageOrganizerScreen
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: PdfPageOrganizerScreen(pdfFile: multiPdf),
+          ),
+        );
+        for (int i = 0; i < 20; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 40)),
+          );
+          await tester.pump();
+          if (find.text('Page 1').evaluate().isNotEmpty) break;
+        }
 
-      expect(find.text('Page 1'), findsOneWidget);
-      expect(find.text('Page 2'), findsOneWidget);
-      expect(find.text('Page 3'), findsOneWidget);
+        expect(find.text('Page 1'), findsOneWidget);
+        expect(find.text('Page 2'), findsOneWidget);
+        expect(find.text('Page 3'), findsOneWidget);
 
-      // Select Page 1 and rotate 90 deg -> badge displays 90 deg
-      await tester.tap(find.text('Page 1'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Rotate 90°'));
-      await tester.pumpAndSettle();
-      expect(find.text('90°'), findsOneWidget);
+        // Select Page 1 and rotate 90 deg -> badge displays 90 deg
+        await tester.tap(find.text('Page 1'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Rotate 90°'));
+        await tester.pumpAndSettle();
+        expect(find.text('90°'), findsOneWidget);
 
-      // Switch Grid -> List View
-      await tester.tap(find.byTooltip('List View'));
-      await tester.pumpAndSettle();
-      expect(find.text('Source page #1 · Rotated 90°'), findsOneWidget);
-    });
+        // Switch Grid -> List View
+        await tester.tap(find.byTooltip('List View'));
+        await tester.pumpAndSettle();
+        expect(find.text('Source page #1 · Rotated 90°'), findsOneWidget);
+      },
+    );
   });
 }

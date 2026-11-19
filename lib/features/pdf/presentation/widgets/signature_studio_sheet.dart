@@ -41,7 +41,11 @@ Future<Uint8List> exportSignatureStrokesToPngBytes({
 
   for (final stroke in strokes) {
     if (stroke.length == 1) {
-      canvas.drawCircle(stroke.first, strokeWidth * 0.6, paint..style = PaintingStyle.fill);
+      canvas.drawCircle(
+        stroke.first,
+        strokeWidth * 0.6,
+        paint..style = PaintingStyle.fill,
+      );
       paint.style = PaintingStyle.stroke;
       continue;
     }
@@ -175,10 +179,8 @@ class _SignatureStudioPanelState extends State<SignatureStudioPanel> {
               Expanded(
                 child: Text(
                   'Creates a visual handwritten signature overlay (non-cryptographic, no X.509 certificate).',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: tokens.textSecondary,
-                    fontSize: 11,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: tokens.textSecondary, fontSize: 11),
                 ),
               ),
             ],
@@ -270,7 +272,9 @@ class _SignatureStudioPanelState extends State<SignatureStudioPanel> {
                     color: c,
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: _inkColor == c ? tokens.accent : Colors.transparent,
+                      color: _inkColor == c
+                          ? tokens.accent
+                          : Colors.transparent,
                       width: 2.2,
                     ),
                   ),
@@ -379,7 +383,10 @@ class _SignatureStudioPanelState extends State<SignatureStudioPanel> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Icon(Icons.check_rounded),
             label: const Text('Place Signature on Page'),

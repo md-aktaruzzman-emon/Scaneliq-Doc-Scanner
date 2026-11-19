@@ -20,15 +20,9 @@ Future<WatermarkOptions?> showWatermarkStudioSheet(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Watermark Studio',
-          style: Theme.of(ctx).textTheme.headlineMedium,
-        ),
+        Text('Watermark Studio', style: Theme.of(ctx).textTheme.headlineMedium),
         const SizedBox(height: 12),
-        WatermarkStudioPanel(
-          currentPage: currentPage,
-          totalPages: totalPages,
-        ),
+        WatermarkStudioPanel(currentPage: currentPage, totalPages: totalPages),
       ],
     ),
   );
@@ -86,10 +80,9 @@ class _WatermarkStudioPanelState extends State<WatermarkStudioPanel> {
       rotationDegrees: _rotation,
       position: _position,
       pageSelection: _pageSelection,
-      customPages1Indexed:
-          _pageSelection == WatermarkPageSelection.customPages
-              ? [widget.currentPage]
-              : null,
+      customPages1Indexed: _pageSelection == WatermarkPageSelection.customPages
+          ? [widget.currentPage]
+          : null,
       imageFile: _imageFile,
       imageScale: 0.45,
     );
@@ -135,7 +128,11 @@ class _WatermarkStudioPanelState extends State<WatermarkStudioPanel> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(height: 8, width: 72, color: Colors.grey.shade300),
+                        Container(
+                          height: 8,
+                          width: 72,
+                          color: Colors.grey.shade300,
+                        ),
                         const SizedBox(height: 10),
                         for (int i = 0; i < 6; i++) ...[
                           Container(
@@ -254,7 +251,9 @@ class _WatermarkStudioPanelState extends State<WatermarkStudioPanel> {
                         color: c,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: _color == c ? tokens.textPrimary : Colors.transparent,
+                          color: _color == c
+                              ? tokens.textPrimary
+                              : Colors.transparent,
                           width: 2.2,
                         ),
                       ),
@@ -297,7 +296,8 @@ class _WatermarkStudioPanelState extends State<WatermarkStudioPanel> {
                     if (v != null) {
                       setState(() {
                         _position = v;
-                        if (v == WatermarkPosition.diagonalCenter && _rotation == 0) {
+                        if (v == WatermarkPosition.diagonalCenter &&
+                            _rotation == 0) {
                           _rotation = -45;
                         } else if (v != WatermarkPosition.diagonalCenter) {
                           _rotation = 0;

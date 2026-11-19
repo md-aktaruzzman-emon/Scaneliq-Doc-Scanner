@@ -87,14 +87,24 @@ Please send signed remittance confirmation to billing@apexdigital.example or cal
       expect(summary.bulletPoints, isNotEmpty);
       expect(summary.totalSentences, greaterThanOrEqualTo(3));
 
-      final entities = AiDocumentService.instance.extractEntities(sampleContract);
+      final entities = AiDocumentService.instance.extractEntities(
+        sampleContract,
+      );
       expect(entities.dates, containsAll(['2026-11-18', '15/12/2026']));
       expect(entities.amounts.any((a) => a.contains('45,500.00')), isTrue);
-      expect(entities.identifiers.any((id) => id.contains('INV-2026-884')), isTrue);
+      expect(
+        entities.identifiers.any((id) => id.contains('INV-2026-884')),
+        isTrue,
+      );
       expect(entities.emails, contains('billing@apexdigital.example'));
-      expect(entities.namesAndOrganizations.any((o) => o.contains('Apex Digital')), isTrue);
+      expect(
+        entities.namesAndOrganizations.any((o) => o.contains('Apex Digital')),
+        isTrue,
+      );
 
-      final explanation = AiDocumentService.instance.explainDocument(sampleContract);
+      final explanation = AiDocumentService.instance.explainDocument(
+        sampleContract,
+      );
       expect(explanation.documentCategory, contains('Invoice'));
       expect(explanation.plainExplanation, contains('45,500.00'));
 
@@ -118,14 +128,30 @@ Please send signed remittance confirmation to billing@apexdigital.example or cal
         options: OpenDatabaseOptions(
           version: 6,
           onCreate: (d, _) async {
-            await d.execute('CREATE TABLE folders (id TEXT PRIMARY KEY, name TEXT, parent_id TEXT, created_at INTEGER, modified_at INTEGER)');
-            await d.execute('CREATE TABLE documents (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER, modified_at INTEGER, page_count INTEGER, is_favorite INTEGER, is_draft INTEGER, export_path TEXT, folder_id TEXT, deleted_at INTEGER)');
-            await d.execute('CREATE TABLE pages (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, page_order INTEGER, original_path TEXT, processed_path TEXT, edit_recipe_json TEXT, width INTEGER, height INTEGER)');
-            await d.execute('CREATE TABLE document_ocr (document_id TEXT PRIMARY KEY, full_text TEXT NOT NULL)');
-            await d.execute('CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, color INTEGER, created_at INTEGER, modified_at INTEGER)');
-            await d.execute('CREATE TABLE document_tags (document_id TEXT NOT NULL, tag_id TEXT NOT NULL, created_at INTEGER)');
-            await d.execute('CREATE TABLE document_bookmarks (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, page_number INTEGER, title TEXT, created_at INTEGER)');
-            await d.execute('CREATE VIRTUAL TABLE documents_fts USING fts5(document_id UNINDEXED, title, full_text)');
+            await d.execute(
+              'CREATE TABLE folders (id TEXT PRIMARY KEY, name TEXT, parent_id TEXT, created_at INTEGER, modified_at INTEGER)',
+            );
+            await d.execute(
+              'CREATE TABLE documents (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER, modified_at INTEGER, page_count INTEGER, is_favorite INTEGER, is_draft INTEGER, export_path TEXT, folder_id TEXT, deleted_at INTEGER)',
+            );
+            await d.execute(
+              'CREATE TABLE pages (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, page_order INTEGER, original_path TEXT, processed_path TEXT, edit_recipe_json TEXT, width INTEGER, height INTEGER)',
+            );
+            await d.execute(
+              'CREATE TABLE document_ocr (document_id TEXT PRIMARY KEY, full_text TEXT NOT NULL)',
+            );
+            await d.execute(
+              'CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, color INTEGER, created_at INTEGER, modified_at INTEGER)',
+            );
+            await d.execute(
+              'CREATE TABLE document_tags (document_id TEXT NOT NULL, tag_id TEXT NOT NULL, created_at INTEGER)',
+            );
+            await d.execute(
+              'CREATE TABLE document_bookmarks (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, page_number INTEGER, title TEXT, created_at INTEGER)',
+            );
+            await d.execute(
+              'CREATE VIRTUAL TABLE documents_fts USING fts5(document_id UNINDEXED, title, full_text)',
+            );
           },
         ),
       );
@@ -157,7 +183,9 @@ Please send signed remittance confirmation to billing@apexdigital.example or cal
           'Photosynthesis chlorophyll plant biology lecture summary',
         );
 
-        final hits = await AiDocumentService.instance.semanticSearchVault('invoice');
+        final hits = await AiDocumentService.instance.semanticSearchVault(
+          'invoice',
+        );
         expect(hits, isNotEmpty);
         expect(hits.first.document.id, equals('ai_v1'));
       } finally {

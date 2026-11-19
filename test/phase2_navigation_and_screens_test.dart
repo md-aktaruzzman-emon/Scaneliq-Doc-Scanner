@@ -156,81 +156,85 @@ void main() {
       expect(find.text('Q4 Receipts'), findsOneWidget);
     });
 
-    testWidgets('Empty folder state and batch selection dock work in Dark theme', (
-      tester,
-    ) async {
-      final emptyFolder = (await tester.runAsync(
-        () => AppDatabaseService.instance.createFolder('Empty Vault'),
-      ))!;
-      final now = DateTime.now();
-      await tester.runAsync(
-        () => AppDatabaseService.instance.saveDocument(
-          ScannedDocument(
-            id: 'root-doc',
-            title: 'Root Contract',
-            createdAt: now,
-            modifiedAt: now,
-            pageCount: 2,
+    testWidgets(
+      'Empty folder state and batch selection dock work in Dark theme',
+      (tester) async {
+        final emptyFolder = (await tester.runAsync(
+          () => AppDatabaseService.instance.createFolder('Empty Vault'),
+        ))!;
+        final now = DateTime.now();
+        await tester.runAsync(
+          () => AppDatabaseService.instance.saveDocument(
+            ScannedDocument(
+              id: 'root-doc',
+              title: 'Root Contract',
+              createdAt: now,
+              modifiedAt: now,
+              pageCount: 2,
+            ),
           ),
-        ),
-      );
+        );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            theme: AppTheme.darkTheme,
-            home: const DocumentsLibraryScreen(),
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              theme: AppTheme.darkTheme,
+              home: const DocumentsLibraryScreen(),
+            ),
           ),
-        ),
-      );
-      await pumpDb(tester, waitFor: find.text('Root Contract'));
+        );
+        await pumpDb(tester, waitFor: find.text('Root Contract'));
 
-      // Enter batch selection mode at root
-      await tester.tap(find.text('Batch Select'));
-      await tester.pumpAndSettle();
-      expect(find.text('0 Selected'), findsOneWidget);
-      await tester.tap(find.text('Root Contract').last);
-      await tester.pumpAndSettle();
-      expect(find.text('1 Selected'), findsOneWidget);
-      await tester.tap(find.byTooltip('Cancel selection'));
-      await tester.pumpAndSettle();
+        // Enter batch selection mode at root
+        await tester.tap(find.text('Batch Select'));
+        await tester.pumpAndSettle();
+        expect(find.text('0 Selected'), findsOneWidget);
+        await tester.tap(find.text('Root Contract').last);
+        await tester.pumpAndSettle();
+        expect(find.text('1 Selected'), findsOneWidget);
+        await tester.tap(find.byTooltip('Cancel selection'));
+        await tester.pumpAndSettle();
 
-      // Open empty folder -> displays Concept A Empty state
-      await tester.tap(find.text(emptyFolder.name));
-      await pumpDb(tester, waitFor: find.text('Folder is empty'));
-      expect(find.text('Folder is empty'), findsOneWidget);
-    });
+        // Open empty folder -> displays Concept A Empty state
+        await tester.tap(find.text(emptyFolder.name));
+        await pumpDb(tester, waitFor: find.text('Folder is empty'));
+        expect(find.text('Folder is empty'), findsOneWidget);
+      },
+    );
   });
 
   group('Stage 2 — PDF Suite Consolidation', () {
-    testWidgets('Renders all tool categories, distinguishes planned tools, and navigates', (
+    testWidgets(
+      'Renders all tool categories, distinguishes planned tools, and navigates',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(theme: AppTheme.lightTheme, home: const ToolsScreen()),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('PDF Suite'), findsOneWidget);
+        expect(find.text('Organize'), findsOneWidget);
+        expect(find.text('Edit & Protect'), findsOneWidget);
+        expect(find.text('Optimize & Convert'), findsOneWidget);
+        expect(find.text('Productivity & OCR Tools'), findsOneWidget);
+        expect(find.text('Upcoming Platform Integrations'), findsOneWidget);
+
+        // Planned / unavailable tools clearly distinguished
+        expect(find.text('PDF to Word / Excel Conversion'), findsOneWidget);
+        expect(find.text('UNAVAILABLE'), findsOneWidget);
+
+        // Navigate into implemented PDF Workbench
+        await tester.ensureVisible(find.text('PDF Productivity Tools'));
+        await tester.tap(find.text('PDF Productivity Tools'));
+        await tester.pumpAndSettle();
+        expect(find.byType(PdfToolsScreen), findsOneWidget);
+        expect(find.text('PDF Workbench'), findsOneWidget);
+      },
+    );
+
+    testWidgets('PDF Suite supports Dark Theme (Carbon Studio)', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.lightTheme, home: const ToolsScreen()),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('PDF Suite'), findsOneWidget);
-      expect(find.text('Organize'), findsOneWidget);
-      expect(find.text('Edit & Protect'), findsOneWidget);
-      expect(find.text('Optimize & Convert'), findsOneWidget);
-      expect(find.text('Productivity & OCR Tools'), findsOneWidget);
-      expect(find.text('Upcoming Platform Integrations'), findsOneWidget);
-
-      // Planned / unavailable tools clearly distinguished
-      expect(find.text('PDF to Word / Excel Conversion'), findsOneWidget);
-      expect(find.text('UNAVAILABLE'), findsOneWidget);
-
-      // Navigate into implemented PDF Workbench
-      await tester.ensureVisible(find.text('PDF Productivity Tools'));
-      await tester.tap(find.text('PDF Productivity Tools'));
-      await tester.pumpAndSettle();
-      expect(find.byType(PdfToolsScreen), findsOneWidget);
-      expect(find.text('PDF Workbench'), findsOneWidget);
-    });
-
-    testWidgets('PDF Suite supports Dark Theme (Carbon Studio)', (tester) async {
       await tester.pumpWidget(
         MaterialApp(theme: AppTheme.darkTheme, home: const ToolsScreen()),
       );
@@ -243,54 +247,60 @@ void main() {
   });
 
   group('Stage 3 — Settings Theme Switching & Persistence', () {
-    testWidgets('Switches Light, Dark, and System Default and persists selection', (
-      tester,
-    ) async {
-      final router = createScaneliqRouter(initialLocation: '/settings');
-      addTearDown(router.dispose);
+    testWidgets(
+      'Switches Light, Dark, and System Default and persists selection',
+      (tester) async {
+        final router = createScaneliqRouter(initialLocation: '/settings');
+        addTearDown(router.dispose);
 
-      await tester.pumpWidget(
-        ProviderScope(child: ScaneliqApp(routerOverride: router)),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          ProviderScope(child: ScaneliqApp(routerOverride: router)),
+        );
+        await tester.pumpAndSettle();
 
-      // Switch to Dark
-      await tester.tap(find.text('Dark'));
-      await tester.pumpAndSettle();
-      var scaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
-      expect(scaffold.backgroundColor, const Color(0xFF0D0E11));
+        // Switch to Dark
+        await tester.tap(find.text('Dark'));
+        await tester.pumpAndSettle();
+        var scaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
+        expect(scaffold.backgroundColor, const Color(0xFF0D0E11));
 
-      // Switch to Light
-      await tester.tap(find.text('Light'));
-      await tester.pumpAndSettle();
-      scaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
-      expect(scaffold.backgroundColor, const Color(0xFFFAF9F6));
+        // Switch to Light
+        await tester.tap(find.text('Light'));
+        await tester.pumpAndSettle();
+        scaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
+        expect(scaffold.backgroundColor, const Color(0xFFFAF9F6));
 
-      // Switch to System Default
-      await tester.tap(find.text('System Default'));
-      await tester.pumpAndSettle();
-      expect(find.text('System Default (Follows device appearance)'), findsOneWidget);
+        // Switch to System Default
+        await tester.tap(find.text('System Default'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('System Default (Follows device appearance)'),
+          findsOneWidget,
+        );
 
-      // Verify persisted Dark selection reloads on app restart
-      await tester.tap(find.text('Dark'));
-      await tester.pumpAndSettle();
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('scaneliq_theme_mode'), 'dark');
+        // Verify persisted Dark selection reloads on app restart
+        await tester.tap(find.text('Dark'));
+        await tester.pumpAndSettle();
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('scaneliq_theme_mode'), 'dark');
 
-      final restartRouter = createScaneliqRouter(initialLocation: '/settings');
-      addTearDown(restartRouter.dispose);
-      await tester.pumpWidget(
-        ProviderScope(
-          key: const ValueKey('restarted-app'),
-          child: ScaneliqApp(routerOverride: restartRouter),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final restartedScaffold = tester.widget<Scaffold>(
-        find.byType(Scaffold).last,
-      );
-      expect(restartedScaffold.backgroundColor, const Color(0xFF0D0E11));
-    });
+        final restartRouter = createScaneliqRouter(
+          initialLocation: '/settings',
+        );
+        addTearDown(restartRouter.dispose);
+        await tester.pumpWidget(
+          ProviderScope(
+            key: const ValueKey('restarted-app'),
+            child: ScaneliqApp(routerOverride: restartRouter),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final restartedScaffold = tester.widget<Scaffold>(
+          find.byType(Scaffold).last,
+        );
+        expect(restartedScaffold.backgroundColor, const Color(0xFF0D0E11));
+      },
+    );
   });
 
   group('Stage 4 — Full-Screen Security PIN Experience', () {
@@ -300,106 +310,119 @@ void main() {
       await AppLockService.instance.disableAppLock();
     });
 
-    testWidgets('Full-screen barrier rejects wrong PIN, blocks back nav, and unlocks on valid PIN', (
-      tester,
-    ) async {
-      await AppLockService.instance.setPin('4321');
-      AppLockService.instance.markSessionLocked();
+    testWidgets(
+      'Full-screen barrier rejects wrong PIN, blocks back nav, and unlocks on valid PIN',
+      (tester) async {
+        await AppLockService.instance.setPin('4321');
+        AppLockService.instance.markSessionLocked();
 
-      var unlockedResult = false;
+        var unlockedResult = false;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: Builder(
-            builder: (ctx) => Scaffold(
-              body: ElevatedButton(
-                onPressed: () async {
-                  unlockedResult = await AppLockScreen.showUnlockBarrier(ctx);
-                },
-                child: const Text('Lock Vault'),
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: Builder(
+              builder: (ctx) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () async {
+                    unlockedResult = await AppLockScreen.showUnlockBarrier(ctx);
+                  },
+                  child: const Text('Lock Vault'),
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      await tester.tap(find.text('Lock Vault'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Lock Vault'));
+        await tester.pumpAndSettle();
 
-      // Verify full-screen lock UI and back-navigation guard
-      expect(find.byType(AppLockScreen), findsOneWidget);
-      expect(find.text('Vault Locked'), findsOneWidget);
-      final popScope = tester.widget<PopScope>(find.byType(PopScope));
-      expect(popScope.canPop, isFalse);
+        // Verify full-screen lock UI and back-navigation guard
+        expect(find.byType(AppLockScreen), findsOneWidget);
+        expect(find.text('Vault Locked'), findsOneWidget);
+        final popScope = tester.widget<PopScope>(find.byType(PopScope));
+        expect(popScope.canPop, isFalse);
 
-      // Attempt system back route pop -> barrier remains open
-      final dynamic widgetsAppState = tester.state(find.byType(WidgetsApp));
-      await widgetsAppState.didPopRoute();
-      await tester.pumpAndSettle();
-      expect(find.text('Vault Locked'), findsOneWidget);
+        // Attempt system back route pop -> barrier remains open
+        final dynamic widgetsAppState = tester.state(find.byType(WidgetsApp));
+        await widgetsAppState.didPopRoute();
+        await tester.pumpAndSettle();
+        expect(find.text('Vault Locked'), findsOneWidget);
 
-      // Enter incorrect PIN -> displays remaining attempts error
-      for (final d in ['1', '1', '1', '1']) {
-        await tester.tap(find.text(d));
-        await tester.pump();
-      }
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Incorrect PIN (4 attempts remaining)'), findsOneWidget);
-      expect(find.text('Vault Locked'), findsOneWidget);
+        // Enter incorrect PIN -> displays remaining attempts error
+        for (final d in ['1', '1', '1', '1']) {
+          await tester.tap(find.text(d));
+          await tester.pump();
+        }
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Incorrect PIN (4 attempts remaining)'),
+          findsOneWidget,
+        );
+        expect(find.text('Vault Locked'), findsOneWidget);
 
-      // Enter correct PIN '4321' -> unlocks cleanly
-      for (final d in ['4', '3', '2', '1']) {
-        await tester.tap(find.text(d));
-        await tester.pump();
-      }
-      await tester.pumpAndSettle();
-      expect(find.text('Vault Locked'), findsNothing);
-      expect(unlockedResult, isTrue);
-    });
+        // Enter correct PIN '4321' -> unlocks cleanly
+        for (final d in ['4', '3', '2', '1']) {
+          await tester.tap(find.text(d));
+          await tester.pump();
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('Vault Locked'), findsNothing);
+        expect(unlockedResult, isTrue);
+      },
+    );
 
-    testWidgets('AppLockScreen displays biometric button when biometrics enabled & lifecycle triggers lock on resume', (
-      tester,
-    ) async {
-      await AppLockService.instance.setPin('1234');
-      await AppLockService.instance.setBiometricsEnabled(true);
-      await AppLockService.instance.setTimeoutSeconds(0);
-      AppLockService.instance.markSessionUnlocked();
+    testWidgets(
+      'AppLockScreen displays biometric button when biometrics enabled & lifecycle triggers lock on resume',
+      (tester) async {
+        await AppLockService.instance.setPin('1234');
+        await AppLockService.instance.setBiometricsEnabled(true);
+        await AppLockService.instance.setTimeoutSeconds(0);
+        AppLockService.instance.markSessionUnlocked();
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            documentsListProvider.overrideWith((ref) async => const []),
-            searchedDocumentsProvider.overrideWith((ref, q) async => const []),
-            foldersListProvider(null).overrideWith((ref) async => const []),
-            tagsListProvider.overrideWith((ref) async => const []),
-            latestDraftProvider.overrideWith((ref) async => null),
-          ],
-          child: MaterialApp(
-            theme: AppTheme.darkTheme,
-            home: const MainNavigationShell(),
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              documentsListProvider.overrideWith((ref) async => const []),
+              searchedDocumentsProvider.overrideWith(
+                (ref, q) async => const [],
+              ),
+              foldersListProvider(null).overrideWith((ref) async => const []),
+              tagsListProvider.overrideWith((ref) async => const []),
+              latestDraftProvider.overrideWith((ref) async => null),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.darkTheme,
+              home: const MainNavigationShell(),
+            ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      // Simulate valid Android/Flutter app background -> foreground lifecycle
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-      await tester.pump();
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-      await tester.pump();
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      await tester.pump();
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-      await tester.pump();
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-      await tester.pump();
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pumpAndSettle();
+        // Simulate valid Android/Flutter app background -> foreground lifecycle
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
 
-      // Full-screen lock barrier appears with biometric button
-      expect(find.text('Vault Locked'), findsOneWidget);
-      expect(find.byTooltip('Unlock with Biometrics'), findsOneWidget);
-    });
+        // Full-screen lock barrier appears with biometric button
+        expect(find.text('Vault Locked'), findsOneWidget);
+        expect(find.byTooltip('Unlock with Biometrics'), findsOneWidget);
+      },
+    );
   });
 }

@@ -92,10 +92,11 @@ void main() {
       img.fill(img3, color: img.ColorRgb8(0, 0, 255)); // Blue page 3
 
       const spacing = 10;
-      final stitched = ImageProcessingService.stitchImagesVertically(
-        [img1, img2, img3],
-        spacing: spacing,
-      );
+      final stitched = ImageProcessingService.stitchImagesVertically([
+        img1,
+        img2,
+        img3,
+      ], spacing: spacing);
 
       // Max width should be 120 (max of 100, 120, 90)
       expect(stitched.width, equals(120));

@@ -56,8 +56,11 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          documentsListProvider.overrideWith((ref) async => const <ScannedDocument>[]),
-          foldersListProvider(null).overrideWith((ref) async => const <DocumentFolder>[]),
+          documentsListProvider.overrideWith(
+            (ref) async => const <ScannedDocument>[],
+          ),
+          foldersListProvider(null)
+              .overrideWith((ref) async => const <DocumentFolder>[]),
           latestDraftProvider.overrideWith((ref) async => null),
         ],
         child: const ScaneliqApp(),

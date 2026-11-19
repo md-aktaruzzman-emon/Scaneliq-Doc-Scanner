@@ -76,7 +76,8 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
     final initialList = widget.pages;
     if (initialList != null && initialList.isNotEmpty) {
       _editablePages = List<DocumentPage>.from(initialList);
-      final idx = widget.initialPageIndex ??
+      final idx =
+          widget.initialPageIndex ??
           _editablePages.indexWhere((p) => p.id == widget.page.id);
       _activePageIndex = idx.clamp(0, _editablePages.length - 1);
     } else {
@@ -124,13 +125,10 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
     _schedulePreviewRender(immediate: false);
 
     _sliderHistoryDebounce?.cancel();
-    _sliderHistoryDebounce = Timer(
-      const Duration(milliseconds: 280),
-      () {
-        _activeStack.commitContinuousEdit();
-        if (mounted) setState(() {});
-      },
-    );
+    _sliderHistoryDebounce = Timer(const Duration(milliseconds: 280), () {
+      _activeStack.commitContinuousEdit();
+      if (mounted) setState(() {});
+    });
   }
 
   void _switchToPage(int newIndex) {
@@ -181,7 +179,8 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
   }
 
   void _rotateBy(int deltaDegrees) {
-    final nextRot = ((_recipe.rotationDegrees + deltaDegrees) % 360 + 360) % 360;
+    final nextRot =
+        ((_recipe.rotationDegrees + deltaDegrees) % 360 + 360) % 360;
     _commitRecipe(
       _recipe.copyWith(rotationDegrees: nextRot),
       immediatePreview: true,
@@ -243,9 +242,7 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
   }
 
   Future<void> _movePageOrder(int fromIdx, int toIdx) async {
-    if (fromIdx == toIdx ||
-        toIdx < 0 ||
-        toIdx >= _editablePages.length) {
+    if (fromIdx == toIdx || toIdx < 0 || toIdx >= _editablePages.length) {
       return;
     }
     setState(() {
@@ -352,9 +349,7 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
 
   void _schedulePreviewRender({bool immediate = false}) {
     _debounceTimer?.cancel();
-    final delay = immediate
-        ? Duration.zero
-        : const Duration(milliseconds: 90);
+    final delay = immediate ? Duration.zero : const Duration(milliseconds: 90);
     _debounceTimer = Timer(delay, _executePreviewRender);
   }
 
@@ -547,8 +542,7 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
                                 Icons.chevron_right_rounded,
                                 size: 15,
                                 color:
-                                    _activePageIndex <
-                                        _editablePages.length - 1
+                                    _activePageIndex < _editablePages.length - 1
                                     ? tokens.textPrimary
                                     : tokens.textTertiary,
                               ),
@@ -575,7 +569,9 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
                           ? tokens.textPrimary
                           : tokens.textTertiary.withValues(alpha: 0.45),
                     ),
-                    onPressed: _activeStack.canUndo && !_isSaving ? _undo : null,
+                    onPressed: _activeStack.canUndo && !_isSaving
+                        ? _undo
+                        : null,
                   ),
                   IconButton(
                     tooltip: 'Redo',
@@ -591,7 +587,9 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
                           ? tokens.textPrimary
                           : tokens.textTertiary.withValues(alpha: 0.45),
                     ),
-                    onPressed: _activeStack.canRedo && !_isSaving ? _redo : null,
+                    onPressed: _activeStack.canRedo && !_isSaving
+                        ? _redo
+                        : null,
                   ),
                   IconButton(
                     tooltip: 'Compare Original',
@@ -702,19 +700,19 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
                       _recipe.copyWith(perspectiveQuad: q),
                     );
                   },
-                  isCleanupMode: _currentTab == EditTab.rotate && _isCleanupMode,
+                  isCleanupMode:
+                      _currentTab == EditTab.rotate && _isCleanupMode,
                   cleanupPatches: _recipe.cleanupPatches,
                   onAddCleanupPatch: (nx, ny) {
-                    final updated = List<CleanupPatch>.from(
-                      _recipe.cleanupPatches,
-                    )..add(
-                      CleanupPatch(
-                        x: nx,
-                        y: ny,
-                        radius: _cleanupRadius,
-                        type: _cleanupType,
-                      ),
-                    );
+                    final updated =
+                        List<CleanupPatch>.from(_recipe.cleanupPatches)..add(
+                          CleanupPatch(
+                            x: nx,
+                            y: ny,
+                            radius: _cleanupRadius,
+                            type: _cleanupType,
+                          ),
+                        );
                     _commitRecipe(
                       _recipe.copyWith(cleanupPatches: updated),
                       immediatePreview: true,
@@ -880,7 +878,9 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
               onPressed: _isAutoDetectingCrop ? null : _runAutoCropDetection,
             ),
             _EditorActionPill(
-              icon: _usePerspectiveWarp ? Icons.transform_rounded : Icons.crop_rounded,
+              icon: _usePerspectiveWarp
+                  ? Icons.transform_rounded
+                  : Icons.crop_rounded,
               label: _usePerspectiveWarp ? '4-Pt Perspective' : 'Box Crop',
               onPressed: () {
                 setState(() {
@@ -988,9 +988,7 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
                 label: 'Shadows',
                 selected: _recipe.shadowCorrection,
                 onPressed: () => _commitRecipe(
-                  _recipe.copyWith(
-                    shadowCorrection: !_recipe.shadowCorrection,
-                  ),
+                  _recipe.copyWith(shadowCorrection: !_recipe.shadowCorrection),
                   immediatePreview: true,
                 ),
               ),
@@ -1098,9 +1096,8 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
           min: -0.5,
           max: 0.5,
           divisions: 20,
-          onChanged: (v) => _previewContinuousRecipe(
-            _recipe.copyWith(brightness: v),
-          ),
+          onChanged: (v) =>
+              _previewContinuousRecipe(_recipe.copyWith(brightness: v)),
         ),
         _buildSingleSlider(
           label: 'Contrast',
@@ -1109,9 +1106,8 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
           min: 0.5,
           max: 2.0,
           divisions: 15,
-          onChanged: (v) => _previewContinuousRecipe(
-            _recipe.copyWith(contrast: v),
-          ),
+          onChanged: (v) =>
+              _previewContinuousRecipe(_recipe.copyWith(contrast: v)),
         ),
         _buildSingleSlider(
           label: 'Sharpness',
@@ -1120,9 +1116,8 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
           min: 0.0,
           max: 1.0,
           divisions: 10,
-          onChanged: (v) => _previewContinuousRecipe(
-            _recipe.copyWith(sharpness: v),
-          ),
+          onChanged: (v) =>
+              _previewContinuousRecipe(_recipe.copyWith(sharpness: v)),
         ),
         Align(
           alignment: Alignment.centerRight,
@@ -1323,8 +1318,9 @@ class _EditPageScreenState extends ConsumerState<EditPageScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                         color: selected ? tokens.accent : tokens.textSecondary,
                       ),
                     ),

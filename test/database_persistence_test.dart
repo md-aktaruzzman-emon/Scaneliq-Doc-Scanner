@@ -451,12 +451,15 @@ void main() {
         AppDatabaseService.instance.setDatabaseForTesting(v6Db);
 
         // Nested folder hierarchy
-        final rootFolder = await AppDatabaseService.instance.createFolder('Finance');
+        final rootFolder = await AppDatabaseService.instance.createFolder(
+          'Finance',
+        );
         final childFolder = await AppDatabaseService.instance.createFolder(
           'Taxes 2026',
           parentId: rootFolder.id,
         );
-        final hierarchy = await AppDatabaseService.instance.getFolderHierarchy();
+        final hierarchy = await AppDatabaseService.instance
+            .getFolderHierarchy();
         expect(hierarchy.length, 2);
         expect(hierarchy[1].depth, 1);
         expect(hierarchy[1].breadcrumbPath, 'Finance / Taxes 2026');
@@ -489,7 +492,8 @@ void main() {
         );
 
         // FTS5 prefix & Unicode search + snippet extraction
-        final enHits = await AppDatabaseService.instance.searchDocumentsWithSnippets('Assess');
+        final enHits = await AppDatabaseService.instance
+            .searchDocumentsWithSnippets('Assess');
         expect(enHits.length, 1);
         expect(enHits.first.document.id, 'doc_bn_fts');
         expect(enHits.first.snippet, contains('Assessment'));
@@ -500,9 +504,8 @@ void main() {
         expect(bnHits.length, 1);
 
         // Operator words and punctuation do not crash FTS MATCH; punctuation around valid terms still matches
-        final safeOperatorInput = await AppDatabaseService.instance.getAllDocuments(
-          searchQuery: 'AND OR * : -',
-        );
+        final safeOperatorInput = await AppDatabaseService.instance
+            .getAllDocuments(searchQuery: 'AND OR * : -');
         expect(safeOperatorInput, isA<List<ScannedDocument>>());
 
         final safePunct = await AppDatabaseService.instance.getAllDocuments(
@@ -511,7 +514,9 @@ void main() {
         expect(safePunct.length, 1);
 
         // Deep document duplication copies page file, OCR, and updates FTS
-        final copy = await AppDatabaseService.instance.duplicateDocument('doc_bn_fts');
+        final copy = await AppDatabaseService.instance.duplicateDocument(
+          'doc_bn_fts',
+        );
         expect(copy, isNotNull);
         expect(copy!.title, equals('জমির দলিল Deed FY26 (Copy)'));
         expect(copy.folderId, equals(childFolder.id));

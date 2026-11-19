@@ -631,9 +631,10 @@ class ImageProcessingService {
     for (int y = 0; y < src.height; y += stepY) {
       for (int x = 0; x < src.width; x += stepX) {
         final p = src.getPixel(x, y);
-        final int lum = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b)
-            .round()
-            .clamp(0, 255);
+        final int lum = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round().clamp(
+          0,
+          255,
+        );
         hist[lum]++;
         lumaSum += lum;
         total++;
@@ -735,9 +736,9 @@ class ImageProcessingService {
       final int row = y * w;
       for (int x = 0; x < w; x++) {
         final p = working.getPixel(x, y);
-        luma[row + x] = ((77 * p.r.toInt() + 150 * p.g.toInt() + 29 * p.b.toInt()) >>
-                8)
-            .clamp(0, 255);
+        luma[row + x] =
+            ((77 * p.r.toInt() + 150 * p.g.toInt() + 29 * p.b.toInt()) >> 8)
+                .clamp(0, 255);
       }
     }
 

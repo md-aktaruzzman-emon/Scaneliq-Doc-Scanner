@@ -42,34 +42,37 @@ void main() {
 
       OcrScript? invokedScript;
       bool receivedPreprocessedPng = false;
-      OcrService.instance.nativeTesseractOverrideForTesting =
-          (processedFile, script) async {
-            invokedScript = script;
-            receivedPreprocessedPng =
-                processedFile.existsSync() &&
-                processedFile.path != imgFile.path;
-            return const PageOcrResult(
-              fullText: r'গণপ্রজাতন্ত্রী বাংলাদেশ সরকার ।' '\r\n' r'নম্বর: ১২৩৪  Tax: $50.00',
-              boxes: [
-                OcrBoundingBox(
-                  text: 'গণপ্রজাতন্ত্রী বাংলাদেশ সরকার ।',
-                  left: 20,
-                  top: 20,
-                  width: 300,
-                  height: 24,
-                ),
-                OcrBoundingBox(
-                  text: r'নম্বর: ১২৩৪  Tax: $50.00',
-                  left: 20,
-                  top: 60,
-                  width: 280,
-                  height: 22,
-                ),
-              ],
-              script: OcrScript.mixedBengaliEnglish,
-              engine: 'tesseract4android:ben+eng',
-            );
-          };
+      OcrService
+          .instance
+          .nativeTesseractOverrideForTesting = (processedFile, script) async {
+        invokedScript = script;
+        receivedPreprocessedPng =
+            processedFile.existsSync() && processedFile.path != imgFile.path;
+        return const PageOcrResult(
+          fullText:
+              r'গণপ্রজাতন্ত্রী বাংলাদেশ সরকার ।'
+              '\r\n'
+              r'নম্বর: ১২৩৪  Tax: $50.00',
+          boxes: [
+            OcrBoundingBox(
+              text: 'গণপ্রজাতন্ত্রী বাংলাদেশ সরকার ।',
+              left: 20,
+              top: 20,
+              width: 300,
+              height: 24,
+            ),
+            OcrBoundingBox(
+              text: r'নম্বর: ১২৩৪  Tax: $50.00',
+              left: 20,
+              top: 60,
+              width: 280,
+              height: 22,
+            ),
+          ],
+          script: OcrScript.mixedBengaliEnglish,
+          engine: 'tesseract4android:ben+eng',
+        );
+      };
 
       final res = await OcrService.instance.extractPageOcr(
         imgFile,
@@ -94,34 +97,73 @@ void main() {
       );
     });
 
-    test('OcrTableExtractor builds CSV and Markdown tables from bounding boxes', () async {
-      const ocr = PageOcrResult(
-        fullText: 'বিবরণ মূল্য\nকলম ৫০ টাকা\nখাতা ১২০ টাকা',
-        boxes: [
-          OcrBoundingBox(text: 'বিবরণ', left: 20, top: 20, width: 80, height: 18),
-          OcrBoundingBox(text: 'মূল্য', left: 220, top: 21, width: 60, height: 18),
-          OcrBoundingBox(text: 'কলম', left: 20, top: 60, width: 60, height: 18),
-          OcrBoundingBox(text: '৫০ টাকা', left: 220, top: 62, width: 70, height: 18),
-          OcrBoundingBox(text: 'খাতা', left: 20, top: 100, width: 60, height: 18),
-          OcrBoundingBox(text: '১২০ টাকা', left: 220, top: 101, width: 80, height: 18),
-        ],
-      );
+    test(
+      'OcrTableExtractor builds CSV and Markdown tables from bounding boxes',
+      () async {
+        const ocr = PageOcrResult(
+          fullText: 'বিবরণ মূল্য\nকলম ৫০ টাকা\nখাতা ১২০ টাকা',
+          boxes: [
+            OcrBoundingBox(
+              text: 'বিবরণ',
+              left: 20,
+              top: 20,
+              width: 80,
+              height: 18,
+            ),
+            OcrBoundingBox(
+              text: 'মূল্য',
+              left: 220,
+              top: 21,
+              width: 60,
+              height: 18,
+            ),
+            OcrBoundingBox(
+              text: 'কলম',
+              left: 20,
+              top: 60,
+              width: 60,
+              height: 18,
+            ),
+            OcrBoundingBox(
+              text: '৫০ টাকা',
+              left: 220,
+              top: 62,
+              width: 70,
+              height: 18,
+            ),
+            OcrBoundingBox(
+              text: 'খাতা',
+              left: 20,
+              top: 100,
+              width: 60,
+              height: 18,
+            ),
+            OcrBoundingBox(
+              text: '১২০ টাকা',
+              left: 220,
+              top: 101,
+              width: 80,
+              height: 18,
+            ),
+          ],
+        );
 
-      final table = OcrTableExtractor.extract(ocr);
-      expect(table.rows.length, equals(3));
-      expect(table.rows[0], equals(['বিবরণ', 'মূল্য']));
-      expect(table.rows[1], equals(['কলম', '৫০ টাকা']));
-      expect(table.toCsv(), contains('কলম,৫০ টাকা'));
-      expect(table.toMarkdown(), contains('| খাতা | ১২০ টাকা |'));
+        final table = OcrTableExtractor.extract(ocr);
+        expect(table.rows.length, equals(3));
+        expect(table.rows[0], equals(['বিবরণ', 'মূল্য']));
+        expect(table.rows[1], equals(['কলম', '৫০ টাকা']));
+        expect(table.toCsv(), contains('কলম,৫০ টাকা'));
+        expect(table.toMarkdown(), contains('| খাতা | ১২০ টাকা |'));
 
-      final csvFile = await OcrService.instance.exportTextFile(
-        content: table.toCsv(),
-        baseName: 'bn_table',
-        extension: 'csv',
-      );
-      expect(csvFile.existsSync(), isTrue);
-      expect(await csvFile.readAsString(), contains('১২০ টাকা'));
-    });
+        final csvFile = await OcrService.instance.exportTextFile(
+          content: table.toCsv(),
+          baseName: 'bn_table',
+          extension: 'csv',
+        );
+        expect(csvFile.existsSync(), isTrue);
+        expect(await csvFile.readAsString(), contains('১২০ টাকা'));
+      },
+    );
 
     test('PdfService.generatePdf embeds UTF-8 NotoSansBengali font so Bengali OCR text is genuinely searchable in PDF', () async {
       final pageImg = img.Image(width: 600, height: 800);
@@ -164,7 +206,9 @@ void main() {
       final sfDoc = sf.PdfDocument(inputBytes: await pdfFile.readAsBytes());
       try {
         final extracted = sf.PdfTextExtractor(sfDoc).extractText();
-        final normalizedExtracted = extracted.replaceAll(RegExp(r'\s+'), ' ').trim();
+        final normalizedExtracted = extracted
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
         debugPrint('Extracted PDF Unicode text: $normalizedExtracted');
         expect(normalizedExtracted, contains('Tax'));
         expect(normalizedExtracted, contains('Receipt'));

@@ -118,8 +118,9 @@ class EditorPreviewStage extends StatelessWidget {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: ScaneliqColorPalette.cameraStudioBg
-                            .withValues(alpha: 0.85),
+                        color: ScaneliqColorPalette.cameraStudioBg.withValues(
+                          alpha: 0.85,
+                        ),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(color: tokens.hairline),
                       ),
@@ -258,11 +259,7 @@ class EditorPreviewStage extends StatelessWidget {
       return baseContent;
     }
 
-    return InteractiveViewer(
-      minScale: 1.0,
-      maxScale: 4.0,
-      child: baseContent,
-    );
+    return InteractiveViewer(minScale: 1.0, maxScale: 4.0, child: baseContent);
   }
 
   Widget _buildBeforeAfterComparison(
@@ -332,7 +329,10 @@ class EditorPreviewStage extends StatelessWidget {
             Positioned(
               top: 10,
               left: 10,
-              child: _compareBadge('ORIGINAL', ScaneliqColorPalette.cameraStudioBg),
+              child: _compareBadge(
+                'ORIGINAL',
+                ScaneliqColorPalette.cameraStudioBg,
+              ),
             ),
             Positioned(
               top: 10,
@@ -363,11 +363,7 @@ class EditorPreviewStage extends StatelessWidget {
     );
   }
 
-  Widget _buildBoxCropOverlay(
-    double boxW,
-    double boxH,
-    ScaneliqTokens tokens,
-  ) {
+  Widget _buildBoxCropOverlay(double boxW, double boxH, ScaneliqTokens tokens) {
     final double leftPx = cropLeft * boxW;
     final double topPx = cropTop * boxH;
     final double rectW = (cropRight - cropLeft) * boxW;

@@ -19,11 +19,12 @@ class ScaneliqMark extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(color: tokens.textPrimary, borderRadius: radius),
-      padding: EdgeInsets.all(size * 0.21),
-      child: CustomPaint(
-        painter: _ViewfinderMarkPainter(color: tokens.bg),
+      decoration: BoxDecoration(
+        color: tokens.textPrimary,
+        borderRadius: radius,
       ),
+      padding: EdgeInsets.all(size * 0.21),
+      child: CustomPaint(painter: _ViewfinderMarkPainter(color: tokens.bg)),
     );
   }
 }

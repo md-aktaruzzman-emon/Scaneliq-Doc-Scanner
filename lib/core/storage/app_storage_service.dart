@@ -4,6 +4,23 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 
+class StorageUsageBreakdown {
+  final int originalsBytes;
+  final int processedBytes;
+  final int exportsBytes;
+  final int tempBytes;
+
+  const StorageUsageBreakdown({
+    this.originalsBytes = 0,
+    this.processedBytes = 0,
+    this.exportsBytes = 0,
+    this.tempBytes = 0,
+  });
+
+  int get totalBytes =>
+      originalsBytes + processedBytes + exportsBytes + tempBytes;
+}
+
 /// Manages app-private local storage directories according to blueprint section 6.1
 class AppStorageService {
   static AppStorageService? _instance;
@@ -140,6 +157,63 @@ class AppStorageService {
     final clean = sanitized.replaceAll('_', '').trim();
     final effectiveName = clean.isEmpty ? 'Scaneliq_Doc' : sanitized;
     return p.join(exportsDir.path, '$effectiveName.pdf');
+  }
+
+  /// Calculates actual byte usage across the four private storage directories.
+  Future<StorageUsageBreakdown> calculateStorageBreakdown() async {
+    Future<int> sumDir(Directory dir) async {
+      int total = 0;
+      try {
+        if (await dir.exists()) {
+          await for (final entity in dir.list(
+            recursive: true,
+            followLinks: false,
+          )) {
+            if (entity is File) {
+              try {
+                total += await entity.length();
+              } catch (_) {}
+            }
+          }
+        }
+      } catch (_) {}
+      return total;
+    }
+
+    final results = await Future.wait([
+      sumDir(originalsDir),
+      sumDir(processedDir),
+      sumDir(exportsDir),
+      sumDir(tempDir),
+    ]);
+    return StorageUsageBreakdown(
+      originalsBytes: results[0],
+      processedBytes: results[1],
+      exportsBytes: results[2],
+      tempBytes: results[3],
+    );
+  }
+
+  /// Safely purges transient temporary files without ever touching originals or exports.
+  /// Returns the number of bytes reclaimed.
+  Future<int> clearTemporaryCache() async {
+    int freedBytes = 0;
+    try {
+      if (await tempDir.exists()) {
+        await for (final entity in tempDir.list(
+          recursive: true,
+          followLinks: false,
+        )) {
+          if (entity is File) {
+            try {
+              freedBytes += await entity.length();
+              await entity.delete();
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (_) {}
+    return freedBytes;
   }
 
   /// Safely deletes the export file and associated page images for a document

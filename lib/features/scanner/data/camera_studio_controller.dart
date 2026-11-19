@@ -197,9 +197,7 @@ class FlutterCameraBackend implements ScannerCameraBackend {
   }
 
   @override
-  Future<void> startFrameStream(
-    void Function(CameraFrameData frame) onFrame,
-  ) {
+  Future<void> startFrameStream(void Function(CameraFrameData frame) onFrame) {
     return _serialized(() async {
       final controller = _controller;
       if (controller == null || !controller.value.isInitialized) return;
@@ -244,22 +242,16 @@ class FlutterCameraBackend implements ScannerCameraBackend {
     if (code == 'cameraaccessdenied') {
       return CameraPermissionException(
         permanentlyDenied: false,
-        message:
-            e.description ??
-            'Camera access is required to scan documents. Grant permission or import from gallery.',
+        message: e.description ?? 'Camera access is required to scan documents. Grant permission or import from gallery.',
       );
     }
     if (code == 'cameraaccessdeniedwithoutprompt' ||
         code == 'cameraaccessrestricted') {
       return CameraPermissionException(
         permanentlyDenied: true,
-        message:
-            e.description ??
-            'Camera permission is disabled in system settings. Enable camera access or import images from gallery.',
+        message: e.description ?? 'Camera permission is disabled in system settings. Enable camera access or import images from gallery.',
       );
     }
-    return Exception(
-      e.description ?? 'Camera error (${e.code})',
-    );
+    return Exception(e.description ?? 'Camera error (${e.code})');
   }
 }

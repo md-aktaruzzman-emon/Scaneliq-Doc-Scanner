@@ -20,49 +20,49 @@ void main() {
   });
 
   group('Navigation & Screen UI Tests', () {
-    testWidgets('MainNavigationShell renders Concept A 3 tabs and switches cleanly', (
-      WidgetTester tester,
-    ) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            documentsListProvider.overrideWith(
-              (ref) async => const <ScannedDocument>[],
+    testWidgets(
+      'MainNavigationShell renders Concept A 3 tabs and switches cleanly',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              documentsListProvider.overrideWith(
+                (ref) async => const <ScannedDocument>[],
+              ),
+              foldersListProvider(null)
+                  .overrideWith((ref) async => const <DocumentFolder>[]),
+              latestDraftProvider.overrideWith((ref) async => null),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.lightTheme,
+              home: const MainNavigationShell(),
             ),
-            foldersListProvider(null).overrideWith(
-              (ref) async => const <DocumentFolder>[],
-            ),
-            latestDraftProvider.overrideWith((ref) async => null),
-          ],
-          child: MaterialApp(
-            theme: AppTheme.lightTheme,
-            home: const MainNavigationShell(),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      // Verify Concept A 3-tab bottom navigation destinations
-      expect(find.text('Scans'), findsOneWidget);
-      expect(find.text('Folders'), findsAtLeastNWidgets(1));
-      expect(find.text('PDF Suite'), findsOneWidget);
+        // Verify Concept A 3-tab bottom navigation destinations
+        expect(find.text('Scans'), findsOneWidget);
+        expect(find.text('Folders'), findsAtLeastNWidgets(1));
+        expect(find.text('PDF Suite'), findsOneWidget);
 
-      // Tap Folders bottom tab
-      await tester.tap(find.text('Folders').last);
-      await tester.pumpAndSettle();
-      expect(find.text('Search documents...'), findsOneWidget);
+        // Tap Folders bottom tab
+        await tester.tap(find.text('Folders').last);
+        await tester.pumpAndSettle();
+        expect(find.text('Search documents...'), findsOneWidget);
 
-      // Tap PDF Suite bottom tab
-      await tester.tap(find.text('PDF Suite'));
-      await tester.pumpAndSettle();
-      expect(find.text('PDF Suite'), findsAtLeastNWidgets(2));
-      expect(find.text('Instant Image OCR'), findsOneWidget);
+        // Tap PDF Suite bottom tab
+        await tester.tap(find.text('PDF Suite'));
+        await tester.pumpAndSettle();
+        expect(find.text('PDF Suite'), findsAtLeastNWidgets(2));
+        expect(find.text('Instant Image OCR'), findsOneWidget);
 
-      // Return to Scans tab
-      await tester.tap(find.text('Scans'));
-      await tester.pumpAndSettle();
-      expect(find.text('Scaneliq'), findsOneWidget);
-    });
+        // Return to Scans tab
+        await tester.tap(find.text('Scans'));
+        await tester.pumpAndSettle();
+        expect(find.text('Scaneliq'), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'SettingsScreen displays brand name, version and local-first privacy',

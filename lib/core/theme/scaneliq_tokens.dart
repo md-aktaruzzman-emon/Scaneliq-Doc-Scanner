@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'scaneliq_colors.dart';
 
 /// Centralized `ThemeExtension` carrying every Concept A token so widgets

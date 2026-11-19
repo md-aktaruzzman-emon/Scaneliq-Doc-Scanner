@@ -48,7 +48,9 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
   Future<void> _loadPdfPages() async {
     setState(() => _isLoading = true);
     try {
-      final count = await AdvancedPdfService.instance.getPageCount(_activePdfFile);
+      final count = await AdvancedPdfService.instance.getPageCount(
+        _activePdfFile,
+      );
       if (mounted) {
         setState(() {
           _currentPages = List<int>.generate(count, (i) => i + 1);
@@ -112,7 +114,8 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
     if (!confirmed || !mounted) return;
 
     setState(() {
-      final toRemove = _selectedIndices.toList()..sort((a, b) => b.compareTo(a));
+      final toRemove = _selectedIndices.toList()
+        ..sort((a, b) => b.compareTo(a));
       for (final idx in toRemove) {
         _currentPages.removeAt(idx);
       }
@@ -134,8 +137,9 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
 
   Future<void> _extractSelected() async {
     if (_selectedIndices.isEmpty) return;
-    final selectedPages =
-        (_selectedIndices.toList()..sort()).map((i) => _currentPages[i]).toList();
+    final selectedPages = (_selectedIndices.toList()..sort())
+        .map((i) => _currentPages[i])
+        .toList();
 
     final ctrl = TextEditingController(
       text:
@@ -175,6 +179,18 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
         pageNumbers: selectedPages,
         outputFileName: name,
       );
+      try {
+        await AppDatabaseService.instance.saveDocument(
+          ScannedDocument(
+            id: '${DateTime.now().microsecondsSinceEpoch}_extract',
+            title: name,
+            createdAt: DateTime.now(),
+            modifiedAt: DateTime.now(),
+            pageCount: selectedPages.length,
+            exportPath: outFile.path,
+          ),
+        );
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _isProcessing = false;
@@ -182,7 +198,7 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
         });
         showScaneliqToast(
           context,
-          'Extracted to ${outFile.uri.pathSegments.last}',
+          'Saved extracted PDF to Vault: ${outFile.uri.pathSegments.last}',
         );
       }
     } catch (e) {
@@ -230,7 +246,9 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
               outputFileName: outName,
             );
 
-      final newCount = await AdvancedPdfService.instance.getPageCount(updatedFile);
+      final newCount = await AdvancedPdfService.instance.getPageCount(
+        updatedFile,
+      );
       if (mounted) {
         setState(() {
           _activePdfFile = updatedFile;
@@ -280,7 +298,8 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
       File outputFile = await AdvancedPdfService.instance.reorderPages(
         sourcePdf: _activePdfFile,
         newPageOrder1Indexed: _currentPages,
-        outputFileName: '${baseName}_organized_${DateTime.now().millisecondsSinceEpoch}',
+        outputFileName:
+            '${baseName}_organized_${DateTime.now().millisecondsSinceEpoch}',
       );
 
       final newRotations = <int, int>{};
@@ -292,7 +311,8 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
         outputFile = await AdvancedPdfService.instance.rotatePages(
           sourcePdf: outputFile,
           pageRotationsDegrees: newRotations,
-          outputFileName: '${baseName}_final_${DateTime.now().millisecondsSinceEpoch}',
+          outputFileName:
+              '${baseName}_final_${DateTime.now().millisecondsSinceEpoch}',
         );
       }
 
@@ -532,7 +552,10 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
                 const Spacer(),
                 if (rotation != 0)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: tokens.accentSoft,
                       borderRadius: BorderRadius.circular(6),
@@ -567,7 +590,9 @@ class _PdfPageOrganizerScreenState extends State<PdfPageOrganizerScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     InkWell(
-                      onTap: index > 0 ? () => _movePage(index, index - 1) : null,
+                      onTap: index > 0
+                          ? () => _movePage(index, index - 1)
+                          : null,
                       child: Padding(
                         padding: const EdgeInsets.all(2),
                         child: Icon(

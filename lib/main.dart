@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/config/app_compliance_config.dart';
 import 'core/navigation/app_router.dart';
+import 'core/services/scan_preferences_service.dart';
 import 'core/storage/app_storage_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/documents/data/app_database_service.dart';
@@ -18,6 +19,7 @@ void main() async {
   // Initialize local vault storage and App Lock state BEFORE rendering the shell
   // so locked sessions never bypass PIN/biometric barriers on cold start.
   await AppStorageService.instance.init();
+  await ScanPreferencesService.instance.init();
   await AppLockService.instance.init();
   await PrivacyShieldService.instance.init();
 

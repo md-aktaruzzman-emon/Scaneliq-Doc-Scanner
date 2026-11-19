@@ -119,13 +119,50 @@ class AiDocumentService {
   }
 
   static const Set<String> _stopWords = {
-    'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and',
-    'any', 'are', 'as', 'at', 'be', 'because', 'been', 'before', 'being', 'below',
-    'between', 'both', 'but', 'by', 'could', 'did', 'do', 'does', 'doing', 'down',
+    'a',
+    'about',
+    'above',
+    'after',
+    'again',
+    'against',
+    'all',
+    'am',
+    'an',
+    'and',
+    'any',
+    'are',
+    'as',
+    'at',
+    'be',
+    'because',
+    'been',
+    'before',
+    'being',
+    'below',
+    'between',
+    'both',
+    'but',
+    'by',
+    'could',
+    'did',
+    'do',
+    'does',
+    'doing',
+    'down',
     'during', 'each', 'few', 'for', 'from', 'further', 'had', 'has', 'have',
     'having', 'he', 'her', 'here', 'hers', 'herself', 'him', 'himself', 'his',
     'how', 'i', 'if', 'in', 'into', 'is', 'it', 'its', 'itself', 'just', 'me',
-    'more', 'most', 'my', 'myself', 'no', 'nor', 'not', 'now', 'of', 'off', 'on',
+    'more',
+    'most',
+    'my',
+    'myself',
+    'no',
+    'nor',
+    'not',
+    'now',
+    'of',
+    'off',
+    'on',
     'once', 'only', 'or', 'other', 'our', 'ours', 'ourselves', 'out', 'over',
     'own', 'same', 'she', 'should', 'so', 'some', 'such', 'than', 'that', 'the',
     'their', 'theirs', 'them', 'themselves', 'then', 'there', 'these', 'they',
@@ -138,12 +175,48 @@ class AiDocumentService {
   };
 
   static const Map<String, List<String>> _bilingualConceptMap = {
-    'invoice': ['bill', 'receipt', 'tax', 'total', 'vat', 'payment', 'ইনভয়েস', 'বিল', 'রশিদ'],
+    'invoice': [
+      'bill',
+      'receipt',
+      'tax',
+      'total',
+      'vat',
+      'payment',
+      'ইনভয়েস',
+      'বিল',
+      'রশিদ',
+    ],
     'receipt': ['invoice', 'paid', 'subtotal', 'total', 'cash', 'রশিদ', 'টাকা'],
-    'tax': ['vat', 'gst', 'nbr', 'tin', 'return', 'assessment', 'কর', 'ভ্যাট', 'আয়কর'],
-    'contract': ['agreement', 'lease', 'party', 'signed', 'deed', 'চুক্তি', 'দলিল'],
+    'tax': [
+      'vat',
+      'gst',
+      'nbr',
+      'tin',
+      'return',
+      'assessment',
+      'কর',
+      'ভ্যাট',
+      'আয়কর',
+    ],
+    'contract': [
+      'agreement',
+      'lease',
+      'party',
+      'signed',
+      'deed',
+      'চুক্তি',
+      'দলিল',
+    ],
     'deed': ['land', 'khatian', 'mouza', 'দলিল', 'খতিয়ান', 'জমি'],
-    'medical': ['prescription', 'doctor', 'hospital', 'rx', 'tablet', 'প্রেসক্রিপশন', 'হাসপাতাল'],
+    'medical': [
+      'prescription',
+      'doctor',
+      'hospital',
+      'rx',
+      'tablet',
+      'প্রেসক্রিপশন',
+      'হাসপাতাল',
+    ],
     'ডাক্তার': ['doctor', 'hospital', 'medical', 'prescription'],
     'রশিদ': ['receipt', 'invoice', 'payment', 'total'],
     'টাকা': ['amount', 'total', 'bdt', 'tk', 'price', 'currency'],
@@ -163,9 +236,10 @@ class AiDocumentService {
 
   /// Extracts Unicode tokens (`Latin + Bengali + digits`), filtering stopwords.
   List<String> _tokenize(String text) {
-    final matches = RegExp(r'[\p{L}\p{N}]+', unicode: true).allMatches(
-      text.toLowerCase(),
-    );
+    final matches = RegExp(
+      r'[\p{L}\p{N}]+',
+      unicode: true,
+    ).allMatches(text.toLowerCase());
     return matches
         .map((m) => m.group(0)!)
         .where((w) => w.length > 1 && !_stopWords.contains(w))
@@ -210,10 +284,15 @@ class AiDocumentService {
     final topKeywords = sortedEntries.take(6).map((e) => e.key).toList();
 
     final int n = sentences.length;
-    final sentTfs = sentences.map((s) => _calculateTermFrequencies(_tokenize(s))).toList();
+    final sentTfs = sentences
+        .map((s) => _calculateTermFrequencies(_tokenize(s)))
+        .toList();
 
     // Build symmetric similarity matrix W[i][j] between sentences
-    final sim = List<List<double>>.generate(n, (_) => List<double>.filled(n, 0.0));
+    final sim = List<List<double>>.generate(
+      n,
+      (_) => List<double>.filled(n, 0.0),
+    );
     final rowSums = List<double>.filled(n, 0.0);
 
     for (int i = 0; i < n; i++) {
@@ -250,11 +329,8 @@ class AiDocumentService {
       for (int i = 0; i < n; i++) MapEntry(i, ranks[i]),
     ]..sort((a, b) => b.value.compareTo(a.value));
 
-    final topIndices = ranked
-        .take(min(maxBulletPoints, n))
-        .map((e) => e.key)
-        .toList()
-      ..sort();
+    final topIndices =
+        ranked.take(min(maxBulletPoints, n)).map((e) => e.key).toList()..sort();
 
     final bulletPoints = topIndices.map((idx) => sentences[idx]).toList();
     return DocumentSummaryResult(
@@ -313,18 +389,21 @@ class AiDocumentService {
       }
     }
 
-    final emails = RegExp(
-      r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b',
-    ).allMatches(clean).map((m) => m.group(0)!).toSet().toList();
-
-    final phones = RegExp(
-      r'(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{3,4}\)?[\s-]?)?\d{3,4}[\s-]?\d{3,5}\b',
-    )
+    final emails = RegExp(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b')
         .allMatches(clean)
-        .map((m) => m.group(0)!.trim())
-        .where((s) => s.replaceAll(RegExp(r'\D'), '').length >= 8)
+        .map((m) => m.group(0)!)
         .toSet()
         .toList();
+
+    final phones =
+        RegExp(
+              r'(?:\+?\d{1,3}[\s-]?)?(?:\(?\d{3,4}\)?[\s-]?)?\d{3,4}[\s-]?\d{3,5}\b',
+            )
+            .allMatches(clean)
+            .map((m) => m.group(0)!.trim())
+            .where((s) => s.replaceAll(RegExp(r'\D'), '').length >= 8)
+            .toSet()
+            .toList();
 
     final identifiers = <String>{};
     final idRx = RegExp(
@@ -408,7 +487,9 @@ class AiDocumentService {
       parts.add('Key dates referenced: ${entities.dates.take(3).join(', ')}.');
     }
     if (entities.amounts.isNotEmpty) {
-      parts.add('Monetary values detected: ${entities.amounts.take(3).join(', ')}.');
+      parts.add(
+        'Monetary values detected: ${entities.amounts.take(3).join(', ')}.',
+      );
     }
     if (entities.namesAndOrganizations.isNotEmpty) {
       parts.add(
@@ -471,7 +552,8 @@ class AiDocumentService {
       if (matching.isNotEmpty) {
         return DocumentQaResult(
           question: question,
-          bestAnswer: 'Dates found: ${entities.dates.join(', ')} — ${matching.first}',
+          bestAnswer:
+              'Dates found: ${entities.dates.join(', ')} — ${matching.first}',
           confidence: 0.88,
           relevantSentences: matching,
         );
@@ -514,7 +596,10 @@ class AiDocumentService {
     sentenceScores.sort((a, b) => b.value.compareTo(a.value));
     final bestIdx = sentenceScores.first.key;
     final confidence = min(1.0, sentenceScores.first.value * 1.5);
-    final relevant = sentenceScores.take(3).map((e) => sentences[e.key]).toList();
+    final relevant = sentenceScores
+        .take(3)
+        .map((e) => sentences[e.key])
+        .toList();
 
     return DocumentQaResult(
       question: question,

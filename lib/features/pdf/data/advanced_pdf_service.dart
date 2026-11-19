@@ -161,7 +161,14 @@ class PdfOutlineItem {
 }
 
 /// Types of supported PDF annotations
-enum PdfAnnotationType { text, signature, highlight, underline, freehand, shape }
+enum PdfAnnotationType {
+  text,
+  signature,
+  highlight,
+  underline,
+  freehand,
+  shape,
+}
 
 /// Vector shape variants supported in annotation mode
 enum PdfShapeKind { rectangle, circle, arrow, line }
@@ -1360,7 +1367,9 @@ class AdvancedPdfService {
       final extractor = sf.PdfTextExtractor(doc);
       final out = <int, String>{};
       for (int i = 0; i < doc.pages.count; i++) {
-        out[i + 1] = extractor.extractText(startPageIndex: i, endPageIndex: i).trim();
+        out[i + 1] = extractor
+            .extractText(startPageIndex: i, endPageIndex: i)
+            .trim();
       }
       return out;
     } finally {
@@ -1439,7 +1448,12 @@ class AdvancedPdfService {
                 item.text!,
                 font,
                 brush: brush,
-                bounds: Rect.fromLTWH(px, py, math.max(40.0, pw), math.max(18.0, ph)),
+                bounds: Rect.fromLTWH(
+                  px,
+                  py,
+                  math.max(40.0, pw),
+                  math.max(18.0, ph),
+                ),
               );
             }
             break;
@@ -1460,10 +1474,7 @@ class AdvancedPdfService {
                 );
                 page.graphics.restore();
               } else {
-                page.graphics.drawImage(
-                  bitmap,
-                  Rect.fromLTWH(px, py, pw, ph),
-                );
+                page.graphics.drawImage(bitmap, Rect.fromLTWH(px, py, pw, ph));
               }
             }
             break;
@@ -1472,7 +1483,9 @@ class AdvancedPdfService {
             final int hAlpha = item.opacity < 0.99
                 ? alpha
                 : 100; // Semi-transparent default
-            final highlightBrush = sf.PdfSolidBrush(sf.PdfColor(r, g, b, hAlpha));
+            final highlightBrush = sf.PdfSolidBrush(
+              sf.PdfColor(r, g, b, hAlpha),
+            );
             page.graphics.drawRectangle(
               brush: highlightBrush,
               bounds: Rect.fromLTWH(px, py, pw, math.max(8.0, ph)),
@@ -1494,11 +1507,13 @@ class AdvancedPdfService {
 
           case PdfAnnotationType.freehand:
             if (item.points.length >= 2) {
-              final pen = sf.PdfPen(
-                sf.PdfColor(r, g, b, alpha),
-                width: math.max(1.0, item.strokeWidth),
-              )..lineCap = sf.PdfLineCap.round
-               ..lineJoin = sf.PdfLineJoin.round;
+              final pen =
+                  sf.PdfPen(
+                      sf.PdfColor(r, g, b, alpha),
+                      width: math.max(1.0, item.strokeWidth),
+                    )
+                    ..lineCap = sf.PdfLineCap.round
+                    ..lineJoin = sf.PdfLineJoin.round;
               for (int i = 0; i < item.points.length - 1; i++) {
                 final p1 = item.points[i];
                 final p2 = item.points[i + 1];
@@ -1677,7 +1692,9 @@ class AdvancedPdfService {
             !pageNumbers1Indexed.contains(pageNum)) {
           continue;
         }
-        final outFile = File('${exportsDir.path}/${sanitized}_page_$pageNum.jpg');
+        final outFile = File(
+          '${exportsDir.path}/${sanitized}_page_$pageNum.jpg',
+        );
         await outFile.writeAsBytes(rasterPages[i], flush: true);
         generated.add(outFile);
       }
@@ -1715,7 +1732,9 @@ class AdvancedPdfService {
             );
             return Uint8List.fromList(img.encodeJpg(im, quality: 90));
           });
-          final outFile = File('${exportsDir.path}/${sanitized}_page_$pageNum.jpg');
+          final outFile = File(
+            '${exportsDir.path}/${sanitized}_page_$pageNum.jpg',
+          );
           await outFile.writeAsBytes(jpgBytes, flush: true);
           generated.add(outFile);
         } finally {
@@ -1764,7 +1783,8 @@ class AdvancedPdfService {
       try {
         final exportedImgs = await exportPdfToImages(
           sourcePdf: sourcePdf,
-          baseOutputName: '_flatten_tmp_${DateTime.now().millisecondsSinceEpoch}',
+          baseOutputName:
+              '_flatten_tmp_${DateTime.now().millisecondsSinceEpoch}',
         );
         for (final f in exportedImgs) {
           pageBitmaps.add(await f.readAsBytes());
@@ -1816,8 +1836,14 @@ class AdvancedPdfService {
             if (r['pageIndex'] != i) continue;
             final rx = ((r['x'] as num).toDouble() / pageW).clamp(0.0, 0.99);
             final ry = ((r['y'] as num).toDouble() / pageH).clamp(0.0, 0.99);
-            final rw = ((r['w'] as num).toDouble() / pageW).clamp(0.01, 1.0 - rx);
-            final rh = ((r['h'] as num).toDouble() / pageH).clamp(0.01, 1.0 - ry);
+            final rw = ((r['w'] as num).toDouble() / pageW).clamp(
+              0.01,
+              1.0 - rx,
+            );
+            final rh = ((r['h'] as num).toDouble() / pageH).clamp(
+              0.01,
+              1.0 - ry,
+            );
             working = ImageProcessingService.permanentlyRedactImage(
               src: working,
               normX: rx,

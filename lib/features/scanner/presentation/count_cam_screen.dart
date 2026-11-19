@@ -117,9 +117,8 @@ class _CountCamScreenState extends State<CountCamScreen> {
     );
     if (!quota.allowed) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(quota.message)),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(quota.message)));
         await SubscriptionSheet.show(context);
       }
       return;
@@ -142,7 +141,9 @@ class _CountCamScreenState extends State<CountCamScreen> {
   }
 
   void _handleCanvasTap(TapDownDetails details, Size canvasSize) {
-    if (_capturedImage == null || canvasSize.width <= 0 || canvasSize.height <= 0) {
+    if (_capturedImage == null ||
+        canvasSize.width <= 0 ||
+        canvasSize.height <= 0) {
       return;
     }
     final nx = (details.localPosition.dx / canvasSize.width).clamp(0.0, 1.0);
@@ -188,7 +189,10 @@ class _CountCamScreenState extends State<CountCamScreen> {
   void _manualAdjust(int delta) {
     setState(() {
       final nextTotal = _effectiveCount + delta;
-      _manualAdjustOffset = (nextTotal - _detectedObjects.length).clamp(-9999, 9999);
+      _manualAdjustOffset = (nextTotal - _detectedObjects.length).clamp(
+        -9999,
+        9999,
+      );
     });
   }
 
@@ -249,9 +253,7 @@ class _CountCamScreenState extends State<CountCamScreen> {
           else if (_isCameraReady && _cameraController != null)
             Center(child: CameraPreview(_cameraController!))
           else
-            const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
 
           // Top Preset Selector Pill
           Positioned(
@@ -289,7 +291,9 @@ class _CountCamScreenState extends State<CountCamScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                         items: _categoryPresets.keys
-                            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                            .map(
+                              (c) => DropdownMenuItem(value: c, child: Text(c)),
+                            )
                             .toList(),
                         onChanged: (val) {
                           if (val != null) {
@@ -386,7 +390,9 @@ class _CountCamScreenState extends State<CountCamScreen> {
                               color: Colors.white,
                             ),
                             tooltip: 'Count from Gallery image',
-                            onPressed: _isProcessing ? null : _pickImageAndCount,
+                            onPressed: _isProcessing
+                                ? null
+                                : _pickImageAndCount,
                           ),
                           GestureDetector(
                             onTap: _isProcessing ? null : _captureAndCount,

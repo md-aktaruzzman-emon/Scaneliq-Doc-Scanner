@@ -451,7 +451,10 @@ class ScanSessionNotifier extends Notifier<ScanSessionState> {
   }
 
   /// Applies a filter preset to a chosen subset of pages in the session
-  Future<void> applyFilterToPages(Set<String> pageIds, PageFilter filter) async {
+  Future<void> applyFilterToPages(
+    Set<String> pageIds,
+    PageFilter filter,
+  ) async {
     for (final page in state.pages) {
       if (!pageIds.contains(page.id)) continue;
       final newRecipe = page.editRecipe.copyWith(

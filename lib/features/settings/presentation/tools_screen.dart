@@ -3,19 +3,24 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:scaneliq/core/navigation/app_router.dart';
 import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
 import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
 import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
 import 'package:scaneliq/core/widgets/scaneliq_overlays.dart';
+import 'package:scaneliq/features/documents/data/app_database_service.dart';
+import 'package:scaneliq/features/editor/presentation/raster_redaction_screen.dart';
 import 'package:scaneliq/features/intelligence/presentation/ai_document_sheet.dart';
 import 'package:scaneliq/features/intelligence/presentation/business_card_dialog.dart';
 import 'package:scaneliq/features/intelligence/presentation/receipt_dialog.dart';
 import 'package:scaneliq/features/ocr/data/ocr_service.dart';
+import 'package:scaneliq/features/pdf/data/pdf_service.dart';
 import 'package:scaneliq/features/pdf/presentation/pdf_tools_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/continuous_camera_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/count_cam_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/scan_code_screen.dart';
 import 'package:scaneliq/features/scanner/presentation/translate_screen.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Concept A (Editorial Gallery Minimal) consolidated PDF Suite & Productivity Hub (Tab 3).
 ///
@@ -179,7 +184,10 @@ class _ToolsScreenState extends State<ToolsScreen> {
                     extension: 'txt',
                   );
                   if (mounted) {
-                    showScaneliqToast(context, 'Saved ${f.path.split(Platform.pathSeparator).last}');
+                    showScaneliqToast(
+                      context,
+                      'Saved ${f.path.split(Platform.pathSeparator).last}',
+                    );
                   }
                 },
               ),
@@ -190,11 +198,15 @@ class _ToolsScreenState extends State<ToolsScreen> {
                   onPressed: () async {
                     final f = await OcrService.instance.exportTextFile(
                       content: table.toCsv(),
-                      baseName: 'Table_${DateTime.now().millisecondsSinceEpoch}',
+                      baseName:
+                          'Table_${DateTime.now().millisecondsSinceEpoch}',
                       extension: 'csv',
                     );
                     if (mounted) {
-                      showScaneliqToast(context, 'Exported ${f.path.split(Platform.pathSeparator).last}');
+                      showScaneliqToast(
+                        context,
+                        'Exported ${f.path.split(Platform.pathSeparator).last}',
+                      );
                     }
                   },
                 ),
@@ -209,6 +221,101 @@ class _ToolsScreenState extends State<ToolsScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => PdfToolsScreen(initialAction: action)),
+    );
+  }
+
+  void _openCameraMode(ScanMode mode) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ContinuousCameraScreen(mode: mode)),
+    );
+  }
+
+  Future<void> _openShareExportSheet() async {
+    final docs = (await AppDatabaseService.instance.getAllDocuments())
+        .where((d) => !d.isTrashed && !d.isDraft)
+        .toList();
+    if (!mounted) return;
+
+    if (docs.isEmpty) {
+      showScaneliqToast(
+        context,
+        'No saved documents in your Vault yet. Scan or import a document first.',
+      );
+      return;
+    }
+
+    await showScaneliqBottomSheet<void>(
+      context: context,
+      builder: (sheetCtx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Share & Export Document',
+            style: Theme.of(sheetCtx).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Select a Vault document to compile and share an unwatermarked PDF:',
+            style: Theme.of(sheetCtx).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 10),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.45,
+            ),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: docs.length,
+              itemBuilder: (ctx, i) {
+                final doc = docs[i];
+                return ScaneliqContextMenuRow(
+                  icon: Icons.picture_as_pdf_outlined,
+                  title: doc.title,
+                  subtitle: '${doc.pageCount} page(s)',
+                  trailing: const ScaneliqStatusLabel(
+                    text: 'SHARE PDF',
+                    tone: ScaneliqStatusTone.accent,
+                  ),
+                  onTap: () async {
+                    Navigator.pop(sheetCtx);
+                    String? path = doc.exportPath;
+                    if (path == null || !File(path).existsSync()) {
+                      final full = await AppDatabaseService.instance
+                          .getDocument(doc.id);
+                      if (full != null && full.pages.isNotEmpty) {
+                        final built = await PdfService.generatePdf(
+                          document: full,
+                          pages: full.pages,
+                          customTitle: full.title,
+                        );
+                        path = built.path;
+                        await AppDatabaseService.instance.saveDocument(
+                          full.copyWith(exportPath: path, isDraft: false),
+                        );
+                      }
+                    }
+                    if (path != null && File(path).existsSync()) {
+                      await SharePlus.instance.share(
+                        ShareParams(
+                          text: doc.title,
+                          files: [XFile(path, mimeType: 'application/pdf')],
+                        ),
+                      );
+                    } else if (mounted) {
+                      showScaneliqToast(
+                        context,
+                        'No exportable pages found for "${doc.title}".',
+                      );
+                    }
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -234,255 +341,320 @@ class _ToolsScreenState extends State<ToolsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            // Editorial PDF Suite Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text('PDF Suite', style: textTheme.headlineLarge),
-                ),
-                const ScaneliqStatusLabel(
-                  text: '100% ON-DEVICE',
+              // Editorial PDF Suite Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text('PDF Suite', style: textTheme.headlineLarge),
+                  ),
+                  const ScaneliqStatusLabel(
+                    text: '100% ON-DEVICE',
+                    tone: ScaneliqStatusTone.accent,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // 1. ORGANIZE
+              const ScaneliqSectionHeader(
+                title: 'Organize',
+                trailing: ScaneliqStatusLabel(text: 'IMPLEMENTED'),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.call_merge_rounded,
+                title: 'Merge PDF',
+                subtitle:
+                    'Combine multiple PDF documents into one ordered file',
+                badge: 'MERGE',
+                onTap: () => _openPdfTool(PdfToolAction.mergePdfs),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.call_split_rounded,
+                title: 'Split PDF',
+                subtitle:
+                    'Split into single pages or partition by custom ranges',
+                badge: 'SPLIT',
+                onTap: () => _openPdfTool(PdfToolAction.splitSinglePages),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.dashboard_customize_outlined,
+                title: 'Reorder & Delete Pages',
+                subtitle: 'Organize, duplicate, insert, or remove individual PDF pages',
+                badge: 'ORGANIZE',
+                onTap: () => _openPdfTool(PdfToolAction.organizePages),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.file_upload_outlined,
+                title: 'Extract Pages',
+                subtitle:
+                    'Save custom page ranges (e.g. 1-3, 5) into a new PDF',
+                badge: 'EXTRACT',
+                onTap: () => _openPdfTool(PdfToolAction.extractPages),
+              ),
+
+              const SizedBox(height: 22),
+
+              // 2. EDIT & PROTECT
+              const ScaneliqSectionHeader(title: 'Edit & Protect'),
+              _SuiteHairlineRow(
+                icon: Icons.rotate_right_rounded,
+                title: 'Rotate PDF Pages',
+                subtitle:
+                    'Inspect thumbnails and rotate individual or all pages 90°',
+                badge: 'ROTATE',
+                onTap: () => _openPdfTool(PdfToolAction.organizePages),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.draw_outlined,
+                title: 'Annotate & Add Signature',
+                subtitle:
+                    'Place approval stamps, text notes, and signature overlays',
+                badge: 'SIGN',
+                onTap: () => _openPdfTool(PdfToolAction.annotatePdf),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.branding_watermark_outlined,
+                title: 'Add Watermark',
+                subtitle:
+                    'Overlay CONFIDENTIAL, DRAFT, or custom diagonal text',
+                badge: 'MARK',
+                onTap: () => _openPdfTool(PdfToolAction.watermarkPdf),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.lock_outline_rounded,
+                title: 'Password Lock & Sanitizer',
+                subtitle: 'AES-256 encryption, unlock PDF, or blackout sensitive areas',
+                badge: 'AES-256',
+                tone: ScaneliqStatusTone.accent,
+                onTap: () => _openPdfTool(PdfToolAction.encryptPdf),
+              ),
+
+              const SizedBox(height: 22),
+
+              // 3. OPTIMIZE & CONVERT
+              const ScaneliqSectionHeader(title: 'Optimize & Convert'),
+              _SuiteHairlineRow(
+                icon: Icons.compress_rounded,
+                title: 'Compress PDF',
+                subtitle: 'Reduce file size with High Quality, Balanced, or Compact presets',
+                badge: 'COMPRESS',
+                tone: ScaneliqStatusTone.success,
+                onTap: () => _openPdfTool(PdfToolAction.compressPdf),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.photo_camera_back_outlined,
+                title: 'Image to PDF Scan',
+                subtitle: 'Capture or import images and export clean A4 searchable PDF',
+                badge: 'JPG → PDF',
+                onTap: () => _openCameraMode(ScanMode.document),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.image_outlined,
+                title: 'PDF to Images (JPEG)',
+                subtitle: 'Rasterize every PDF page into high-resolution JPEGs',
+                badge: 'PDF → JPG',
+                onTap: () => _openPdfTool(PdfToolAction.pdfToImages),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.layers_clear_rounded,
+                title: 'Redact & Mosaic Studio',
+                subtitle: 'Irreversible PDF pixel scrub & raster mosaic redaction brush',
+                badge: 'REDACT',
+                onTap: () => _openPdfTool(PdfToolAction.redactPdf),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.grid_on_rounded,
+                title: 'Pixel / Mosaic Image Redactor',
+                subtitle: 'Draw permanent blackout or mosaic boxes over scanned images',
+                badge: 'MOSAIC',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const RasterRedactionScreen(),
+                    ),
+                  );
+                },
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.view_stream_outlined,
+                title: 'Stitch to Long Image',
+                subtitle: 'Join multi-page receipts or bills into a continuous vertical JPEG',
+                badge: 'STITCH',
+                onTap: () => _openPdfTool(PdfToolAction.stitchLongImage),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.info_outline_rounded,
+                title: 'Inspect PDF Properties',
+                subtitle:
+                    'Check page dimensions, file size, and encryption flags',
+                badge: 'INSPECT',
+                onTap: () => _openPdfTool(PdfToolAction.inspectPdf),
+              ),
+
+              const SizedBox(height: 22),
+
+              // 3B. SPECIALIZED CAPTURE MODES
+              const ScaneliqSectionHeader(
+                title: 'Specialized Capture Modes',
+                trailing: ScaneliqStatusLabel(text: 'OPTICAL STUDIO'),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.badge_outlined,
+                title: 'ID Card 2-in-1 Sheet',
+                subtitle: 'Guided Front & Back capture stitched onto one A4 print page',
+                badge: '2-IN-1',
+                tone: ScaneliqStatusTone.accent,
+                onTap: () => _openCameraMode(ScanMode.idCard),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.menu_book_outlined,
+                title: 'Book Spread Split',
+                subtitle: 'Capture open book pages & auto-split left/right down spine',
+                badge: 'BOOK SPLIT',
+                onTap: () => _openCameraMode(ScanMode.book),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.co_present_outlined,
+                title: 'Whiteboard Glare Clean',
+                subtitle:
+                    'Whiten glare and preserve colored dry-erase marker ink',
+                badge: 'WHITEBOARD',
+                onTap: () => _openCameraMode(ScanMode.whiteboard),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.quiz_outlined,
+                title: 'Exam / Question Set Scan',
+                subtitle: 'Crisp high-contrast Otsu B&W binarization for printed sheets',
+                badge: 'EXAM B&W',
+                onTap: () => _openCameraMode(ScanMode.questionSet),
+              ),
+
+              const SizedBox(height: 22),
+
+              // 4. PRODUCTIVITY & OCR TOOLS (Preserved Group Title & Keys)
+              const ScaneliqSectionHeader(
+                title: 'Productivity & OCR Tools',
+                trailing: ScaneliqStatusLabel(
+                  text: 'OCR & AI',
                   tone: ScaneliqStatusTone.accent,
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
-
-            // 1. ORGANIZE
-            const ScaneliqSectionHeader(
-              title: 'Organize',
-              trailing: ScaneliqStatusLabel(text: 'IMPLEMENTED'),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.call_merge_rounded,
-              title: 'Merge PDF',
-              subtitle: 'Combine multiple PDF documents into one ordered file',
-              badge: 'MERGE',
-              onTap: () => _openPdfTool(PdfToolAction.mergePdfs),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.call_split_rounded,
-              title: 'Split PDF',
-              subtitle: 'Split into single pages or partition by custom ranges',
-              badge: 'SPLIT',
-              onTap: () => _openPdfTool(PdfToolAction.splitSinglePages),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.dashboard_customize_outlined,
-              title: 'Reorder & Delete Pages',
-              subtitle: 'Organize, duplicate, insert, or remove individual PDF pages',
-              badge: 'ORGANIZE',
-              onTap: () => _openPdfTool(PdfToolAction.organizePages),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.file_upload_outlined,
-              title: 'Extract Pages',
-              subtitle: 'Save custom page ranges (e.g. 1-3, 5) into a new PDF',
-              badge: 'EXTRACT',
-              onTap: () => _openPdfTool(PdfToolAction.extractPages),
-            ),
-
-            const SizedBox(height: 22),
-
-            // 2. EDIT & PROTECT
-            const ScaneliqSectionHeader(title: 'Edit & Protect'),
-            _SuiteHairlineRow(
-              icon: Icons.rotate_right_rounded,
-              title: 'Rotate PDF Pages',
-              subtitle: 'Inspect thumbnails and rotate individual or all pages 90°',
-              badge: 'ROTATE',
-              onTap: () => _openPdfTool(PdfToolAction.organizePages),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.draw_outlined,
-              title: 'Annotate & Add Signature',
-              subtitle: 'Place approval stamps, text notes, and signature overlays',
-              badge: 'SIGN',
-              onTap: () => _openPdfTool(PdfToolAction.annotatePdf),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.branding_watermark_outlined,
-              title: 'Add Watermark',
-              subtitle: 'Overlay CONFIDENTIAL, DRAFT, or custom diagonal text',
-              badge: 'MARK',
-              onTap: () => _openPdfTool(PdfToolAction.watermarkPdf),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.lock_outline_rounded,
-              title: 'Password Lock & Sanitizer',
-              subtitle: 'AES-256 encryption, unlock PDF, or blackout sensitive areas',
-              badge: 'AES-256',
-              tone: ScaneliqStatusTone.accent,
-              onTap: () => _openPdfTool(PdfToolAction.encryptPdf),
-            ),
-
-            const SizedBox(height: 22),
-
-            // 3. OPTIMIZE & CONVERT
-            const ScaneliqSectionHeader(title: 'Optimize & Convert'),
-            _SuiteHairlineRow(
-              icon: Icons.compress_rounded,
-              title: 'Compress PDF',
-              subtitle: 'Reduce file size with High Quality, Balanced, or Compact presets',
-              badge: 'COMPRESS',
-              tone: ScaneliqStatusTone.success,
-              onTap: () => _openPdfTool(PdfToolAction.compressPdf),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.photo_camera_back_outlined,
-              title: 'Image to PDF Scan',
-              subtitle: 'Capture or import images and export clean A4 searchable PDF',
-              badge: 'JPG → PDF',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const ContinuousCameraScreen(mode: ScanMode.document),
-                  ),
-                );
-              },
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.view_stream_outlined,
-              title: 'Stitch to Long Image',
-              subtitle: 'Join multi-page receipts or bills into a continuous vertical JPEG',
-              badge: 'STITCH',
-              onTap: () => _openPdfTool(PdfToolAction.stitchLongImage),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.info_outline_rounded,
-              title: 'Inspect PDF Properties',
-              subtitle: 'Check page dimensions, file size, and encryption flags',
-              badge: 'INSPECT',
-              onTap: () => _openPdfTool(PdfToolAction.inspectPdf),
-            ),
-
-            const SizedBox(height: 22),
-
-            // 4. PRODUCTIVITY & OCR TOOLS (Preserved Group Title & Keys)
-            const ScaneliqSectionHeader(
-              title: 'Productivity & OCR Tools',
-              trailing: ScaneliqStatusLabel(
-                text: 'OCR & AI',
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.document_scanner_outlined,
+                title: 'Instant Image OCR',
+                subtitle:
+                    'Extract selectable text from any image file on your phone',
+                badge: _isProcessingOcr ? 'RUNNING…' : 'OCR',
                 tone: ScaneliqStatusTone.accent,
+                onTap: _isProcessingOcr ? null : _runDirectOcrOnPickedFile,
               ),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.document_scanner_outlined,
-              title: 'Instant Image OCR',
-              subtitle: 'Extract selectable text from any image file on your phone',
-              badge: _isProcessingOcr ? 'RUNNING…' : 'OCR',
-              tone: ScaneliqStatusTone.accent,
-              onTap: _isProcessingOcr ? null : _runDirectOcrOnPickedFile,
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.qr_code_scanner_rounded,
-              title: 'QR & Barcode Scanner',
-              subtitle: 'Instant code detection, URL open, and clipboard copy',
-              badge: 'QR',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ScanCodeScreen()),
-                );
-              },
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.translate_rounded,
-              title: 'Translate Lens',
-              subtitle: 'Offline ML Kit En ↔ Bn models + optional online translation',
-              badge: 'OFFLINE / EN-BN',
-              tone: ScaneliqStatusTone.success,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const TranslateScreen()),
-                );
-              },
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.calculate_outlined,
-              title: 'CountCam',
-              subtitle: 'ML Kit object detector + dense item cluster counter with tap pins',
-              badge: 'OBJECT AI',
-              tone: ScaneliqStatusTone.success,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CountCamScreen()),
-                );
-              },
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.contact_mail_outlined,
-              title: 'Business Card Reader',
-              subtitle: 'Extract contact details and export standard vCard (.vcf)',
-              badge: 'VCARD',
-              onTap: () => BusinessCardDialog.show(context),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.receipt_long_outlined,
-              title: 'Receipt & Invoice Scanner',
-              subtitle: 'Extract totals, VAT/tax math check & CSV spreadsheet export',
-              badge: 'CSV',
-              tone: ScaneliqStatusTone.success,
-              onTap: () => ReceiptDialog.show(context),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.auto_awesome_outlined,
-              title: 'AI Document Summary & Q&A',
-              subtitle: '100% offline TextRank executive summary and TF-IDF citations',
-              badge: 'OFFLINE AI',
-              onTap: () => AiDocumentSheet.show(context),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.picture_as_pdf_outlined,
-              title: 'PDF Productivity Tools',
-              subtitle: 'Open complete PDF manipulation, encryption & watermark workbench',
-              badge: 'ALL TOOLS',
-              tone: ScaneliqStatusTone.accent,
-              onTap: () => _openPdfTool(),
-            ),
-            _SuiteHairlineRow(
-              icon: Icons.ios_share_rounded,
-              title: 'Share & Export',
-              subtitle: 'Export unwatermarked PDFs or text inside any document sheet',
-              badge: 'EXPORT',
-              onTap: () => showScaneliqToast(
-                context,
-                'Sharing is integrated inside every document row and viewer.',
+              _SuiteHairlineRow(
+                icon: Icons.qr_code_scanner_rounded,
+                title: 'QR & Barcode Scanner',
+                subtitle:
+                    'Instant code detection, URL open, and clipboard copy',
+                badge: 'QR',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ScanCodeScreen()),
+                  );
+                },
               ),
-            ),
+              _SuiteHairlineRow(
+                icon: Icons.translate_rounded,
+                title: 'Translate Lens',
+                subtitle: 'Offline ML Kit En ↔ Bn models + optional online translation',
+                badge: 'OFFLINE / EN-BN',
+                tone: ScaneliqStatusTone.success,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const TranslateScreen()),
+                  );
+                },
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.calculate_outlined,
+                title: 'CountCam',
+                subtitle: 'ML Kit object detector + dense item cluster counter with tap pins',
+                badge: 'OBJECT AI',
+                tone: ScaneliqStatusTone.success,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CountCamScreen()),
+                  );
+                },
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.contact_mail_outlined,
+                title: 'Business Card Reader',
+                subtitle:
+                    'Extract contact details and export standard vCard (.vcf)',
+                badge: 'VCARD',
+                onTap: () => BusinessCardDialog.show(context),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.receipt_long_outlined,
+                title: 'Receipt & Invoice Scanner',
+                subtitle: 'Extract totals, VAT/tax math check & CSV spreadsheet export',
+                badge: 'CSV',
+                tone: ScaneliqStatusTone.success,
+                onTap: () => ReceiptDialog.show(context),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.auto_awesome_outlined,
+                title: 'AI Document Summary & Q&A',
+                subtitle: '100% offline TextRank executive summary and TF-IDF citations',
+                badge: 'OFFLINE AI',
+                onTap: () => AiDocumentSheet.show(context),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.picture_as_pdf_outlined,
+                title: 'PDF Productivity Tools',
+                subtitle: 'Open complete PDF manipulation, encryption & watermark workbench',
+                badge: 'ALL TOOLS',
+                tone: ScaneliqStatusTone.accent,
+                onTap: () => _openPdfTool(),
+              ),
+              _SuiteHairlineRow(
+                icon: Icons.ios_share_rounded,
+                title: 'Share & Export',
+                subtitle: 'Pick any Vault document to compile and share unwatermarked PDF',
+                badge: 'EXPORT',
+                onTap: _openShareExportSheet,
+              ),
 
-            const SizedBox(height: 22),
+              const SizedBox(height: 22),
 
-            // 5. PLANNED / UNAVAILABLE INTEGRATIONS (Clearly Distinguished)
-            const ScaneliqSectionHeader(
-              title: 'Upcoming Platform Integrations',
-              trailing: ScaneliqStatusLabel(
-                text: 'PLANNED',
+              // 5. CLOUD SYNC & UPCOMING PLATFORM INTEGRATIONS
+              const ScaneliqSectionHeader(
+                title: 'Upcoming Platform Integrations',
+                trailing: ScaneliqStatusLabel(
+                  text: 'ROADMAP',
+                  tone: ScaneliqStatusTone.accent,
+                ),
+              ),
+              const _SuiteHairlineRow(
+                icon: Icons.table_chart_outlined,
+                title: 'PDF to Word / Excel Conversion',
+                subtitle: 'Table CSV/Markdown export active in Instant OCR; native .docx/.xlsx unavailable',
+                badge: 'UNAVAILABLE',
                 tone: ScaneliqStatusTone.warning,
+                onTap: null,
               ),
-            ),
-            const _SuiteHairlineRow(
-              icon: Icons.table_chart_outlined,
-              title: 'PDF to Word / Excel Conversion',
-              subtitle: 'Not yet available in this local-first release',
-              badge: 'UNAVAILABLE',
-              tone: ScaneliqStatusTone.warning,
-              onTap: null,
-            ),
-            const _SuiteHairlineRow(
-              icon: Icons.cloud_sync_outlined,
-              title: 'Cloud Backup & Multi-device Sync',
-              subtitle: 'Remote Drive AppData & WebDAV sync transport scheduled',
-              badge: 'PLANNED',
-              tone: ScaneliqStatusTone.warning,
-              onTap: null,
-            ),
-          ],
+              _SuiteHairlineRow(
+                icon: Icons.cloud_sync_outlined,
+                title: 'WebDAV & Encrypted Vault Sync',
+                subtitle: 'HTTPS WebDAV cloud backup, schedules & AES-256-CBC sync in Settings',
+                badge: 'OPEN SYNC',
+                tone: ScaneliqStatusTone.success,
+                onTap: () => navigateToSettings(context),
+              ),
+            ],
           ),
         ),
       ),

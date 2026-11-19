@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
@@ -18,6 +19,7 @@ import 'package:scaneliq/features/editor/presentation/raster_redaction_screen.da
 import 'package:scaneliq/features/pdf/data/advanced_pdf_service.dart';
 import 'package:scaneliq/features/pdf/presentation/pdf_page_organizer_screen.dart';
 import 'package:scaneliq/features/pdf/presentation/widgets/watermark_studio_sheet.dart';
+import 'package:scaneliq/features/scanner/presentation/scan_session_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
@@ -350,6 +352,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
         sourcePdf: file,
         baseOutputName: 'Split_${DateTime.now().millisecondsSinceEpoch}',
       );
+      await _registerSplitFilesInVault(splitFiles);
 
       setState(() {
         _isProcessing = false;
@@ -362,7 +365,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
           builder: (ctx) => AlertDialog(
             title: const Text('Split Completed'),
             content: Text(
-              'Generated ${splitFiles.length} single-page PDF files in exports.',
+              'Generated ${splitFiles.length} single-page PDF files and added them to your Vault.',
             ),
             actions: [
               TextButton(
@@ -467,6 +470,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
         ranges1Indexed: parsedRanges,
         baseOutputName: 'RangeSplit_${DateTime.now().millisecondsSinceEpoch}',
       );
+      await _registerSplitFilesInVault(results);
 
       setState(() {
         _isProcessing = false;
@@ -478,7 +482,9 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Split by Ranges Complete'),
-            content: Text('Generated ${results.length} split PDF files.'),
+            content: Text(
+              'Generated ${results.length} split PDF files and saved them to your Vault.',
+            ),
             actions: [
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -547,15 +553,82 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
         quality: 90,
       );
 
+      final docId = const Uuid().v4();
+      final pageId = const Uuid().v4();
+      final savedOriginal = await AppStorageService.instance.copyToOriginals(
+        pageId,
+        targetFile,
+        extension: 'jpg',
+      );
+      final stitchedDoc = ScannedDocument(
+        id: docId,
+        title: p.basenameWithoutExtension(outName),
+        createdAt: DateTime.now(),
+        modifiedAt: DateTime.now(),
+        pageCount: 1,
+      );
+      final stitchedPage = DocumentPage(
+        id: pageId,
+        documentId: docId,
+        pageOrder: 0,
+        originalPath: savedOriginal.path,
+      );
+      await AppDatabaseService.instance.saveDocumentWithPages(stitchedDoc, [
+        stitchedPage,
+      ]);
+      _invalidateLibraryProviders();
+
       setState(() {
         _isProcessing = false;
         _statusMessage = null;
       });
 
       if (mounted) {
-        _showSuccessDialog(
-          'Long Image Created (${imageFiles.length} Pages)',
-          targetFile,
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Long Image Created (${imageFiles.length} Pages)'),
+            content: Text(
+              'Saved continuous vertical scan as "${stitchedDoc.title}.jpg" and indexed it into your Vault.',
+            ),
+            actions: [
+              TextButton.icon(
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                label: const Text('Open / Convert PDF'),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  final fullDoc =
+                      await AppDatabaseService.instance.getDocument(docId) ??
+                      stitchedDoc.copyWith(pages: [stitchedPage]);
+                  if (mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DocumentViewerScreen(document: fullDoc),
+                      ),
+                    );
+                  }
+                },
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.share),
+                label: const Text('Share JPEG'),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  SharePlus.instance.share(
+                    ShareParams(
+                      text: stitchedDoc.title,
+                      files: [XFile(targetFile.path, mimeType: 'image/jpeg')],
+                    ),
+                  );
+                },
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
         );
       }
     } catch (e) {
@@ -1341,18 +1414,47 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
     );
   }
 
+  Future<void> _registerSplitFilesInVault(List<File> files) async {
+    for (final f in files) {
+      int pageCount = 1;
+      try {
+        pageCount = await AdvancedPdfService.instance.getPageCount(f);
+      } catch (_) {}
+      try {
+        await AppDatabaseService.instance.saveDocument(
+          ScannedDocument(
+            id: const Uuid().v4(),
+            title: p.basenameWithoutExtension(f.path),
+            createdAt: DateTime.now(),
+            modifiedAt: DateTime.now(),
+            pageCount: pageCount,
+            exportPath: f.path,
+          ),
+        );
+      } catch (_) {}
+    }
+    _invalidateLibraryProviders();
+  }
+
+  void _invalidateLibraryProviders() {
+    try {
+      final container = ProviderScope.containerOf(context, listen: false);
+      container.invalidate(documentsListProvider);
+      container.invalidate(searchedDocumentsProvider);
+    } catch (_) {}
+  }
+
   Future<void> _showSuccessDialog(String title, File file) async {
     int pageCount = 1;
     try {
       pageCount = await AdvancedPdfService.instance.getPageCount(file);
     } catch (_) {}
+    final sizeBytes = await file.length();
+    final sizeKb = (sizeBytes / 1024).toStringAsFixed(1);
 
     final doc = ScannedDocument(
       id: const Uuid().v4(),
-      title: file.path
-          .split(Platform.pathSeparator)
-          .last
-          .replaceAll('.pdf', ''),
+      title: p.basenameWithoutExtension(file.path),
       createdAt: DateTime.now(),
       modifiedAt: DateTime.now(),
       pageCount: pageCount,
@@ -1361,6 +1463,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
 
     try {
       await AppDatabaseService.instance.saveDocument(doc);
+      _invalidateLibraryProviders();
     } catch (_) {}
 
     if (!mounted) return;
@@ -1373,10 +1476,10 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Saved to Documents library:\n${file.path}'),
+            Text('Saved to Documents library:\n${p.basename(file.path)}'),
             const SizedBox(height: 8),
             Text(
-              'Total Pages: $pageCount',
+              'Total Pages: $pageCount · $sizeKb KB',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ],
@@ -1401,7 +1504,10 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
             onPressed: () {
               Navigator.pop(ctx);
               SharePlus.instance.share(
-                ShareParams(text: title, files: [XFile(file.path)]),
+                ShareParams(
+                  text: title,
+                  files: [XFile(file.path, mimeType: 'application/pdf')],
+                ),
               );
             },
           ),

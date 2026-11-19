@@ -94,7 +94,11 @@ class PdfAnnotationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateItem(String id, PdfAnnotationItem updated, {bool recordHistory = true}) {
+  void updateItem(
+    String id,
+    PdfAnnotationItem updated, {
+    bool recordHistory = true,
+  }) {
     if (recordHistory) _pushUndo();
     _items = [for (final e in _items) e.id == id ? updated : e];
     notifyListeners();
@@ -291,7 +295,9 @@ class _PdfAnnotationOverlayState extends State<PdfAnnotationOverlay> {
     final norm = _toNorm(details.localPosition, size);
     final tool = widget.controller.tool;
 
-    if (tool == PdfAnnotationTool.select && _movingId != null && _lastMoveNorm != null) {
+    if (tool == PdfAnnotationTool.select &&
+        _movingId != null &&
+        _lastMoveNorm != null) {
       final item = widget.controller.selectedItem;
       if (item != null && item.id == _movingId) {
         final dx = norm.dx - _lastMoveNorm!.dx;
@@ -319,7 +325,8 @@ class _PdfAnnotationOverlayState extends State<PdfAnnotationOverlay> {
     setState(() {
       _dragCurrent = norm;
       if (tool == PdfAnnotationTool.freehand) {
-        if (_activeStroke.isEmpty || (_activeStroke.last - norm).distance > 0.004) {
+        if (_activeStroke.isEmpty ||
+            (_activeStroke.last - norm).distance > 0.004) {
           _activeStroke = [..._activeStroke, norm];
         }
       }
@@ -359,7 +366,8 @@ class _PdfAnnotationOverlayState extends State<PdfAnnotationOverlay> {
           normalized: true,
         ),
       );
-    } else if (tool == PdfAnnotationTool.highlight && (a - b).distance > 0.015) {
+    } else if (tool == PdfAnnotationTool.highlight &&
+        (a - b).distance > 0.015) {
       final left = math.min(a.dx, b.dx);
       final top = math.min(a.dy, b.dy);
       final w = (a.dx - b.dx).abs().clamp(0.03, 1.0);
@@ -377,7 +385,8 @@ class _PdfAnnotationOverlayState extends State<PdfAnnotationOverlay> {
           normalized: true,
         ),
       );
-    } else if (tool == PdfAnnotationTool.underline && (a.dx - b.dx).abs() > 0.02) {
+    } else if (tool == PdfAnnotationTool.underline &&
+        (a.dx - b.dx).abs() > 0.02) {
       final left = math.min(a.dx, b.dx);
       final w = (a.dx - b.dx).abs().clamp(0.04, 1.0);
       widget.controller.addItem(
@@ -395,15 +404,20 @@ class _PdfAnnotationOverlayState extends State<PdfAnnotationOverlay> {
       );
     } else if (tool == PdfAnnotationTool.shape && (a - b).distance > 0.02) {
       final kind = widget.controller.shapeKind;
-      final bool directed = kind == PdfShapeKind.line || kind == PdfShapeKind.arrow;
+      final bool directed =
+          kind == PdfShapeKind.line || kind == PdfShapeKind.arrow;
       widget.controller.addItem(
         PdfAnnotationItem(
           type: PdfAnnotationType.shape,
           pageIndex: widget.pageIndex,
           x: directed ? a.dx : math.min(a.dx, b.dx),
           y: directed ? a.dy : math.min(a.dy, b.dy),
-          width: directed ? (b.dx - a.dx) : (a.dx - b.dx).abs().clamp(0.03, 1.0),
-          height: directed ? (b.dy - a.dy) : (a.dy - b.dy).abs().clamp(0.03, 1.0),
+          width: directed
+              ? (b.dx - a.dx)
+              : (a.dx - b.dx).abs().clamp(0.03, 1.0),
+          height: directed
+              ? (b.dy - a.dy)
+              : (a.dy - b.dy).abs().clamp(0.03, 1.0),
           shapeKind: kind,
           color: widget.controller.color,
           strokeWidth: widget.controller.strokeWidth,
@@ -506,11 +520,7 @@ class _PdfAnnotationPainter extends CustomPainter {
             ..color = item.color.withValues(alpha: item.opacity)
             ..strokeWidth = item.strokeWidth
             ..strokeCap = StrokeCap.round;
-          canvas.drawLine(
-            Offset(px, py + ph),
-            Offset(px + pw, py + ph),
-            paint,
-          );
+          canvas.drawLine(Offset(px, py + ph), Offset(px + pw, py + ph), paint);
           break;
         case PdfAnnotationType.freehand:
           if (item.points.length >= 2) {
@@ -543,7 +553,12 @@ class _PdfAnnotationPainter extends CustomPainter {
           _drawShape(canvas, paint, item.shapeKind, px, py, pw, ph);
           break;
         case PdfAnnotationType.text:
-          final rect = Rect.fromLTWH(px, py, math.max(96, pw), math.max(30, ph));
+          final rect = Rect.fromLTWH(
+            px,
+            py,
+            math.max(96, pw),
+            math.max(30, ph),
+          );
           canvas.drawRRect(
             RRect.fromRectAndRadius(rect, const Radius.circular(6)),
             Paint()..color = item.color.withValues(alpha: 0.14),
@@ -582,7 +597,10 @@ class _PdfAnnotationPainter extends CustomPainter {
           );
           canvas.drawRRect(
             RRect.fromRectAndRadius(box, const Radius.circular(6)),
-            Paint()..color = ScaneliqColorPalette.light.accent.withValues(alpha: 0.12),
+            Paint()
+              ..color = ScaneliqColorPalette.light.accent.withValues(
+                alpha: 0.12,
+              ),
           );
           canvas.drawRRect(
             RRect.fromRectAndRadius(box, const Radius.circular(6)),
@@ -608,8 +626,15 @@ class _PdfAnnotationPainter extends CustomPainter {
           break;
       }
 
-      if (item.id != null && item.id == selectedId && item.type != PdfAnnotationType.freehand) {
-        final selRect = Rect.fromLTWH(px - 3, py - 3, pw.abs() + 6, ph.abs() + 6);
+      if (item.id != null &&
+          item.id == selectedId &&
+          item.type != PdfAnnotationType.freehand) {
+        final selRect = Rect.fromLTWH(
+          px - 3,
+          py - 3,
+          pw.abs() + 6,
+          ph.abs() + 6,
+        );
         canvas.drawRect(
           selRect,
           Paint()
@@ -642,7 +667,10 @@ class _PdfAnnotationPainter extends CustomPainter {
       canvas.drawPath(path, paint);
     } else if (dragStart != null && dragCurrent != null) {
       final a = Offset(dragStart!.dx * size.width, dragStart!.dy * size.height);
-      final b = Offset(dragCurrent!.dx * size.width, dragCurrent!.dy * size.height);
+      final b = Offset(
+        dragCurrent!.dx * size.width,
+        dragCurrent!.dy * size.height,
+      );
       if (activeTool == PdfAnnotationTool.highlight) {
         canvas.drawRect(
           Rect.fromPoints(a, b),
@@ -666,16 +694,20 @@ class _PdfAnnotationPainter extends CustomPainter {
             ..strokeCap = StrokeCap.round
             ..style = PaintingStyle.stroke,
           activeShape,
-          (activeShape == PdfShapeKind.line || activeShape == PdfShapeKind.arrow)
+          (activeShape == PdfShapeKind.line ||
+                  activeShape == PdfShapeKind.arrow)
               ? a.dx
               : math.min(a.dx, b.dx),
-          (activeShape == PdfShapeKind.line || activeShape == PdfShapeKind.arrow)
+          (activeShape == PdfShapeKind.line ||
+                  activeShape == PdfShapeKind.arrow)
               ? a.dy
               : math.min(a.dy, b.dy),
-          (activeShape == PdfShapeKind.line || activeShape == PdfShapeKind.arrow)
+          (activeShape == PdfShapeKind.line ||
+                  activeShape == PdfShapeKind.arrow)
               ? (b.dx - a.dx)
               : (a.dx - b.dx).abs(),
-          (activeShape == PdfShapeKind.line || activeShape == PdfShapeKind.arrow)
+          (activeShape == PdfShapeKind.line ||
+                  activeShape == PdfShapeKind.arrow)
               ? (b.dy - a.dy)
               : (a.dy - b.dy).abs(),
         );
@@ -783,7 +815,10 @@ class PdfAnnotationToolbar extends StatelessWidget {
                     IconButton(
                       tooltip: 'Undo Annotation',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 34),
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 34,
+                      ),
                       icon: Icon(
                         Icons.undo_rounded,
                         size: 19,
@@ -796,7 +831,10 @@ class PdfAnnotationToolbar extends StatelessWidget {
                     IconButton(
                       tooltip: 'Redo Annotation',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 34),
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 34,
+                      ),
                       icon: Icon(
                         Icons.redo_rounded,
                         size: 19,
@@ -841,7 +879,10 @@ class PdfAnnotationToolbar extends StatelessWidget {
                       IconButton(
                         tooltip: 'Delete Selected',
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 32, minHeight: 34),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 34,
+                        ),
                         icon: Icon(
                           Icons.delete_outline_rounded,
                           size: 19,
@@ -853,7 +894,10 @@ class PdfAnnotationToolbar extends StatelessWidget {
                       IconButton(
                         tooltip: 'Clear Page',
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 32, minHeight: 34),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 34,
+                        ),
                         icon: Icon(
                           Icons.layers_clear_outlined,
                           size: 19,
@@ -864,7 +908,10 @@ class PdfAnnotationToolbar extends StatelessWidget {
                     IconButton(
                       tooltip: 'Close Annotate',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 34),
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 34,
+                      ),
                       icon: const Icon(Icons.close_rounded, size: 19),
                       onPressed: onClose,
                     ),
@@ -879,7 +926,9 @@ class PdfAnnotationToolbar extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
-                      onPressed: isSaving || controller.items.isEmpty ? null : onSavePdf,
+                      onPressed: isSaving || controller.items.isEmpty
+                          ? null
+                          : onSavePdf,
                       child: Text(
                         isSaving ? 'Saving...' : 'Save PDF',
                         style: TextStyle(
@@ -906,26 +955,33 @@ class PdfAnnotationToolbar extends StatelessWidget {
                         if (controller.tool == PdfAnnotationTool.shape) ...[
                           _ShapeChip(
                             label: 'Rect',
-                            selected: controller.shapeKind == PdfShapeKind.rectangle,
-                            onTap: () => controller.setShapeKind(PdfShapeKind.rectangle),
+                            selected:
+                                controller.shapeKind == PdfShapeKind.rectangle,
+                            onTap: () =>
+                                controller.setShapeKind(PdfShapeKind.rectangle),
                           ),
                           const SizedBox(width: 6),
                           _ShapeChip(
                             label: 'Circle',
-                            selected: controller.shapeKind == PdfShapeKind.circle,
-                            onTap: () => controller.setShapeKind(PdfShapeKind.circle),
+                            selected:
+                                controller.shapeKind == PdfShapeKind.circle,
+                            onTap: () =>
+                                controller.setShapeKind(PdfShapeKind.circle),
                           ),
                           const SizedBox(width: 6),
                           _ShapeChip(
                             label: 'Arrow',
-                            selected: controller.shapeKind == PdfShapeKind.arrow,
-                            onTap: () => controller.setShapeKind(PdfShapeKind.arrow),
+                            selected:
+                                controller.shapeKind == PdfShapeKind.arrow,
+                            onTap: () =>
+                                controller.setShapeKind(PdfShapeKind.arrow),
                           ),
                           const SizedBox(width: 6),
                           _ShapeChip(
                             label: 'Line',
                             selected: controller.shapeKind == PdfShapeKind.line,
-                            onTap: () => controller.setShapeKind(PdfShapeKind.line),
+                            onTap: () =>
+                                controller.setShapeKind(PdfShapeKind.line),
                           ),
                         ],
                         Expanded(
@@ -952,7 +1008,10 @@ class PdfAnnotationToolbar extends StatelessWidget {
                                   child: Slider(
                                     min: 1.5,
                                     max: 10.0,
-                                    value: controller.strokeWidth.clamp(1.5, 10.0),
+                                    value: controller.strokeWidth.clamp(
+                                      1.5,
+                                      10.0,
+                                    ),
                                     onChanged: controller.setStrokeWidth,
                                   ),
                                 ),
@@ -973,28 +1032,34 @@ class PdfAnnotationToolbar extends StatelessWidget {
                         icon: Icons.near_me_outlined,
                         label: 'Select',
                         selected: controller.tool == PdfAnnotationTool.select,
-                        onTap: () => controller.setTool(PdfAnnotationTool.select),
+                        onTap: () =>
+                            controller.setTool(PdfAnnotationTool.select),
                       ),
                       const SizedBox(width: 6),
                       _ToolButton(
                         icon: Icons.border_color_outlined,
                         label: 'Highlight',
-                        selected: controller.tool == PdfAnnotationTool.highlight,
-                        onTap: () => controller.setTool(PdfAnnotationTool.highlight),
+                        selected:
+                            controller.tool == PdfAnnotationTool.highlight,
+                        onTap: () =>
+                            controller.setTool(PdfAnnotationTool.highlight),
                       ),
                       const SizedBox(width: 6),
                       _ToolButton(
                         icon: Icons.format_underlined_rounded,
                         label: 'Underline',
-                        selected: controller.tool == PdfAnnotationTool.underline,
-                        onTap: () => controller.setTool(PdfAnnotationTool.underline),
+                        selected:
+                            controller.tool == PdfAnnotationTool.underline,
+                        onTap: () =>
+                            controller.setTool(PdfAnnotationTool.underline),
                       ),
                       const SizedBox(width: 6),
                       _ToolButton(
                         icon: Icons.gesture_rounded,
                         label: 'Ink Draw',
                         selected: controller.tool == PdfAnnotationTool.freehand,
-                        onTap: () => controller.setTool(PdfAnnotationTool.freehand),
+                        onTap: () =>
+                            controller.setTool(PdfAnnotationTool.freehand),
                       ),
                       const SizedBox(width: 6),
                       _ToolButton(
@@ -1008,14 +1073,16 @@ class PdfAnnotationToolbar extends StatelessWidget {
                         icon: Icons.category_outlined,
                         label: 'Shapes',
                         selected: controller.tool == PdfAnnotationTool.shape,
-                        onTap: () => controller.setTool(PdfAnnotationTool.shape),
+                        onTap: () =>
+                            controller.setTool(PdfAnnotationTool.shape),
                       ),
                       const SizedBox(width: 6),
                       _ToolButton(
                         icon: Icons.auto_fix_normal_outlined,
                         label: 'Eraser',
                         selected: controller.tool == PdfAnnotationTool.eraser,
-                        onTap: () => controller.setTool(PdfAnnotationTool.eraser),
+                        onTap: () =>
+                            controller.setTool(PdfAnnotationTool.eraser),
                       ),
                     ],
                   ),

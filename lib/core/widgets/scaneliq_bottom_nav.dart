@@ -224,10 +224,8 @@ class ScaneliqFloatingCaptureCluster extends StatelessWidget {
                   : const Icon(Icons.camera_alt_outlined, size: 18),
               label: Text(
                 'Scan',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Colors.white,
-                  fontSize: 14.5,
-                ),
+                style: Theme.of(context).textTheme.labelLarge
+                    ?.copyWith(color: Colors.white, fontSize: 14.5),
               ),
             ),
           ),

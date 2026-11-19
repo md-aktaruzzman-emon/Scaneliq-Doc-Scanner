@@ -17,6 +17,7 @@ enum CountDetectionPreset {
 
 class DetectedCountObject {
   final int index;
+
   /// Normalized [0..1] bounding box relative to source image width & height.
   final Rect normalizedRect;
   final Offset normalizedCenter;
@@ -68,7 +69,8 @@ class ObjectCounterService {
   static final ObjectCounterService instance = ObjectCounterService._();
 
   @visibleForTesting
-  Future<List<DetectedObject>> Function(File imageFile)? mlKitOverrideForTesting;
+  Future<List<DetectedObject>> Function(File imageFile)?
+  mlKitOverrideForTesting;
 
   Future<CountCamResult> detectObjects(
     File imageFile, {
@@ -108,8 +110,12 @@ class ObjectCounterService {
       );
     }
 
-    final minAreaRatio = preset == CountDetectionPreset.smallItems ? 0.0012 : 0.0035;
-    final maxAreaRatio = preset == CountDetectionPreset.smallItems ? 0.18 : 0.42;
+    final minAreaRatio = preset == CountDetectionPreset.smallItems
+        ? 0.0012
+        : 0.0035;
+    final maxAreaRatio = preset == CountDetectionPreset.smallItems
+        ? 0.18
+        : 0.42;
 
     final clusterObjects = await detectVisualObjectClusters(
       bytes,
@@ -224,16 +230,28 @@ class ObjectCounterService {
       for (int x = 0; x < w; x++) {
         final pTop = work.getPixel(x, 0);
         final pBot = work.getPixel(x, h - 1);
-        borderSamplesR..add(pTop.r.toInt())..add(pBot.r.toInt());
-        borderSamplesG..add(pTop.g.toInt())..add(pBot.g.toInt());
-        borderSamplesB..add(pTop.b.toInt())..add(pBot.b.toInt());
+        borderSamplesR
+          ..add(pTop.r.toInt())
+          ..add(pBot.r.toInt());
+        borderSamplesG
+          ..add(pTop.g.toInt())
+          ..add(pBot.g.toInt());
+        borderSamplesB
+          ..add(pTop.b.toInt())
+          ..add(pBot.b.toInt());
       }
       for (int y = 1; y < h - 1; y++) {
         final pL = work.getPixel(0, y);
         final pR = work.getPixel(w - 1, y);
-        borderSamplesR..add(pL.r.toInt())..add(pR.r.toInt());
-        borderSamplesG..add(pL.g.toInt())..add(pR.g.toInt());
-        borderSamplesB..add(pL.b.toInt())..add(pR.b.toInt());
+        borderSamplesR
+          ..add(pL.r.toInt())
+          ..add(pR.r.toInt());
+        borderSamplesG
+          ..add(pL.g.toInt())
+          ..add(pR.g.toInt());
+        borderSamplesB
+          ..add(pL.b.toInt())
+          ..add(pR.b.toInt());
       }
       borderSamplesR.sort();
       borderSamplesG.sort();

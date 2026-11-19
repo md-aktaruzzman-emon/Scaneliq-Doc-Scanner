@@ -375,7 +375,10 @@ class AppDatabaseService {
     });
   }
 
-  Future<void> _removeDocumentFts(DatabaseExecutor db, String documentId) async {
+  Future<void> _removeDocumentFts(
+    DatabaseExecutor db,
+    String documentId,
+  ) async {
     if (!await _hasFtsTable(db)) return;
     await db.delete(
       'documents_fts',
@@ -542,6 +545,7 @@ class AppDatabaseService {
     visit(null, 0, '');
     return result;
   }
+
   Future<DocumentFolder?> getFolder(String folderId) async {
     final db = await database;
     final rows = await db.query(
@@ -1048,7 +1052,10 @@ class AppDatabaseService {
         final procFile = File(srcPage.processedPath!);
         if (await procFile.exists()) {
           await storage.processedDir.create(recursive: true);
-          final targetProc = p.join(storage.processedDir.path, '${newPageId}_proc.jpg');
+          final targetProc = p.join(
+            storage.processedDir.path,
+            '${newPageId}_proc.jpg',
+          );
           await procFile.copy(targetProc);
           newProcessedPath = targetProc;
         }
@@ -1092,10 +1099,7 @@ class AppDatabaseService {
 
     await saveDocumentWithPages(copiedDoc, copiedPages);
     if (source.tags.isNotEmpty) {
-      await setDocumentTags(
-        newDocId,
-        source.tags.map((t) => t.id).toList(),
-      );
+      await setDocumentTags(newDocId, source.tags.map((t) => t.id).toList());
     }
     final sourceOcr = await getDocumentOcr(documentId);
     if (sourceOcr != null && sourceOcr.trim().isNotEmpty) {
@@ -1157,8 +1161,7 @@ class AppDatabaseService {
           ? buildFtsMatchQuery(searchQuery)
           : null;
       if (ftsExpr != null) {
-        searchJoin =
-            'INNER JOIN documents_fts fts ON d.id = fts.document_id';
+        searchJoin = 'INNER JOIN documents_fts fts ON d.id = fts.document_id';
         whereClauses.add('documents_fts MATCH ?');
         whereArgs.add(ftsExpr);
         orderBy = 'd.modified_at DESC';
@@ -1220,7 +1223,8 @@ class AppDatabaseService {
           final end = (matchIdx + 100).clamp(start, ocr.length);
           final prefix = start > 0 ? '…' : '';
           final suffix = end < ocr.length ? '…' : '';
-          snippet = '$prefix${ocr.substring(start, end).replaceAll('\n', ' ').trim()}$suffix';
+          snippet =
+              '$prefix${ocr.substring(start, end).replaceAll('\n', ' ').trim()}$suffix';
         }
       }
       hits.add(DocumentSearchHit(document: doc, snippet: snippet));

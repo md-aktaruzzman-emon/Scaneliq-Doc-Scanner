@@ -114,7 +114,9 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
             children: [
               TextField(
                 controller: merchantCtrl,
-                decoration: const InputDecoration(labelText: 'Merchant / Vendor'),
+                decoration: const InputDecoration(
+                  labelText: 'Merchant / Vendor',
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -129,7 +131,9 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
               const SizedBox(height: 8),
               TextField(
                 controller: totalCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(
                   labelText: 'Grand Total (${current.currency})',
                 ),

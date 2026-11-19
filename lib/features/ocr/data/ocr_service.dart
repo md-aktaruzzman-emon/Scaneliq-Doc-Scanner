@@ -302,7 +302,10 @@ class OcrService {
       }
 
       if (nativeTesseractOverrideForTesting != null) {
-        final raw = await nativeTesseractOverrideForTesting!(workingFile, script);
+        final raw = await nativeTesseractOverrideForTesting!(
+          workingFile,
+          script,
+        );
         final normalizedFull = normalizeBanglaNumerals(raw.fullText);
         final normalizedBoxes = raw.boxes
             .map(
@@ -345,9 +348,7 @@ class OcrService {
       final boxes = <OcrBoundingBox>[];
       for (final entry in rawBoxes) {
         if (entry is! Map) continue;
-        final text = normalizeBanglaNumerals(
-          entry['text']?.toString() ?? '',
-        );
+        final text = normalizeBanglaNumerals(entry['text']?.toString() ?? '');
         if (text.trim().isEmpty) continue;
         boxes.add(
           OcrBoundingBox(

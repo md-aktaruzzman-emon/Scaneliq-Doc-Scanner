@@ -260,13 +260,18 @@ class DocumentEdgeDetector {
     final int marginY = math.max(2, (gh * 0.07).round());
     for (int y = 0; y < gh; y++) {
       for (int x = 0; x < gw; x++) {
-        if (x < marginX || x >= gw - marginX || y < marginY || y >= gh - marginY) {
+        if (x < marginX ||
+            x >= gw - marginX ||
+            y < marginY ||
+            y >= gh - marginY) {
           borderSum += grid[y * gw + x];
           borderCount++;
         }
       }
     }
-    final double borderMean = borderCount > 0 ? borderSum / borderCount : meanLuma;
+    final double borderMean = borderCount > 0
+        ? borderSum / borderCount
+        : meanLuma;
 
     // Also inspect inner center region mean to determine light-on-dark or dark-on-light.
     double centerSum = 0;
@@ -277,7 +282,9 @@ class DocumentEdgeDetector {
         centerCount++;
       }
     }
-    final double centerMean = centerCount > 0 ? centerSum / centerCount : meanLuma;
+    final double centerMean = centerCount > 0
+        ? centerSum / centerCount
+        : meanLuma;
     final bool brightForeground = centerMean >= borderMean;
     final double contrastDelta = (centerMean - borderMean).abs();
 

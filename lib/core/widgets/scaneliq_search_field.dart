@@ -29,8 +29,7 @@ class ScaneliqSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final hasText =
-        query.isNotEmpty || (controller?.text.isNotEmpty ?? false);
+    final hasText = query.isNotEmpty || (controller?.text.isNotEmpty ?? false);
 
     return Container(
       height: 44,
@@ -49,9 +48,8 @@ class ScaneliqSearchField extends StatelessWidget {
               readOnly: readOnly,
               onTap: onTap,
               onChanged: onChanged,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: tokens.textPrimary),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: tokens.textPrimary),
               decoration: InputDecoration(
                 isDense: true,
                 filled: false,
@@ -60,9 +58,8 @@ class ScaneliqSearchField extends StatelessWidget {
                 focusedBorder: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
                 hintText: hintText,
-                hintStyle: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: tokens.textSecondary),
+                hintStyle: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: tokens.textSecondary),
               ),
             ),
           ),

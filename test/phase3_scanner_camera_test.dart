@@ -325,110 +325,101 @@ void main() {
       if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
     });
 
-    test(
-      'DocumentEdgeDetector detects genuine document quad and rejects blank/dark frames',
-      () {
-        const detector = DocumentEdgeDetector();
+    test('DocumentEdgeDetector detects genuine document quad and rejects blank/dark frames', () {
+      const detector = DocumentEdgeDetector();
 
-        // 1. Dark frame triggers lowLight with NO fake quad.
-        final darkFrame = CameraFrameData(
-          width: 120,
-          height: 160,
-          lumaBytes: Uint8List.fromList(List.filled(120 * 160, 12)),
-        );
-        final darkResult = detector.detect(darkFrame);
-        expect(darkResult.status, DocumentDetectionStatus.lowLight);
-        expect(darkResult.quad, isNull);
+      // 1. Dark frame triggers lowLight with NO fake quad.
+      final darkFrame = CameraFrameData(
+        width: 120,
+        height: 160,
+        lumaBytes: Uint8List.fromList(List.filled(120 * 160, 12)),
+      );
+      final darkResult = detector.detect(darkFrame);
+      expect(darkResult.status, DocumentDetectionStatus.lowLight);
+      expect(darkResult.quad, isNull);
 
-        // 2. Uniform bright blank wall emits NO fake quad.
-        final blankFrame = CameraFrameData(
-          width: 120,
-          height: 160,
-          lumaBytes: Uint8List.fromList(List.filled(120 * 160, 180)),
-        );
-        final blankResult = detector.detect(blankFrame);
-        expect(blankResult.status, DocumentDetectionStatus.searching);
-        expect(blankResult.quad, isNull);
+      // 2. Uniform bright blank wall emits NO fake quad.
+      final blankFrame = CameraFrameData(
+        width: 120,
+        height: 160,
+        lumaBytes: Uint8List.fromList(List.filled(120 * 160, 180)),
+      );
+      final blankResult = detector.detect(blankFrame);
+      expect(blankResult.status, DocumentDetectionStatus.searching);
+      expect(blankResult.quad, isNull);
 
-        // 3. Synthetic paper sheet on dark background returns valid convex quad.
-        final docFrame = buildSyntheticDocumentFrame();
-        final docResult = detector.detect(docFrame);
-        expect(docResult.status, DocumentDetectionStatus.alignedHoldSteady);
-        expect(docResult.quad, isNotNull);
-        expect(docResult.quad!.isValidConvex(), isTrue);
-        expect(docResult.areaFraction, greaterThan(0.35));
-      },
-    );
+      // 3. Synthetic paper sheet on dark background returns valid convex quad.
+      final docFrame = buildSyntheticDocumentFrame();
+      final docResult = detector.detect(docFrame);
+      expect(docResult.status, DocumentDetectionStatus.alignedHoldSteady);
+      expect(docResult.quad, isNotNull);
+      expect(docResult.quad!.isValidConvex(), isTrue);
+      expect(docResult.areaFraction, greaterThan(0.35));
+    });
 
-    test(
-      'DocumentStabilityTracker locks after 4 steady frames and enforces post-capture cooldown',
-      () {
-        const detector = DocumentEdgeDetector();
-        final tracker = DocumentStabilityTracker(
-          requiredStableFrames: 4,
-          captureCooldown: const Duration(milliseconds: 2000),
-        );
-        final docFrame = buildSyntheticDocumentFrame();
-        final raw = detector.detect(docFrame);
-        final t0 = DateTime(2026, 11, 19, 12, 0, 0);
+    test('DocumentStabilityTracker locks after 4 steady frames and enforces post-capture cooldown', () {
+      const detector = DocumentEdgeDetector();
+      final tracker = DocumentStabilityTracker(
+        requiredStableFrames: 4,
+        captureCooldown: const Duration(milliseconds: 2000),
+      );
+      final docFrame = buildSyntheticDocumentFrame();
+      final raw = detector.detect(docFrame);
+      final t0 = DateTime(2026, 11, 19, 12, 0, 0);
 
-        final r1 = tracker.evaluate(raw, now: t0);
-        expect(r1.status, DocumentDetectionStatus.alignedHoldSteady);
-        expect(r1.stabilityProgress, closeTo(0.25, 0.01));
+      final r1 = tracker.evaluate(raw, now: t0);
+      expect(r1.status, DocumentDetectionStatus.alignedHoldSteady);
+      expect(r1.stabilityProgress, closeTo(0.25, 0.01));
 
-        final r2 = tracker.evaluate(
-          raw,
-          now: t0.add(const Duration(milliseconds: 200)),
-        );
-        expect(r2.stabilityProgress, closeTo(0.50, 0.01));
+      final r2 = tracker.evaluate(
+        raw,
+        now: t0.add(const Duration(milliseconds: 200)),
+      );
+      expect(r2.stabilityProgress, closeTo(0.50, 0.01));
 
-        final r3 = tracker.evaluate(
-          raw,
-          now: t0.add(const Duration(milliseconds: 400)),
-        );
-        expect(r3.stabilityProgress, closeTo(0.75, 0.01));
+      final r3 = tracker.evaluate(
+        raw,
+        now: t0.add(const Duration(milliseconds: 400)),
+      );
+      expect(r3.stabilityProgress, closeTo(0.75, 0.01));
 
-        final r4 = tracker.evaluate(
-          raw,
-          now: t0.add(const Duration(milliseconds: 600)),
-        );
-        expect(r4.status, DocumentDetectionStatus.readyToCapture);
-        expect(r4.stabilityProgress, equals(1.0));
+      final r4 = tracker.evaluate(
+        raw,
+        now: t0.add(const Duration(milliseconds: 600)),
+      );
+      expect(r4.status, DocumentDetectionStatus.readyToCapture);
+      expect(r4.stabilityProgress, equals(1.0));
 
-        // After marking captured, immediate subsequent frames do NOT re-trigger.
-        tracker.markCaptured(t0.add(const Duration(milliseconds: 600)));
-        final rCooldown = tracker.evaluate(
-          raw,
-          now: t0.add(const Duration(milliseconds: 1000)),
-        );
-        expect(rCooldown.status, DocumentDetectionStatus.alignedHoldSteady);
-        expect(rCooldown.stabilityProgress, equals(0.0));
-      },
-    );
+      // After marking captured, immediate subsequent frames do NOT re-trigger.
+      tracker.markCaptured(t0.add(const Duration(milliseconds: 600)));
+      final rCooldown = tracker.evaluate(
+        raw,
+        now: t0.add(const Duration(milliseconds: 1000)),
+      );
+      expect(rCooldown.status, DocumentDetectionStatus.alignedHoldSteady);
+      expect(rCooldown.stabilityProgress, equals(0.0));
+    });
 
-    test(
-      'GalleryImportService validates formats, magic bytes, corrupt files, and cancellation',
-      () async {
-        final validJpg = _writeSampleJpgSync(tempDir, 'good.jpg');
-        final fakeJpg = File('${tempDir.path}/corrupt.jpg');
-        await fakeJpg.writeAsBytes([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]);
-        final unsupported = File('${tempDir.path}/notes.txt');
-        await unsupported.writeAsString('not an image');
+    test('GalleryImportService validates formats, magic bytes, corrupt files, and cancellation', () async {
+      final validJpg = _writeSampleJpgSync(tempDir, 'good.jpg');
+      final fakeJpg = File('${tempDir.path}/corrupt.jpg');
+      await fakeJpg.writeAsBytes([0x00, 0x01, 0x02, 0x03, 0x04, 0x05]);
+      final unsupported = File('${tempDir.path}/notes.txt');
+      await unsupported.writeAsString('not an image');
 
-        final cancelService = GalleryImportService(picker: () async => null);
-        final cancelResult = await cancelService.pickAndValidateImages();
-        expect(cancelResult.cancelled, isTrue);
+      final cancelService = GalleryImportService(picker: () async => null);
+      final cancelResult = await cancelService.pickAndValidateImages();
+      expect(cancelResult.cancelled, isTrue);
 
-        final mixedService = GalleryImportService(
-          picker: () async => [validJpg, fakeJpg, unsupported],
-        );
-        final mixedResult = await mixedService.pickAndValidateImages();
-        expect(mixedResult.cancelled, isFalse);
-        expect(mixedResult.accepted.length, equals(1));
-        expect(mixedResult.accepted.first.width, equals(120));
-        expect(mixedResult.rejections.length, equals(2));
-      },
-    );
+      final mixedService = GalleryImportService(
+        picker: () async => [validJpg, fakeJpg, unsupported],
+      );
+      final mixedResult = await mixedService.pickAndValidateImages();
+      expect(mixedResult.cancelled, isFalse);
+      expect(mixedResult.accepted.length, equals(1));
+      expect(mixedResult.accepted.first.width, equals(120));
+      expect(mixedResult.rejections.length, equals(2));
+    });
   });
 
   group('Phase 3 Widget & Integration Tests: Camera Studio & Capture Review', () {
@@ -666,15 +657,15 @@ void main() {
           AppLifecycleState.inactive,
         );
         await tester.pump();
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
         await tester.pump();
         expect(backend.disposeCount, greaterThanOrEqualTo(1));
         expect(backend.isInitialized, isFalse);
 
         // Simulate returning to foreground -> resumed.
-        tester.binding.handleAppLifecycleStateChanged(
-          AppLifecycleState.hidden,
-        );
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
         tester.binding.handleAppLifecycleStateChanged(
           AppLifecycleState.inactive,
         );
@@ -682,7 +673,9 @@ void main() {
           AppLifecycleState.resumed,
         );
         await tester.pump();
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
         await tester.pumpAndSettle();
         expect(backend.initializeCount, equals(2));
         expect(backend.isInitialized, isTrue);
@@ -822,9 +815,7 @@ void main() {
         final capFile = _writeSampleJpgSync(tempDir, 'auto_cap.jpg');
         final backend = FakeScannerCameraBackend(nextCapturedFile: capFile);
         final container = ProviderContainer(
-          overrides: [
-            scannerCameraBackendProvider.overrideWithValue(backend),
-          ],
+          overrides: [scannerCameraBackendProvider.overrideWithValue(backend)],
         );
         addTearDown(container.dispose);
 
@@ -847,10 +838,7 @@ void main() {
           await notifier.processFrame(docFrame);
         });
         await tester.pump();
-        expect(
-          container.read(scannerStudioProvider).detection.quad,
-          isNotNull,
-        );
+        expect(container.read(scannerStudioProvider).detection.quad, isNotNull);
         expect(
           container.read(scannerStudioProvider).detection.stabilityProgress,
           closeTo(0.25, 0.01),

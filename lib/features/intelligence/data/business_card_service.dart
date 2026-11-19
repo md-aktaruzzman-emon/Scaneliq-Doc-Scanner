@@ -150,8 +150,14 @@ class BusinessCardService {
   ];
 
   /// Performs full workflow: runs OCR on image and extracts structured contact fields
-  Future<BusinessCardContact> extractFromImage(File imageFile) async {
-    final ocrText = await OcrService.instance.extractText(imageFile);
+  Future<BusinessCardContact> extractFromImage(
+    File imageFile, {
+    OcrScript script = OcrScript.mixedBengaliEnglish,
+  }) async {
+    final ocrText = await OcrService.instance.extractText(
+      imageFile,
+      script: script,
+    );
     return parseText(ocrText);
   }
 

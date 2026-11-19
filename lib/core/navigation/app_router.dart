@@ -120,9 +120,8 @@ void navigateToSettings(BuildContext context) {
     router.push(AppRoutes.settings);
     return;
   }
-  Navigator.of(
-    context,
-  ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+  Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
 }
 
 /// Safe helper supporting both GoRouter-hosted trees and isolated Navigator tests.

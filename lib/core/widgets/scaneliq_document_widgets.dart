@@ -6,6 +6,7 @@ import 'package:scaneliq/core/theme/scaneliq_radius.dart';
 import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
 import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
 import 'package:scaneliq/core/theme/scaneliq_typography.dart';
+
 import 'scaneliq_buttons.dart';
 import 'scaneliq_content_widgets.dart';
 
@@ -54,7 +55,8 @@ class ScaneliqDocumentThumbnail extends StatelessWidget {
               File(thumbPath),
               fit: BoxFit.cover,
               cacheWidth: 240,
-              errorBuilder: (_, _, _) => _MiniaturePaperFallback(document: document),
+              errorBuilder: (_, _, _) =>
+                  _MiniaturePaperFallback(document: document),
             )
           : _MiniaturePaperFallback(document: document),
     );
@@ -73,77 +75,77 @@ class _MiniaturePaperFallback extends StatelessWidget {
     return ExcludeSemantics(
       child: Padding(
         padding: const EdgeInsets.all(5),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                document.title.toUpperCase(),
-                maxLines: 1,
-                overflow: TextOverflow.clip,
-                style: const TextStyle(
-                  fontSize: 4.8,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF141413),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  document.title.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                  style: const TextStyle(
+                    fontSize: 4.8,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF141413),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 3),
-              Container(
-                height: 2,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF94A3B8),
-                  borderRadius: BorderRadius.circular(1),
-                ),
-              ),
-              const SizedBox(height: 2),
-              FractionallySizedBox(
-                widthFactor: 0.82,
-                child: Container(
+                const SizedBox(height: 3),
+                Container(
                   height: 2,
+                  width: double.infinity,
                   decoration: BoxDecoration(
                     color: const Color(0xFF94A3B8),
                     borderRadius: BorderRadius.circular(1),
                   ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              FractionallySizedBox(
-                widthFactor: 0.65,
-                child: Container(
-                  height: 2,
+                const SizedBox(height: 2),
+                FractionallySizedBox(
+                  widthFactor: 0.82,
+                  child: Container(
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF94A3B8),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                FractionallySizedBox(
+                  widthFactor: 0.65,
+                  child: Container(
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFCBD5E1),
-                    borderRadius: BorderRadius.circular(1),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: hasPdf
+                          ? const Color(0xFFDC2626)
+                          : const Color(0xFF0052FF),
+                      width: 1,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: hasPdf
-                        ? const Color(0xFFDC2626)
-                        : const Color(0xFF0052FF),
-                    width: 1,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 }
@@ -344,6 +346,7 @@ class ScaneliqFeaturedFolioCard extends StatelessWidget {
   final VoidCallback onResume;
   final VoidCallback onAddPages;
   final VoidCallback onSavePdf;
+  final VoidCallback? onDiscard;
 
   const ScaneliqFeaturedFolioCard({
     super.key,
@@ -351,6 +354,7 @@ class ScaneliqFeaturedFolioCard extends StatelessWidget {
     required this.onResume,
     required this.onAddPages,
     required this.onSavePdf,
+    this.onDiscard,
   });
 
   @override
@@ -470,6 +474,16 @@ class ScaneliqFeaturedFolioCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (onDiscard != null)
+                          GestureDetector(
+                            onTap: onDiscard,
+                            child: Text(
+                              'Discard',
+                              style: textTheme.labelMedium?.copyWith(
+                                color: tokens.danger,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ],

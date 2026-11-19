@@ -83,7 +83,10 @@ class MultiPageEditHistory {
   final Map<String, Uint8List> _cachedBasePreviewBytes = {};
 
   EditHistoryStack stackFor(DocumentPage page) {
-    return _stacks.putIfAbsent(page.id, () => EditHistoryStack(page.editRecipe));
+    return _stacks.putIfAbsent(
+      page.id,
+      () => EditHistoryStack(page.editRecipe),
+    );
   }
 
   Uint8List? cachedBaseBytesFor(String pageId) =>

@@ -3,6 +3,7 @@ import 'package:scaneliq/core/theme/scaneliq_radius.dart';
 import 'package:scaneliq/core/theme/scaneliq_spacing.dart';
 import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
 import 'package:scaneliq/core/theme/scaneliq_typography.dart';
+
 import 'scaneliq_buttons.dart';
 
 /// Semantic tone variants for monospaced status & metadata pills.
@@ -101,8 +102,8 @@ class ScaneliqScopeTabs extends StatelessWidget {
               ),
             ),
           ),
-            ?trailing,
-          ],
+          ?trailing,
+        ],
       ),
     );
   }
@@ -173,11 +174,7 @@ class ScaneliqHairlineDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: margin,
-      height: 1,
-      color: context.tokens.hairline,
-    );
+    return Container(margin: margin, height: 1, color: context.tokens.hairline);
   }
 }
 
@@ -196,7 +193,10 @@ class ScaneliqStatusLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final (bg, fg) = switch (tone) {
-      ScaneliqStatusTone.neutral => (tokens.surfaceSubtle, tokens.textSecondary),
+      ScaneliqStatusTone.neutral => (
+        tokens.surfaceSubtle,
+        tokens.textSecondary,
+      ),
       ScaneliqStatusTone.accent => (tokens.accentSoft, tokens.accent),
       ScaneliqStatusTone.success => (tokens.successSoft, tokens.success),
       ScaneliqStatusTone.warning => (tokens.warningSoft, tokens.warning),

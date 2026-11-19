@@ -230,7 +230,10 @@ Future<void> showPdfMetadataSheet({
               child: Column(
                 children: [
                   _MetaRow(label: 'Pages', value: '${info.pageCount} pages'),
-                  _MetaRow(label: 'File Size', value: '$sizeKb KB ($sizeMb MB)'),
+                  _MetaRow(
+                    label: 'File Size',
+                    value: '$sizeKb KB ($sizeMb MB)',
+                  ),
                   _MetaRow(
                     label: 'Page Size',
                     value:
@@ -249,7 +252,9 @@ Future<void> showPdfMetadataSheet({
             if (!info.isEncrypted) ...[
               TextField(
                 controller: titleCtrl,
-                decoration: const InputDecoration(labelText: 'PDF Title Metadata'),
+                decoration: const InputDecoration(
+                  labelText: 'PDF Title Metadata',
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -273,8 +278,8 @@ Future<void> showPdfMetadataSheet({
                       : () async {
                           setSheetState(() => isSaving = true);
                           try {
-                            final outFile =
-                                await AdvancedPdfService.instance.updateMetadata(
+                            final outFile = await AdvancedPdfService.instance
+                                .updateMetadata(
                                   sourcePdf: pdfFile,
                                   title: titleCtrl.text.trim(),
                                   author: authorCtrl.text.trim(),
@@ -340,10 +345,8 @@ class _MetaRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600, fontSize: 13),
             ),
           ),
         ],
