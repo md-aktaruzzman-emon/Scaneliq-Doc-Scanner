@@ -30,7 +30,6 @@ class ToolsScreen extends StatefulWidget {
 
 class _ToolsScreenState extends State<ToolsScreen> {
   bool _isProcessingOcr = false;
-  String? _extractedText;
 
   Future<void> _runDirectOcrOnPickedFile() async {
     try {
@@ -65,13 +64,23 @@ class _ToolsScreenState extends State<ToolsScreen> {
               ),
               ScaneliqContextMenuRow(
                 icon: Icons.translate_rounded,
-                title: 'Bengali (বাংলা) & Indic',
-                subtitle: 'Indic script & numeral converter',
+                title: 'Bengali (বাংলা)',
+                subtitle: 'Offline Tesseract Bengali script engine',
                 trailing: const ScaneliqStatusLabel(
-                  text: 'INDIC BETA',
-                  tone: ScaneliqStatusTone.warning,
+                  text: 'OFFLINE BN',
+                  tone: ScaneliqStatusTone.success,
                 ),
                 onTap: () => Navigator.pop(ctx, OcrScript.bengali),
+              ),
+              ScaneliqContextMenuRow(
+                icon: Icons.spellcheck_rounded,
+                title: 'Mixed বাংলা + English',
+                subtitle: 'Offline bilingual ben+eng recognition',
+                trailing: const ScaneliqStatusLabel(
+                  text: 'BN + EN',
+                  tone: ScaneliqStatusTone.accent,
+                ),
+                onTap: () => Navigator.pop(ctx, OcrScript.mixedBengaliEnglish),
               ),
               ScaneliqContextMenuRow(
                 icon: Icons.auto_awesome_outlined,
@@ -87,24 +96,20 @@ class _ToolsScreenState extends State<ToolsScreen> {
 
         setState(() {
           _isProcessingOcr = true;
-          _extractedText = null;
         });
 
         final file = File(pickedFiles.first.path!);
-        final text = await OcrService.instance.extractText(
+        final ocrResult = await OcrService.instance.extractPageOcr(
           file,
           script: chosenScript,
         );
 
         setState(() {
           _isProcessingOcr = false;
-          _extractedText = text.trim().isEmpty
-              ? 'No text detected in this image.'
-              : text;
         });
 
         if (mounted) {
-          _showTextResultSheet(_extractedText!);
+          _showTextResultSheet(ocrResult);
         }
       }
     } catch (e) {
@@ -115,7 +120,14 @@ class _ToolsScreenState extends State<ToolsScreen> {
     }
   }
 
-  void _showTextResultSheet(String text) {
+  void _showTextResultSheet(PageOcrResult ocrResult) {
+    final editController = TextEditingController(
+      text: ocrResult.fullText.trim().isEmpty
+          ? 'No text detected in this image.'
+          : ocrResult.fullText,
+    );
+    final table = OcrTableExtractor.extract(ocrResult);
+
     showScaneliqBottomSheet<void>(
       context: context,
       builder: (ctx) => Column(
@@ -126,14 +138,14 @@ class _ToolsScreenState extends State<ToolsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Extracted Text',
+                'Extracted & Editable Text',
                 style: Theme.of(ctx).textTheme.headlineMedium,
               ),
               TextButton.icon(
                 icon: const Icon(Icons.copy_rounded, size: 17),
                 label: const Text('Copy'),
                 onPressed: () {
-                  Clipboard.setData(ClipboardData(text: text));
+                  Clipboard.setData(ClipboardData(text: editController.text));
                   Navigator.pop(ctx);
                   showScaneliqToast(context, 'Copied text to clipboard.');
                 },
@@ -142,8 +154,51 @@ class _ToolsScreenState extends State<ToolsScreen> {
           ),
           const SizedBox(height: 8),
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 280),
-            child: SingleChildScrollView(child: SelectableText(text)),
+            constraints: const BoxConstraints(maxHeight: 240),
+            child: TextField(
+              controller: editController,
+              maxLines: null,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                icon: const Icon(Icons.description_outlined, size: 17),
+                label: const Text('Export .TXT'),
+                onPressed: () async {
+                  final f = await OcrService.instance.exportTextFile(
+                    content: editController.text,
+                    baseName: 'OCR_${DateTime.now().millisecondsSinceEpoch}',
+                    extension: 'txt',
+                  );
+                  if (mounted) {
+                    showScaneliqToast(context, 'Saved ${f.path.split(Platform.pathSeparator).last}');
+                  }
+                },
+              ),
+              if (!table.isEmpty)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.table_chart_outlined, size: 17),
+                  label: const Text('Export Table CSV'),
+                  onPressed: () async {
+                    final f = await OcrService.instance.exportTextFile(
+                      content: table.toCsv(),
+                      baseName: 'Table_${DateTime.now().millisecondsSinceEpoch}',
+                      extension: 'csv',
+                    );
+                    if (mounted) {
+                      showScaneliqToast(context, 'Exported ${f.path.split(Platform.pathSeparator).last}');
+                    }
+                  },
+                ),
+            ],
           ),
         ],
       ),
@@ -337,9 +392,9 @@ class _ToolsScreenState extends State<ToolsScreen> {
             _SuiteHairlineRow(
               icon: Icons.translate_rounded,
               title: 'Translate Lens',
-              subtitle: 'Cross-language document translation (requires network consent)',
-              badge: 'ONLINE',
-              tone: ScaneliqStatusTone.warning,
+              subtitle: 'Offline ML Kit En ↔ Bn models + optional online translation',
+              badge: 'OFFLINE / EN-BN',
+              tone: ScaneliqStatusTone.success,
               onTap: () {
                 Navigator.push(
                   context,
@@ -350,9 +405,9 @@ class _ToolsScreenState extends State<ToolsScreen> {
             _SuiteHairlineRow(
               icon: Icons.calculate_outlined,
               title: 'CountCam',
-              subtitle: 'Interactive counter & OCR block pin marker (TFLite detector planned)',
-              badge: 'BETA',
-              tone: ScaneliqStatusTone.warning,
+              subtitle: 'ML Kit object detector + dense item cluster counter with tap pins',
+              badge: 'OBJECT AI',
+              tone: ScaneliqStatusTone.success,
               onTap: () {
                 Navigator.push(
                   context,

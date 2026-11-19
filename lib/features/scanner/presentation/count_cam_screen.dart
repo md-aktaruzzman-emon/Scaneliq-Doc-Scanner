@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
+import 'package:scaneliq/features/scanner/data/object_counter_service.dart';
+import 'package:scaneliq/features/subscription/data/subscription_service.dart';
+import 'package:scaneliq/features/subscription/presentation/subscription_sheet.dart';
 import 'package:share_plus/share_plus.dart';
 
 class CountCamScreen extends StatefulWidget {
@@ -20,15 +22,20 @@ class _CountCamScreenState extends State<CountCamScreen> {
   bool _isCameraReady = false;
   bool _isProcessing = false;
   File? _capturedImage;
-  int _estimatedCount = 0;
-  String _selectedCategory = 'Items / Labels';
+  List<DetectedCountObject> _detectedObjects = [];
+  int _manualAdjustOffset = 0;
+  String _engineUsed = 'morphological_cluster_detector';
+  String _selectedCategory = 'Boxes & Cartons (Dense)';
 
-  final List<String> _categories = [
-    'Items / Labels',
-    'Books & Notebooks',
-    'Classroom Stationery',
-    'Cartons & Packages',
-  ];
+  final Map<String, CountDetectionPreset> _categoryPresets = const {
+    'Boxes & Cartons (Dense)': CountDetectionPreset.denseCluster,
+    'Coins & Small Items': CountDetectionPreset.smallItems,
+    'Prominent Objects (ML Kit)': CountDetectionPreset.prominentObjects,
+    'Auto Hybrid Detection': CountDetectionPreset.autoHybrid,
+  };
+
+  int get _effectiveCount =>
+      (_detectedObjects.length + _manualAdjustOffset).clamp(0, 9999);
 
   @override
   void initState() {
@@ -67,12 +74,9 @@ class _CountCamScreenState extends State<CountCamScreen> {
       return;
     }
     try {
-      setState(() {
-        _isProcessing = true;
-      });
+      setState(() => _isProcessing = true);
       final picture = await _cameraController!.takePicture();
-      final file = File(picture.path);
-      await _processImageForCounting(file);
+      await _processImageForCounting(File(picture.path));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -84,9 +88,7 @@ class _CountCamScreenState extends State<CountCamScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
+        setState(() => _isProcessing = false);
       }
     }
   }
@@ -98,52 +100,103 @@ class _CountCamScreenState extends State<CountCamScreen> {
         allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
       );
       if (result.isNotEmpty && result.first.path != null) {
-        setState(() {
-          _isProcessing = true;
-        });
+        setState(() => _isProcessing = true);
         await _processImageForCounting(File(result.first.path!));
       }
     } catch (_) {
     } finally {
       if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
+        setState(() => _isProcessing = false);
       }
     }
   }
 
   Future<void> _processImageForCounting(File imageFile) async {
-    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
-    try {
-      final inputImage = InputImage.fromFile(imageFile);
-      final recognizedText = await recognizer.processImage(inputImage);
-
-      final boxes = <Rect>[];
-      for (final block in recognizedText.blocks) {
-        boxes.add(block.boundingBox);
+    final quota = await SubscriptionService.instance.consumeQuota(
+      QuotaFeature.objectCountCam,
+    );
+    if (!quota.allowed) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(quota.message)),
+        );
+        await SubscriptionSheet.show(context);
       }
-
-      setState(() {
-        _capturedImage = imageFile;
-        // Count distinct blocks or minimum 1 if detected
-        _estimatedCount = boxes.length;
-      });
-    } finally {
-      recognizer.close();
+      return;
     }
+
+    final preset =
+        _categoryPresets[_selectedCategory] ?? CountDetectionPreset.autoHybrid;
+    final res = await ObjectCounterService.instance.detectObjects(
+      imageFile,
+      preset: preset,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _capturedImage = imageFile;
+      _detectedObjects = List<DetectedCountObject>.from(res.objects);
+      _manualAdjustOffset = 0;
+      _engineUsed = res.engineUsed;
+    });
+  }
+
+  void _handleCanvasTap(TapDownDetails details, Size canvasSize) {
+    if (_capturedImage == null || canvasSize.width <= 0 || canvasSize.height <= 0) {
+      return;
+    }
+    final nx = (details.localPosition.dx / canvasSize.width).clamp(0.0, 1.0);
+    final ny = (details.localPosition.dy / canvasSize.height).clamp(0.0, 1.0);
+
+    // If user tapped near an existing marker, remove it; otherwise add a new manual pin marker.
+    int removeIdx = -1;
+    for (int i = 0; i < _detectedObjects.length; i++) {
+      final c = _detectedObjects[i].normalizedCenter;
+      final dx = (c.dx - nx) * canvasSize.width;
+      final dy = (c.dy - ny) * canvasSize.height;
+      if (dx * dx + dy * dy <= 24 * 24) {
+        removeIdx = i;
+        break;
+      }
+    }
+
+    setState(() {
+      if (removeIdx != -1) {
+        _detectedObjects.removeAt(removeIdx);
+      } else {
+        _detectedObjects.add(
+          DetectedCountObject(
+            index: _detectedObjects.length + 1,
+            normalizedRect: Rect.fromCenter(
+              center: Offset(nx, ny),
+              width: 0.08,
+              height: 0.08,
+            ),
+            normalizedCenter: Offset(nx, ny),
+            label: 'Manual',
+            confidence: 1.0,
+            isManual: true,
+          ),
+        );
+      }
+      for (int i = 0; i < _detectedObjects.length; i++) {
+        _detectedObjects[i] = _detectedObjects[i].copyWith(index: i + 1);
+      }
+    });
   }
 
   void _manualAdjust(int delta) {
     setState(() {
-      _estimatedCount = (_estimatedCount + delta).clamp(0, 9999);
+      final nextTotal = _effectiveCount + delta;
+      _manualAdjustOffset = (nextTotal - _detectedObjects.length).clamp(-9999, 9999);
     });
   }
 
   void _reset() {
     setState(() {
       _capturedImage = null;
-      _estimatedCount = 0;
+      _detectedObjects = [];
+      _manualAdjustOffset = 0;
     });
   }
 
@@ -170,13 +223,37 @@ class _CountCamScreenState extends State<CountCamScreen> {
       body: Stack(
         children: [
           if (_capturedImage != null)
-            Center(child: Image.file(_capturedImage!, fit: BoxFit.contain))
+            Center(
+              child: LayoutBuilder(
+                builder: (ctx, constraints) => GestureDetector(
+                  onTapDown: (d) => _handleCanvasTap(
+                    d,
+                    Size(constraints.maxWidth, constraints.maxHeight),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(
+                        _capturedImage!,
+                        fit: BoxFit.contain,
+                        cacheWidth: 1200,
+                      ),
+                      CustomPaint(
+                        painter: _CountBoxesPainter(_detectedObjects),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
           else if (_isCameraReady && _cameraController != null)
             Center(child: CameraPreview(_cameraController!))
           else
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
+            const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
 
-          // Top Category Selector Pill
+          // Top Preset Selector Pill
           Positioned(
             top: 16,
             left: 20,
@@ -191,7 +268,7 @@ class _CountCamScreenState extends State<CountCamScreen> {
               child: Row(
                 children: [
                   const Icon(
-                    Icons.category,
+                    Icons.category_outlined,
                     color: AppColors.brandPrimary,
                     size: 20,
                   ),
@@ -211,14 +288,15 @@ class _CountCamScreenState extends State<CountCamScreen> {
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                         ),
-                        items: _categories
-                            .map(
-                              (c) => DropdownMenuItem(value: c, child: Text(c)),
-                            )
+                        items: _categoryPresets.keys
+                            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                             .toList(),
                         onChanged: (val) {
                           if (val != null) {
                             setState(() => _selectedCategory = val);
+                            if (_capturedImage != null) {
+                              _processImageForCounting(_capturedImage!);
+                            }
                           }
                         },
                       ),
@@ -256,18 +334,18 @@ class _CountCamScreenState extends State<CountCamScreen> {
                           Column(
                             children: [
                               Text(
-                                '$_estimatedCount',
+                                '$_effectiveCount',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 36,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              const Text(
-                                'Estimated Count (Review & adjust)',
-                                style: TextStyle(
+                              Text(
+                                'Tap image to add/remove markers ($_engineUsed)',
+                                style: const TextStyle(
                                   color: Colors.white70,
-                                  fontSize: 12,
+                                  fontSize: 11,
                                 ),
                               ),
                             ],
@@ -287,7 +365,7 @@ class _CountCamScreenState extends State<CountCamScreen> {
                           SharePlus.instance.share(
                             ShareParams(
                               text:
-                                  'CountCam Estimate: $_estimatedCount $_selectedCategory counted via Scaneliq.',
+                                  'CountCam Count: $_effectiveCount ($_selectedCategory) counted via Scaneliq.',
                               files: [XFile(_capturedImage!.path)],
                             ),
                           );
@@ -295,7 +373,7 @@ class _CountCamScreenState extends State<CountCamScreen> {
                       ),
                     ] else ...[
                       const Text(
-                        'Align items clearly inside camera frame',
+                        'Place separated objects cleanly inside frame',
                         style: TextStyle(color: Colors.white70, fontSize: 13),
                       ),
                       const SizedBox(height: 16),
@@ -308,9 +386,7 @@ class _CountCamScreenState extends State<CountCamScreen> {
                               color: Colors.white,
                             ),
                             tooltip: 'Count from Gallery image',
-                            onPressed: _isProcessing
-                                ? null
-                                : _pickImageAndCount,
+                            onPressed: _isProcessing ? null : _pickImageAndCount,
                           ),
                           GestureDetector(
                             onTap: _isProcessing ? null : _captureAndCount,
@@ -352,7 +428,7 @@ class _CountCamScreenState extends State<CountCamScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 48), // Spacer balance
+                          const SizedBox(width: 48),
                         ],
                       ),
                     ],
@@ -365,4 +441,60 @@ class _CountCamScreenState extends State<CountCamScreen> {
       ),
     );
   }
+}
+
+class _CountBoxesPainter extends CustomPainter {
+  final List<DetectedCountObject> objects;
+
+  const _CountBoxesPainter(this.objects);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final boxPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..color = const Color(0xFF34D399);
+
+    final manualPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..color = const Color(0xFF3B82F6);
+
+    final fillPaint = Paint()..style = PaintingStyle.fill;
+
+    for (final obj in objects) {
+      final rect = Rect.fromLTWH(
+        obj.normalizedRect.left * size.width,
+        obj.normalizedRect.top * size.height,
+        obj.normalizedRect.width * size.width,
+        obj.normalizedRect.height * size.height,
+      );
+      canvas.drawRect(rect, obj.isManual ? manualPaint : boxPaint);
+
+      final center = Offset(
+        obj.normalizedCenter.dx * size.width,
+        obj.normalizedCenter.dy * size.height,
+      );
+      fillPaint.color = obj.isManual
+          ? const Color(0xFF3B82F6)
+          : const Color(0xFF059669);
+      canvas.drawCircle(center, 11, fillPaint);
+
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '${obj.index}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CountBoxesPainter oldDelegate) => true;
 }

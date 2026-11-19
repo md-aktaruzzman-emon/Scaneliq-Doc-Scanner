@@ -330,7 +330,9 @@ void main() {
       expect(lockService.hasPinSet, isTrue);
 
       final prefs = await SharedPreferences.getInstance();
-      final storedHash = prefs.getString('app_lock_pin_hash');
+      expect(prefs.getString('app_lock_pin_hash'), isNull);
+      expect(prefs.getString('app_lock_pin_salt'), isNull);
+      final storedHash = await lockService.debugReadStoredPinHash();
       expect(storedHash, startsWith('v3:100000:'));
 
       // Correct PIN verifies
@@ -357,9 +359,11 @@ void main() {
       expect(blocked.success, isFalse);
       expect(blocked.isLockedOut, isTrue);
 
-      // Fail-safe handling: Corrupt stored hash while lock is enabled
-      await prefs.remove('app_lock_lockout_until_epoch');
-      await prefs.setString('app_lock_pin_hash', ''); // corrupted
+      // Fail-safe handling: Corrupt stored hash in secure storage while lock is enabled
+      await lockService.debugOverrideSecretStateForTest(
+        pinHash: '',
+        clearLockout: true,
+      );
       final corruptCheck = await lockService.verifyPin('654321');
       expect(corruptCheck.success, isFalse);
       expect(lockService.isSessionUnlocked, isFalse);

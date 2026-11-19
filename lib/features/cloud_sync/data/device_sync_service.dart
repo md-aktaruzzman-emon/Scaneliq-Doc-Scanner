@@ -1,13 +1,60 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:encrypt/encrypt.dart' as enc;
+import 'package:pointycastle/export.dart' as pc;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:uuid/uuid.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 
 enum SyncStatus { idle, syncing, success, error }
+
+enum SyncOperationType { upsertDocument, deleteDocument, fullBackupUpload }
+
+class OfflineSyncOperation {
+  final String id;
+  final SyncOperationType type;
+  final String entityId;
+  final DateTime queuedAt;
+  final String? details;
+
+  const OfflineSyncOperation({
+    required this.id,
+    required this.type,
+    required this.entityId,
+    required this.queuedAt,
+    this.details,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'type': type.name,
+    'entityId': entityId,
+    'queuedAt': queuedAt.toIso8601String(),
+    if (details != null) 'details': details,
+  };
+
+  factory OfflineSyncOperation.fromJson(Map<String, dynamic> json) {
+    final typeName =
+        json['type'] as String? ?? SyncOperationType.upsertDocument.name;
+    final parsedType = SyncOperationType.values.firstWhere(
+      (v) => v.name == typeName,
+      orElse: () => SyncOperationType.upsertDocument,
+    );
+    return OfflineSyncOperation(
+      id: json['id'] as String? ?? '',
+      type: parsedType,
+      entityId: json['entityId'] as String? ?? '',
+      queuedAt:
+          DateTime.tryParse(json['queuedAt'] as String? ?? '') ??
+          DateTime.now(),
+      details: json['details'] as String?,
+    );
+  }
+}
 
 class SyncLogEntry {
   final DateTime timestamp;
@@ -90,6 +137,7 @@ class DeviceSyncService {
   static const String _prefSyncEnabled = 'device_sync_enabled';
   static const String _prefLastSyncEpoch = 'device_sync_last_epoch';
   static const String _prefSyncLogs = 'device_sync_logs';
+  static const String _prefPendingQueue = 'device_sync_pending_ops';
 
   SharedPreferences? _prefs;
   SyncStatus _status = SyncStatus.idle;
@@ -101,6 +149,63 @@ class DeviceSyncService {
   Future<SharedPreferences> get prefs async {
     _prefs ??= await SharedPreferences.getInstance();
     return _prefs!;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Persisted Offline Sync Queue
+  // ---------------------------------------------------------------------------
+
+  Future<List<OfflineSyncOperation>> getPendingQueue() async {
+    final p = await prefs;
+    final raw = p.getStringList(_prefPendingQueue) ?? [];
+    return raw
+        .map(
+          (item) => OfflineSyncOperation.fromJson(
+            jsonDecode(item) as Map<String, dynamic>,
+          ),
+        )
+        .toList();
+  }
+
+  Future<OfflineSyncOperation> enqueueSyncOperation({
+    required SyncOperationType type,
+    required String entityId,
+    String? details,
+  }) async {
+    final p = await prefs;
+    final existing = await getPendingQueue();
+    final op = OfflineSyncOperation(
+      id: const Uuid().v4(),
+      type: type,
+      entityId: entityId,
+      queuedAt: DateTime.now(),
+      details: details,
+    );
+    // Deduplicate same operation type + entityId so repeated local edits coalesce cleanly.
+    final filtered = existing
+        .where((e) => !(e.type == type && e.entityId == entityId))
+        .toList();
+    filtered.add(op);
+    await p.setStringList(
+      _prefPendingQueue,
+      filtered.map((e) => jsonEncode(e.toJson())).toList(),
+    );
+    return op;
+  }
+
+  Future<void> removePendingOperation(String opId) async {
+    final p = await prefs;
+    final existing = await getPendingQueue();
+    final updated = existing.where((e) => e.id != opId).toList();
+    await p.setStringList(
+      _prefPendingQueue,
+      updated.map((e) => jsonEncode(e.toJson())).toList(),
+    );
+  }
+
+  Future<void> clearPendingQueue() async {
+    final p = await prefs;
+    await p.remove(_prefPendingQueue);
   }
 
   Future<String> getDeviceId() async {
@@ -165,10 +270,33 @@ class DeviceSyncService {
   }
 
   // ---------------------------------------------------------------------------
-  // End-to-End Cryptography Engine (Passphrase -> PBKDF2/SHA-256 Key derivation)
+  // End-to-End Cryptography Engine:
+  // - V2 (default): PBKDF2-HMAC-SHA256 (100k, 64B split Enc/Mac) + AES-256-CBC + HMAC-SHA256 EtM
+  // - V1 (legacy fallback): 1000-iter stream XOR + HMAC-SHA256
   // ---------------------------------------------------------------------------
 
-  List<int> _deriveKey(
+  Uint8List _deriveKeyMaterialV2(
+    String passphrase,
+    Uint8List salt, {
+    int iterations = 100000,
+  }) {
+    final pbkdf2 = pc.KeyDerivator('SHA-256/HMAC/PBKDF2');
+    pbkdf2.init(pc.Pbkdf2Parameters(salt, iterations, 64));
+    return pbkdf2.process(utf8.encode(passphrase));
+  }
+
+  static bool _constantTimeEquals(String a, String b) {
+    final bytesA = utf8.encode(a);
+    final bytesB = utf8.encode(b);
+    if (bytesA.length != bytesB.length) return false;
+    int diff = 0;
+    for (int i = 0; i < bytesA.length; i++) {
+      diff |= bytesA[i] ^ bytesB[i];
+    }
+    return diff == 0;
+  }
+
+  List<int> _deriveKeyV1(
     String passphrase,
     List<int> salt, {
     int iterations = 1000,
@@ -181,7 +309,7 @@ class DeviceSyncService {
     return key;
   }
 
-  List<int> _xorCrypt(List<int> input, List<int> keyStream) {
+  List<int> _xorCryptV1(List<int> input, List<int> keyStream) {
     final output = List<int>.filled(input.length, 0);
     for (int i = 0; i < input.length; i++) {
       output[i] = input[i] ^ keyStream[i % keyStream.length];
@@ -189,13 +317,13 @@ class DeviceSyncService {
     return output;
   }
 
-  String _computeHmac(List<int> data, List<int> key) {
+  String _computeHmacHex(List<int> data, List<int> key) {
     final h = Hmac(sha256, key);
     return h.convert(data).toString();
   }
 
   // ---------------------------------------------------------------------------
-  // Export & Encrypt Sync Package
+  // Export & Encrypt Sync Package (V2 AES-256-CBC Encrypt-then-MAC)
   // ---------------------------------------------------------------------------
 
   Future<EncryptedSyncEnvelope> createEncryptedEnvelope({
@@ -225,34 +353,48 @@ class DeviceSyncService {
 
       final plainBytes = utf8.encode(jsonEncode(payloadMap));
 
-      // Generate random 16-byte salt
       final rnd = Random.secure();
-      final saltBytes = List<int>.generate(16, (_) => rnd.nextInt(256));
+      final saltBytes = Uint8List.fromList(
+        List<int>.generate(16, (_) => rnd.nextInt(256)),
+      );
+      final ivBytes = Uint8List.fromList(
+        List<int>.generate(16, (_) => rnd.nextInt(256)),
+      );
 
-      // Derive key
-      final key = _deriveKey(encryptionPassphrase, saltBytes);
+      final keyMaterial = _deriveKeyMaterialV2(encryptionPassphrase, saltBytes);
+      final encKey = Uint8List.fromList(keyMaterial.sublist(0, 32));
+      final macKey = keyMaterial.sublist(32, 64);
 
-      // Encrypt payload
-      final encryptedBytes = _xorCrypt(plainBytes, key);
-      final ciphertextBase64 = base64Encode(encryptedBytes);
+      final encrypter = enc.Encrypter(
+        enc.AES(enc.Key(encKey), mode: enc.AESMode.cbc),
+      );
+      final cipherBytes = encrypter
+          .encryptBytes(plainBytes, iv: enc.IV(ivBytes))
+          .bytes;
 
-      // Authenticate with HMAC-SHA256
-      final hmac = _computeHmac(encryptedBytes, key);
+      final saltB64 = base64Encode(saltBytes);
+      final ivB64 = base64Encode(ivBytes);
+      final cipherB64 = base64Encode(cipherBytes);
+      final macTag = _computeHmacHex([
+        ...saltBytes,
+        ...ivBytes,
+        ...cipherBytes,
+      ], macKey);
 
       final envelope = EncryptedSyncEnvelope(
-        version: '1.0',
+        version: '2.0',
         senderDeviceId: deviceId,
         senderDeviceName: deviceName,
         timestamp: DateTime.now().millisecondsSinceEpoch,
-        salt: base64Encode(saltBytes),
-        ciphertext: ciphertextBase64,
-        hmacTag: hmac,
+        salt: saltB64,
+        ciphertext: '$ivB64:$cipherB64',
+        hmacTag: macTag,
       );
 
       _status = SyncStatus.success;
       await _recordLog(
         'Export Envelope',
-        'Exported ${docs.length} docs, ${folders.length} folders',
+        'Exported ${docs.length} docs, ${folders.length} folders (V2 AES-256-CBC)',
         true,
       );
 
@@ -275,20 +417,55 @@ class DeviceSyncService {
   }) async {
     _status = SyncStatus.syncing;
     try {
-      final saltBytes = base64Decode(envelope.salt);
-      final key = _deriveKey(decryptionPassphrase, saltBytes);
-      final cipherBytes = base64Decode(envelope.ciphertext);
+      final saltBytes = Uint8List.fromList(base64Decode(envelope.salt));
+      final List<int> plainBytes;
 
-      // 1. Verify HMAC integrity tag
-      final computedHmac = _computeHmac(cipherBytes, key);
-      if (computedHmac != envelope.hmacTag) {
-        throw Exception(
-          'HMAC verification failed. Invalid passphrase or corrupted envelope.',
+      if (envelope.version == '2.0') {
+        final parts = envelope.ciphertext.split(':');
+        if (parts.length != 2) {
+          throw Exception('Malformed V2 encrypted sync envelope payload.');
+        }
+        final ivBytes = Uint8List.fromList(base64Decode(parts[0]));
+        final cipherBytes = Uint8List.fromList(base64Decode(parts[1]));
+
+        final keyMaterial = _deriveKeyMaterialV2(
+          decryptionPassphrase,
+          saltBytes,
         );
+        final encKey = Uint8List.fromList(keyMaterial.sublist(0, 32));
+        final macKey = keyMaterial.sublist(32, 64);
+
+        final computedHmac = _computeHmacHex([
+          ...saltBytes,
+          ...ivBytes,
+          ...cipherBytes,
+        ], macKey);
+        if (!_constantTimeEquals(computedHmac, envelope.hmacTag)) {
+          throw Exception(
+            'HMAC verification failed. Invalid passphrase or corrupted envelope.',
+          );
+        }
+
+        final encrypter = enc.Encrypter(
+          enc.AES(enc.Key(encKey), mode: enc.AESMode.cbc),
+        );
+        plainBytes = encrypter.decryptBytes(
+          enc.Encrypted(cipherBytes),
+          iv: enc.IV(ivBytes),
+        );
+      } else {
+        // Legacy V1 compatibility path
+        final key = _deriveKeyV1(decryptionPassphrase, saltBytes);
+        final cipherBytes = base64Decode(envelope.ciphertext);
+        final computedHmac = _computeHmacHex(cipherBytes, key);
+        if (!_constantTimeEquals(computedHmac, envelope.hmacTag)) {
+          throw Exception(
+            'HMAC verification failed. Invalid passphrase or corrupted envelope.',
+          );
+        }
+        plainBytes = _xorCryptV1(cipherBytes, key);
       }
 
-      // 2. Decrypt payload
-      final plainBytes = _xorCrypt(cipherBytes, key);
       final plainJsonStr = utf8.decode(plainBytes);
       final data = jsonDecode(plainJsonStr) as Map<String, dynamic>;
 

@@ -93,6 +93,78 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
     }
   }
 
+  Future<void> _editParsedFields() async {
+    final current = _receipt;
+    if (current == null) return;
+
+    final merchantCtrl = TextEditingController(text: current.merchantName);
+    final invoiceCtrl = TextEditingController(text: current.invoiceNumber);
+    final dateCtrl = TextEditingController(text: current.date);
+    final totalCtrl = TextEditingController(
+      text: current.total?.toStringAsFixed(2) ?? '',
+    );
+
+    final updated = await showDialog<ParsedReceipt>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit ${current.documentKind} Fields'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: merchantCtrl,
+                decoration: const InputDecoration(labelText: 'Merchant / Vendor'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: invoiceCtrl,
+                decoration: const InputDecoration(labelText: 'Invoice / PO #'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: dateCtrl,
+                decoration: const InputDecoration(labelText: 'Date'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: totalCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Grand Total (${current.currency})',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final parsedTotal = double.tryParse(totalCtrl.text.trim());
+              Navigator.pop(
+                ctx,
+                current.copyWith(
+                  merchantName: merchantCtrl.text.trim(),
+                  invoiceNumber: invoiceCtrl.text.trim(),
+                  date: dateCtrl.text.trim(),
+                  total: parsedTotal ?? current.total,
+                ),
+              );
+            },
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    if (updated != null && mounted) {
+      setState(() => _receipt = updated);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -252,9 +324,23 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                           if (_receipt!.date.isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Text(
-                              'Date: ${_receipt!.date}',
+                              'Date: ${_receipt!.date}${_receipt!.dueDate.isNotEmpty ? ' · Due: ${_receipt!.dueDate}' : ''}',
                               style: TextStyle(
                                 fontSize: 13,
+                                color: isDark
+                                    ? AppColors.textSecondaryDark
+                                    : AppColors.textSecondaryLight,
+                              ),
+                            ),
+                          ],
+                          if (_receipt!.invoiceNumber.isNotEmpty ||
+                              _receipt!.poNumber.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '${_receipt!.documentKind} ${_receipt!.invoiceNumber.isNotEmpty ? '#${_receipt!.invoiceNumber}' : ''}${_receipt!.poNumber.isNotEmpty ? ' · PO: ${_receipt!.poNumber}' : ''}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
                                 color: isDark
                                     ? AppColors.textSecondaryDark
                                     : AppColors.textSecondaryLight,
@@ -345,16 +431,22 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                   Row(
                     children: [
                       OutlinedButton.icon(
-                        onPressed: _pickImage,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Pick Another'),
+                        onPressed: _editParsedFields,
+                        icon: const Icon(Icons.edit_outlined, size: 17),
+                        label: const Text('Edit'),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: _pickImage,
+                        icon: const Icon(Icons.refresh, size: 17),
+                        label: const Text('Retry'),
+                      ),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: _exportCsv,
                           icon: const Icon(Icons.table_chart_outlined),
-                          label: const Text('Export Expense CSV'),
+                          label: const Text('Export CSV'),
                         ),
                       ),
                     ],

@@ -7,8 +7,29 @@ import 'package:uuid/uuid.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 
-/// Database service using SQLite with schema versioning, hierarchical folders,
-/// tags, soft deletion (Trash), and batch management operations.
+/// Represents a folder node flattened with hierarchy depth and full path for nested pickers.
+class FolderTreeEntry {
+  final DocumentFolder folder;
+  final int depth;
+  final String breadcrumbPath;
+
+  const FolderTreeEntry({
+    required this.folder,
+    required this.depth,
+    required this.breadcrumbPath,
+  });
+}
+
+/// Ranked document search hit including an optional matched text excerpt.
+class DocumentSearchHit {
+  final ScannedDocument document;
+  final String? snippet;
+
+  const DocumentSearchHit({required this.document, this.snippet});
+}
+
+/// Database service using SQLite with schema versioning, FTS5 full-text search,
+/// hierarchical folders, tags, soft deletion (Trash), duplication, and batch operations.
 class AppDatabaseService {
   static AppDatabaseService? _instance;
   static AppDatabaseService get instance =>
@@ -42,7 +63,7 @@ class AppDatabaseService {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON;');
       },
@@ -166,6 +187,9 @@ class AppDatabaseService {
 
         // Seed default starter categories
         await _seedStarterTags(db);
+
+        // Full-text search index (FTS5 with FTS4 fallback)
+        await _ensureFtsTableAndBackfill(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -264,8 +288,115 @@ class AppDatabaseService {
             'CREATE INDEX IF NOT EXISTS idx_bookmarks_doc ON document_bookmarks (document_id)',
           );
         }
+        if (oldVersion < 6) {
+          await _ensureFtsTableAndBackfill(db);
+        }
       },
     );
+  }
+
+  /// Creates the FTS5 virtual table (falling back to FTS4 only if host SQLite omits FTS5)
+  /// and backfills all existing non-trashed documents and OCR text.
+  Future<void> _ensureFtsTableAndBackfill(DatabaseExecutor db) async {
+    bool hasTable = await _hasFtsTable(db);
+    if (!hasTable) {
+      try {
+        await db.execute('''
+          CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
+            document_id UNINDEXED,
+            title,
+            full_text,
+            tokenize='unicode61 remove_diacritics 1'
+          )
+        ''');
+        hasTable = true;
+      } catch (_) {
+        try {
+          await db.execute('''
+            CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts4(
+              document_id,
+              title,
+              full_text,
+              tokenize=unicode61
+            )
+          ''');
+          hasTable = true;
+        } catch (_) {
+          hasTable = false;
+        }
+      }
+    }
+
+    if (!hasTable) return;
+    await db.execute('DELETE FROM documents_fts');
+    await db.execute('''
+      INSERT INTO documents_fts (document_id, title, full_text)
+      SELECT d.id, d.title, COALESCE(o.full_text, '')
+      FROM documents d
+      LEFT JOIN document_ocr o ON d.id = o.document_id
+      WHERE d.deleted_at IS NULL
+    ''');
+  }
+
+  Future<bool> _hasFtsTable(DatabaseExecutor db) async {
+    try {
+      final rows = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name = 'documents_fts' LIMIT 1",
+      );
+      return rows.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _syncDocumentFts(DatabaseExecutor db, String documentId) async {
+    if (!await _hasFtsTable(db)) return;
+    await db.delete(
+      'documents_fts',
+      where: 'document_id = ?',
+      whereArgs: [documentId],
+    );
+    final rows = await db.rawQuery(
+      '''
+      SELECT d.id, d.title, COALESCE(o.full_text, '') AS full_text
+      FROM documents d
+      LEFT JOIN document_ocr o ON d.id = o.document_id
+      WHERE d.id = ? AND d.deleted_at IS NULL
+      LIMIT 1
+    ''',
+      [documentId],
+    );
+    if (rows.isEmpty) return;
+    final row = rows.first;
+    await db.insert('documents_fts', {
+      'document_id': row['id'],
+      'title': row['title'] ?? '',
+      'full_text': row['full_text'] ?? '',
+    });
+  }
+
+  Future<void> _removeDocumentFts(DatabaseExecutor db, String documentId) async {
+    if (!await _hasFtsTable(db)) return;
+    await db.delete(
+      'documents_fts',
+      where: 'document_id = ?',
+      whereArgs: [documentId],
+    );
+  }
+
+  /// Builds a safe FTS5/FTS4 prefix query from arbitrary user text (Latin & Bengali Unicode safe).
+  static String? buildFtsMatchQuery(String rawQuery) {
+    final matches = RegExp(
+      r'[\p{L}\p{N}_]+',
+      unicode: true,
+    ).allMatches(rawQuery.trim());
+    final tokens = matches
+        .map((m) => m.group(0)!)
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (tokens.isEmpty) return null;
+    // Quote each token cleanly so reserved words like AND/OR/NOT cannot break MATCH syntax.
+    return tokens.map((t) => '"$t"*').join(' ');
   }
 
   /// Seeds default starter tags if none exist
@@ -366,7 +497,51 @@ class AppDatabaseService {
     return result;
   }
 
-  /// Retrieves a single folder by ID
+  /// Returns all folders across every nesting depth ordered depth-first with breadcrumb paths.
+  Future<List<FolderTreeEntry>> getFolderHierarchy() async {
+    final db = await database;
+    final rows = await db.query('folders', orderBy: 'name ASC');
+    if (rows.isEmpty) return const [];
+
+    final folders = <DocumentFolder>[];
+    for (final row in rows) {
+      final fId = row['id'] as String;
+      final countResult = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM documents WHERE folder_id = ? AND deleted_at IS NULL',
+        [fId],
+      );
+      final count = Sqflite.firstIntValue(countResult) ?? 0;
+      folders.add(DocumentFolder.fromMap(row, documentCount: count));
+    }
+
+    final byParent = <String?, List<DocumentFolder>>{};
+    for (final f in folders) {
+      byParent.putIfAbsent(f.parentId, () => []).add(f);
+    }
+
+    final result = <FolderTreeEntry>[];
+    final visited = <String>{};
+    void visit(String? parentId, int depth, String prefix) {
+      final children = byParent[parentId] ?? const [];
+      for (final folder in children) {
+        if (!visited.add(folder.id)) continue;
+        final breadcrumb = prefix.isEmpty
+            ? folder.name
+            : '$prefix / ${folder.name}';
+        result.add(
+          FolderTreeEntry(
+            folder: folder,
+            depth: depth,
+            breadcrumbPath: breadcrumb,
+          ),
+        );
+        visit(folder.id, depth + 1, breadcrumb);
+      }
+    }
+
+    visit(null, 0, '');
+    return result;
+  }
   Future<DocumentFolder?> getFolder(String folderId) async {
     final db = await database;
     final rows = await db.query(
@@ -626,6 +801,7 @@ class AppDatabaseService {
       where: 'id = ?',
       whereArgs: [documentId],
     );
+    await _removeDocumentFts(db, documentId);
   }
 
   /// Moves multiple documents to Trash (Batch Trash)
@@ -641,6 +817,7 @@ class AppDatabaseService {
           where: 'id = ?',
           whereArgs: [id],
         );
+        await _removeDocumentFts(txn, id);
       }
     });
   }
@@ -681,6 +858,7 @@ class AppDatabaseService {
       where: 'id = ?',
       whereArgs: [documentId],
     );
+    await _syncDocumentFts(db, documentId);
   }
 
   /// Restores multiple documents from Trash (Batch Restore)
@@ -710,6 +888,7 @@ class AppDatabaseService {
         whereArgs: [id],
       );
       await txn.delete('documents', where: 'id = ?', whereArgs: [id]);
+      await _removeDocumentFts(txn, id);
     });
   }
 
@@ -797,6 +976,7 @@ class AppDatabaseService {
       doc.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    await _syncDocumentFts(db, doc.id);
   }
 
   /// Inserts or updates a document and its pages atomically in a transaction
@@ -826,10 +1006,106 @@ class AppDatabaseService {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
+      await _syncDocumentFts(txn, doc.id);
     });
   }
 
-  /// Retrieves documents supporting multi-criteria filtering (folder, tags, favorites, search, trash)
+  /// Creates an independent deep copy of a document (files, pages, tags, OCR text, and FTS entry).
+  Future<ScannedDocument?> duplicateDocument(
+    String documentId, {
+    String? customTitle,
+  }) async {
+    final source = await getDocument(documentId);
+    if (source == null) return null;
+
+    final now = DateTime.now();
+    final newDocId = const Uuid().v4();
+    final newTitle = customTitle?.trim().isNotEmpty == true
+        ? customTitle!.trim()
+        : '${source.title} (Copy)';
+
+    final storage = AppStorageService.instance;
+    final copiedPages = <DocumentPage>[];
+
+    for (int i = 0; i < source.pages.length; i++) {
+      final srcPage = source.pages[i];
+      final newPageId = const Uuid().v4();
+      String newOriginalPath = srcPage.originalPath;
+      String? newProcessedPath;
+
+      final origFile = File(srcPage.originalPath);
+      if (await origFile.exists()) {
+        final ext = p.extension(origFile.path).replaceFirst('.', '');
+        final copiedOrig = await storage.copyToOriginals(
+          newPageId,
+          origFile,
+          extension: ext.isEmpty ? 'jpg' : ext,
+        );
+        newOriginalPath = copiedOrig.path;
+      }
+
+      if (srcPage.processedPath != null) {
+        final procFile = File(srcPage.processedPath!);
+        if (await procFile.exists()) {
+          await storage.processedDir.create(recursive: true);
+          final targetProc = p.join(storage.processedDir.path, '${newPageId}_proc.jpg');
+          await procFile.copy(targetProc);
+          newProcessedPath = targetProc;
+        }
+      }
+
+      copiedPages.add(
+        srcPage.copyWith(
+          id: newPageId,
+          documentId: newDocId,
+          pageOrder: i,
+          originalPath: newOriginalPath,
+          processedPath: newProcessedPath,
+        ),
+      );
+    }
+
+    String? newExportPath;
+    if (source.exportPath != null) {
+      final srcExport = File(source.exportPath!);
+      if (await srcExport.exists()) {
+        await storage.exportsDir.create(recursive: true);
+        final candidate = storage.getExportPdfPath(newTitle);
+        await srcExport.copy(candidate);
+        newExportPath = candidate;
+      }
+    }
+
+    final copiedDoc = ScannedDocument(
+      id: newDocId,
+      title: newTitle,
+      createdAt: now,
+      modifiedAt: now,
+      pageCount: copiedPages.isNotEmpty ? copiedPages.length : source.pageCount,
+      isFavorite: source.isFavorite,
+      isDraft: source.isDraft,
+      exportPath: newExportPath,
+      folderId: source.folderId,
+      pages: copiedPages,
+      tags: source.tags,
+    );
+
+    await saveDocumentWithPages(copiedDoc, copiedPages);
+    if (source.tags.isNotEmpty) {
+      await setDocumentTags(
+        newDocId,
+        source.tags.map((t) => t.id).toList(),
+      );
+    }
+    final sourceOcr = await getDocumentOcr(documentId);
+    if (sourceOcr != null && sourceOcr.trim().isNotEmpty) {
+      await saveDocumentOcr(newDocId, sourceOcr);
+    }
+
+    return await getDocument(newDocId);
+  }
+
+  /// Retrieves documents supporting multi-criteria filtering (folder, tags, favorites, FTS5 search, trash)
   Future<List<ScannedDocument>> getAllDocuments({
     String? searchQuery,
     String? folderId,
@@ -865,14 +1141,6 @@ class AppDatabaseService {
       whereClauses.add('d.is_favorite = 1');
     }
 
-    // Title / OCR full-text search
-    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      final term = '%${searchQuery.trim()}%';
-      whereClauses.add('(d.title LIKE ? OR o.full_text LIKE ?)');
-      whereArgs.add(term);
-      whereArgs.add(term);
-    }
-
     // Tag filter (must have at least one of selected tags)
     String tagJoin = '';
     if (tagIds != null && tagIds.isNotEmpty) {
@@ -880,6 +1148,26 @@ class AppDatabaseService {
       tagJoin =
           'INNER JOIN document_tags dt ON d.id = dt.document_id AND dt.tag_id IN ($placeholders)';
       whereArgs.addAll(tagIds);
+    }
+
+    String searchJoin = '';
+    String orderBy = 'd.modified_at DESC';
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final ftsExpr = !onlyTrashed && await _hasFtsTable(db)
+          ? buildFtsMatchQuery(searchQuery)
+          : null;
+      if (ftsExpr != null) {
+        searchJoin =
+            'INNER JOIN documents_fts fts ON d.id = fts.document_id';
+        whereClauses.add('documents_fts MATCH ?');
+        whereArgs.add(ftsExpr);
+        orderBy = 'd.modified_at DESC';
+      } else {
+        final term = '%${searchQuery.trim()}%';
+        whereClauses.add('(d.title LIKE ? OR o.full_text LIKE ?)');
+        whereArgs.add(term);
+        whereArgs.add(term);
+      }
     }
 
     final whereSql = whereClauses.isNotEmpty
@@ -890,18 +1178,63 @@ class AppDatabaseService {
         '''
       SELECT DISTINCT d.* FROM documents d
       LEFT JOIN document_ocr o ON d.id = o.document_id
+      $searchJoin
       $tagJoin
       $whereSql
-      ORDER BY d.modified_at DESC
+      ORDER BY $orderBy
     ''';
 
     final docRows = await db.rawQuery(query, whereArgs);
+    return _hydrateDocuments(db, docRows);
+  }
 
+  /// Searches documents using FTS5 and returns matched excerpt snippets from OCR/title text.
+  Future<List<DocumentSearchHit>> searchDocumentsWithSnippets(
+    String query,
+  ) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return const [];
+    final docs = await getAllDocuments(searchQuery: trimmed);
+    final hits = <DocumentSearchHit>[];
+    final lowerTokens = trimmed
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+
+    for (final doc in docs) {
+      final ocr = await getDocumentOcr(doc.id);
+      String? snippet;
+      if (ocr != null && ocr.isNotEmpty) {
+        final lowerOcr = ocr.toLowerCase();
+        int matchIdx = -1;
+        for (final token in lowerTokens) {
+          final idx = lowerOcr.indexOf(token);
+          if (idx != -1) {
+            matchIdx = idx;
+            break;
+          }
+        }
+        if (matchIdx != -1) {
+          final start = (matchIdx - 40).clamp(0, ocr.length);
+          final end = (matchIdx + 100).clamp(start, ocr.length);
+          final prefix = start > 0 ? '…' : '';
+          final suffix = end < ocr.length ? '…' : '';
+          snippet = '$prefix${ocr.substring(start, end).replaceAll('\n', ' ').trim()}$suffix';
+        }
+      }
+      hits.add(DocumentSearchHit(document: doc, snippet: snippet));
+    }
+    return hits;
+  }
+
+  Future<List<ScannedDocument>> _hydrateDocuments(
+    Database db,
+    List<Map<String, Object?>> docRows,
+  ) async {
     final List<ScannedDocument> results = [];
     for (final row in docRows) {
       final docId = row['id'] as String;
-
-      // Load pages
       final pageRows = await db.query(
         'pages',
         where: 'document_id = ?',
@@ -910,7 +1243,6 @@ class AppDatabaseService {
       );
       final pages = pageRows.map((p) => DocumentPage.fromMap(p)).toList();
 
-      // Load tags
       final tagRows = await db.rawQuery(
         '''
         SELECT t.* FROM tags t
@@ -921,10 +1253,8 @@ class AppDatabaseService {
         [docId],
       );
       final tags = tagRows.map((t) => DocumentTag.fromMap(t)).toList();
-
       results.add(ScannedDocument.fromMap(row, pages: pages, tags: tags));
     }
-
     return results;
   }
 
@@ -1026,6 +1356,7 @@ class AppDatabaseService {
     }
 
     await db.update('documents', updateMap, where: 'id = ?', whereArgs: [id]);
+    await _syncDocumentFts(db, id);
   }
 
   /// Saves or updates the OCR text for a document
@@ -1036,6 +1367,7 @@ class AppDatabaseService {
       'document_id': documentId,
       'full_text': fullText.trim(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _syncDocumentFts(db, documentId);
   }
 
   /// Retrieves the OCR text for a document if available

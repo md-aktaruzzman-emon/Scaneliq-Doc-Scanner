@@ -339,6 +339,7 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
                                   child: Image.file(
                                     File(doc.pages.first.originalPath),
                                     fit: BoxFit.cover,
+                                    cacheWidth: 180,
                                   ),
                                 )
                               : const Icon(

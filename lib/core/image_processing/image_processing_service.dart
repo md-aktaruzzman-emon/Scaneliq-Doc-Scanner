@@ -946,34 +946,31 @@ class ImageProcessingService {
     return [leftPage, rightPage];
   }
 
-  /// Splits a book spread image file on disk into two discrete JPEG files (left and right page)
+  /// Splits a book spread image file on disk into two discrete JPEG files in a background isolate.
   static Future<List<File>> splitBookSpreadFile({
     required File spreadFile,
     required Directory outputDir,
     required String baseId,
   }) async {
     final bytes = await spreadFile.readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) {
-      throw Exception('Failed to decode book spread image: ${spreadFile.path}');
-    }
+    final spreadPath = spreadFile.path;
+    final encodedPages = await Isolate.run(() {
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) {
+        throw Exception('Failed to decode book spread image: $spreadPath');
+      }
+      final pages = splitBookSpread(decoded);
+      return [
+        Uint8List.fromList(img.encodeJpg(pages[0], quality: 90)),
+        Uint8List.fromList(img.encodeJpg(pages[1], quality: 90)),
+      ];
+    });
 
-    final pages = splitBookSpread(decoded);
+    final leftFile = File('${outputDir.path}/${baseId}_left.jpg');
+    final rightFile = File('${outputDir.path}/${baseId}_right.jpg');
 
-    final leftPath = '${outputDir.path}/${baseId}_left.jpg';
-    final rightPath = '${outputDir.path}/${baseId}_right.jpg';
-
-    final leftFile = File(leftPath);
-    final rightFile = File(rightPath);
-
-    await leftFile.writeAsBytes(
-      img.encodeJpg(pages[0], quality: 90),
-      flush: true,
-    );
-    await rightFile.writeAsBytes(
-      img.encodeJpg(pages[1], quality: 90),
-      flush: true,
-    );
+    await leftFile.writeAsBytes(encodedPages[0], flush: true);
+    await rightFile.writeAsBytes(encodedPages[1], flush: true);
 
     return [leftFile, rightFile];
   }
@@ -1012,7 +1009,8 @@ class ImageProcessingService {
     return dst;
   }
 
-  /// Permanently redacts an image file on disk, writing the redacted bitmap to a target file.
+  /// Permanently redacts an image file on disk inside a background isolate,
+  /// writing the redacted bitmap to [targetImage].
   static Future<File> permanentlyRedactImageFile({
     required File sourceImage,
     required File targetImage,
@@ -1023,22 +1021,22 @@ class ImageProcessingService {
     int quality = 90,
   }) async {
     final bytes = await sourceImage.readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) {
-      throw Exception(
-        'Failed to decode image file for redaction: ${sourceImage.path}',
+    final srcPath = sourceImage.path;
+    final encoded = await Isolate.run(() {
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) {
+        throw Exception('Failed to decode image file for redaction: $srcPath');
+      }
+      final redacted = permanentlyRedactImage(
+        src: decoded,
+        normX: normX,
+        normY: normY,
+        normW: normW,
+        normH: normH,
       );
-    }
+      return Uint8List.fromList(img.encodeJpg(redacted, quality: quality));
+    });
 
-    final redacted = permanentlyRedactImage(
-      src: decoded,
-      normX: normX,
-      normY: normY,
-      normW: normW,
-      normH: normH,
-    );
-
-    final encoded = img.encodeJpg(redacted, quality: quality);
     await targetImage.writeAsBytes(encoded, flush: true);
     return targetImage;
   }
@@ -1095,7 +1093,7 @@ class ImageProcessingService {
     return dst;
   }
 
-  /// Permanently pixelates an image file on disk, writing the mosaic bitmap to target.
+  /// Permanently pixelates an image file on disk inside a background isolate.
   static Future<File> permanentlyMosaicImageFile({
     required File sourceImage,
     required File targetImage,
@@ -1107,23 +1105,23 @@ class ImageProcessingService {
     int quality = 90,
   }) async {
     final bytes = await sourceImage.readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) {
-      throw Exception(
-        'Failed to decode image file for mosaic: ${sourceImage.path}',
+    final srcPath = sourceImage.path;
+    final encoded = await Isolate.run(() {
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) {
+        throw Exception('Failed to decode image file for mosaic: $srcPath');
+      }
+      final mosaic = permanentlyMosaicImage(
+        src: decoded,
+        normX: normX,
+        normY: normY,
+        normW: normW,
+        normH: normH,
+        blockSize: blockSize,
       );
-    }
+      return Uint8List.fromList(img.encodeJpg(mosaic, quality: quality));
+    });
 
-    final mosaic = permanentlyMosaicImage(
-      src: decoded,
-      normX: normX,
-      normY: normY,
-      normW: normW,
-      normH: normH,
-      blockSize: blockSize,
-    );
-
-    final encoded = img.encodeJpg(mosaic, quality: quality);
     await targetImage.writeAsBytes(encoded, flush: true);
     return targetImage;
   }
@@ -1174,30 +1172,38 @@ class ImageProcessingService {
     return dst;
   }
 
-  /// Stitches multiple image files on disk into a single vertical long image file.
+  /// Stitches multiple image files on disk into a single vertical long image file
+  /// using a background isolate so large multi-page rolls do not block the UI thread.
   static Future<File> stitchImageFilesVertically({
     required List<File> imageFiles,
     required File targetFile,
     int spacing = 12,
     int quality = 90,
   }) async {
-    final images = <img.Image>[];
+    final byteChunks = <Uint8List>[];
     for (final f in imageFiles) {
-      final bytes = await f.readAsBytes();
-      final decoded = img.decodeImage(bytes);
-      if (decoded != null) {
-        images.add(decoded);
+      if (await f.exists()) {
+        byteChunks.add(await f.readAsBytes());
       }
     }
 
-    if (images.isEmpty) {
-      throw ArgumentError(
-        'No valid images could be decoded from provided files',
-      );
-    }
+    final encoded = await Isolate.run(() {
+      final images = <img.Image>[];
+      for (final bytes in byteChunks) {
+        final decoded = img.decodeImage(bytes);
+        if (decoded != null) {
+          images.add(decoded);
+        }
+      }
+      if (images.isEmpty) {
+        throw ArgumentError(
+          'No valid images could be decoded from provided files',
+        );
+      }
+      final stitched = stitchImagesVertically(images, spacing: spacing);
+      return Uint8List.fromList(img.encodeJpg(stitched, quality: quality));
+    });
 
-    final stitched = stitchImagesVertically(images, spacing: spacing);
-    final encoded = img.encodeJpg(stitched, quality: quality);
     await targetFile.writeAsBytes(encoded, flush: true);
     return targetFile;
   }

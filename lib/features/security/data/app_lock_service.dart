@@ -4,9 +4,89 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:pointycastle/export.dart' as pc;
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Abstraction over hardware-backed secret persistence (Android KeyStore / iOS Keychain)
+/// so tests can verify migrations deterministically without platform channels.
+abstract class SecureKeyValueStore {
+  Future<String?> read(String key);
+  Future<void> write(String key, String value);
+  Future<void> delete(String key);
+}
+
+class FlutterSecureStorageKeyStore implements SecureKeyValueStore {
+  final FlutterSecureStorage _storage;
+  final Map<String, String> _vmFallback = {};
+  bool _useVmFallback = false;
+
+  FlutterSecureStorageKeyStore([FlutterSecureStorage? storage])
+    : _storage = storage ?? const FlutterSecureStorage();
+
+  @override
+  Future<String?> read(String key) async {
+    if (_useVmFallback) return _vmFallback[key];
+    try {
+      return await _storage.read(key: key);
+    } on MissingPluginException {
+      // Host VM unit tests without registered secure_storage plugin bindings.
+      _useVmFallback = true;
+      return _vmFallback[key];
+    } on PlatformException catch (e) {
+      debugPrint('Secure storage read error ($key): $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<void> write(String key, String value) async {
+    if (_useVmFallback) {
+      _vmFallback[key] = value;
+      return;
+    }
+    try {
+      await _storage.write(key: key, value: value);
+    } on MissingPluginException {
+      _useVmFallback = true;
+      _vmFallback[key] = value;
+    }
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    if (_useVmFallback) {
+      _vmFallback.remove(key);
+      return;
+    }
+    try {
+      await _storage.delete(key: key);
+    } on MissingPluginException {
+      _useVmFallback = true;
+      _vmFallback.remove(key);
+    } on PlatformException {
+      // Ignore missing entry on delete.
+    }
+  }
+}
+
+class InMemorySecureKeyStore implements SecureKeyValueStore {
+  final Map<String, String> data = {};
+
+  @override
+  Future<String?> read(String key) async => data[key];
+
+  @override
+  Future<void> write(String key, String value) async {
+    data[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    data.remove(key);
+  }
+}
 
 class PinVerificationResult {
   final bool success;
@@ -23,7 +103,7 @@ class PinVerificationResult {
 }
 
 /// Service providing Biometric & standard RFC 2898 PBKDF2-HMAC-SHA256 (100,000 iterations)
-/// salted PIN app lock security with constant-time verification, lockout protection, and fail-safe operation (F-46).
+/// salted PIN app lock security persisted in KeyStore-backed secure storage.
 class AppLockService {
   AppLockService._();
   static final AppLockService instance = AppLockService._();
@@ -41,17 +121,83 @@ class AppLockService {
 
   final LocalAuthentication _localAuth = LocalAuthentication();
   SharedPreferences? _prefs;
+  SecureKeyValueStore _secureStore = FlutterSecureStorageKeyStore();
 
   DateTime? _lastBackgroundTime;
   bool _isSessionUnlocked = false;
+  bool _hasPinCached = false;
+  int? _lockoutUntilEpochCached;
+  bool _initialized = false;
 
-  Future<void> init([SharedPreferences? testPrefs]) async {
+  bool get isInitialized => _initialized;
+  bool get isUsingHardwareBackedStore =>
+      _secureStore is! FlutterSecureStorageKeyStore ||
+      !(_secureStore as FlutterSecureStorageKeyStore)._useVmFallback;
+
+  Future<void> init([
+    SharedPreferences? testPrefs,
+    SecureKeyValueStore? testSecureStore,
+  ]) async {
     _prefs = testPrefs ?? await SharedPreferences.getInstance();
+    if (testSecureStore != null) {
+      _secureStore = testSecureStore;
+    } else if (testPrefs != null) {
+      // Fresh test setup with injected prefs uses an isolated store unless explicitly overridden.
+      _secureStore = FlutterSecureStorageKeyStore();
+    }
+
+    await _migrateLegacySecretsFromPrefs();
+    await _refreshSecurityCaches();
+    _initialized = true;
   }
 
   Future<SharedPreferences> get prefs async {
     _prefs ??= await SharedPreferences.getInstance();
     return _prefs!;
+  }
+
+  /// Migrates legacy plaintext PIN secrets/lockout counters out of SharedPreferences
+  /// into Android KeyStore / Keychain secure storage and scrubs the plaintext keys.
+  Future<void> _migrateLegacySecretsFromPrefs() async {
+    final p = await prefs;
+    final legacyHash = p.getString(_prefPinHash);
+    final legacySalt = p.getString(_prefPinSalt);
+    final legacyFailed = p.getInt(_prefFailedAttempts);
+    final legacyLockout = p.getInt(_prefLockoutUntilEpoch);
+
+    if (legacyHash != null && legacyHash.isNotEmpty) {
+      await _secureStore.write(_prefPinHash, legacyHash);
+      await p.remove(_prefPinHash);
+    } else if (legacyHash != null) {
+      await p.remove(_prefPinHash);
+    }
+
+    if (legacySalt != null && legacySalt.isNotEmpty) {
+      await _secureStore.write(_prefPinSalt, legacySalt);
+      await p.remove(_prefPinSalt);
+    } else if (legacySalt != null) {
+      await p.remove(_prefPinSalt);
+    }
+
+    if (legacyFailed != null) {
+      await _secureStore.write(_prefFailedAttempts, legacyFailed.toString());
+      await p.remove(_prefFailedAttempts);
+    }
+
+    if (legacyLockout != null) {
+      await _secureStore.write(
+        _prefLockoutUntilEpoch,
+        legacyLockout.toString(),
+      );
+      await p.remove(_prefLockoutUntilEpoch);
+    }
+  }
+
+  Future<void> _refreshSecurityCaches() async {
+    final storedHash = await _secureStore.read(_prefPinHash);
+    _hasPinCached = storedHash != null && storedHash.isNotEmpty;
+    final lockoutStr = await _secureStore.read(_prefLockoutUntilEpoch);
+    _lockoutUntilEpochCached = lockoutStr == null ? null : int.tryParse(lockoutStr);
   }
 
   // ---------------------------------------------------------------------------
@@ -67,8 +213,9 @@ class AppLockService {
   }
 
   bool get hasPinSet {
-    final hash = _prefs?.getString(_prefPinHash);
-    return hash != null && hash.isNotEmpty;
+    if (_hasPinCached) return true;
+    final legacyHash = _prefs?.getString(_prefPinHash);
+    return legacyHash != null && legacyHash.isNotEmpty;
   }
 
   int get lockTimeoutSeconds {
@@ -187,13 +334,24 @@ class AppLockService {
     final salt = _generateSalt();
     final saltBytes = _decodeSalt(salt);
     final hash = _hashPinV3(cleanPin, saltBytes);
+    final encodedHash = 'v3:$pinHashIterationsV3:$hash';
 
-    await p.setString(_prefPinSalt, salt);
-    await p.setString(_prefPinHash, 'v3:$pinHashIterationsV3:$hash');
-    await p.setBool(_prefLockEnabled, true);
-    await p.setInt(_prefFailedAttempts, 0);
+    await _secureStore.write(_prefPinSalt, salt);
+    await _secureStore.write(_prefPinHash, encodedHash);
+    await _secureStore.write(_prefFailedAttempts, '0');
+    await _secureStore.delete(_prefLockoutUntilEpoch);
+
+    // Ensure plaintext preferences contain zero secret fields.
+    await p.remove(_prefPinSalt);
+    await p.remove(_prefPinHash);
+    await p.remove(_prefFailedAttempts);
     await p.remove(_prefLockoutUntilEpoch);
+    await p.setBool(_prefLockEnabled, true);
+
+    _hasPinCached = true;
+    _lockoutUntilEpochCached = null;
     _isSessionUnlocked = true;
+    _initialized = true;
   }
 
   Future<void> disableAppLock() async {
@@ -202,8 +360,16 @@ class AppLockService {
     await p.setBool(_prefBiometricsEnabled, false);
     await p.remove(_prefPinHash);
     await p.remove(_prefPinSalt);
-    await p.setInt(_prefFailedAttempts, 0);
+    await p.remove(_prefFailedAttempts);
     await p.remove(_prefLockoutUntilEpoch);
+
+    await _secureStore.delete(_prefPinHash);
+    await _secureStore.delete(_prefPinSalt);
+    await _secureStore.write(_prefFailedAttempts, '0');
+    await _secureStore.delete(_prefLockoutUntilEpoch);
+
+    _hasPinCached = false;
+    _lockoutUntilEpochCached = null;
     _isSessionUnlocked = true;
   }
 
@@ -218,7 +384,8 @@ class AppLockService {
   }
 
   int getRemainingCooldownSeconds() {
-    final epoch = _prefs?.getInt(_prefLockoutUntilEpoch);
+    final epoch =
+        _lockoutUntilEpochCached ?? _prefs?.getInt(_prefLockoutUntilEpoch);
     if (epoch == null) return 0;
     final lockoutUntil = DateTime.fromMillisecondsSinceEpoch(epoch);
     final now = DateTime.now();
@@ -229,7 +396,8 @@ class AppLockService {
   }
 
   Future<PinVerificationResult> verifyPin(String inputPin) async {
-    final p = await prefs;
+    await _migrateLegacySecretsFromPrefs();
+    await _refreshSecurityCaches();
 
     // Check existing lockout before running key derivation (DoS mitigation)
     final cooldown = getRemainingCooldownSeconds();
@@ -242,8 +410,8 @@ class AppLockService {
       );
     }
 
-    final storedHash = p.getString(_prefPinHash);
-    final salt = p.getString(_prefPinSalt);
+    final storedHash = await _secureStore.read(_prefPinHash);
+    final salt = await _secureStore.read(_prefPinSalt);
 
     // Fail-safe handling for corrupted or unconfigured authentication state
     if (isAppLockEnabled &&
@@ -276,43 +444,44 @@ class AppLockService {
       final v2Hash = _hashPinV2(inputPin, salt);
       if (_constantTimeEquals(v2Hash, storedHash)) {
         isMatch = true;
-        // Transparently upgrade to hardened V3 PBKDF2
         final newV3Hash = _hashPinV3(inputPin, saltBytes);
-        await p.setString(_prefPinHash, 'v3:$pinHashIterationsV3:$newV3Hash');
+        await _secureStore.write(
+          _prefPinHash,
+          'v3:$pinHashIterationsV3:$newV3Hash',
+        );
       } else {
         // V1 single-round SHA-256 legacy check
         final v1Hash = _legacyHashPin(inputPin, salt);
         if (_constantTimeEquals(v1Hash, storedHash)) {
           isMatch = true;
-          // Transparently upgrade to hardened V3 PBKDF2
           final newV3Hash = _hashPinV3(inputPin, saltBytes);
-          await p.setString(_prefPinHash, 'v3:$pinHashIterationsV3:$newV3Hash');
+          await _secureStore.write(
+            _prefPinHash,
+            'v3:$pinHashIterationsV3:$newV3Hash',
+          );
         }
       }
     }
 
     if (isMatch) {
-      // Success! Reset failed attempts
-      await p.setInt(_prefFailedAttempts, 0);
-      await p.remove(_prefLockoutUntilEpoch);
+      await _secureStore.write(_prefFailedAttempts, '0');
+      await _secureStore.delete(_prefLockoutUntilEpoch);
+      _lockoutUntilEpochCached = null;
+      _hasPinCached = true;
       _isSessionUnlocked = true;
       return const PinVerificationResult(success: true);
     } else {
       _isSessionUnlocked = false;
-      // Failed attempt
-      int failed = (p.getInt(_prefFailedAttempts) ?? 0) + 1;
+      final failedStr = await _secureStore.read(_prefFailedAttempts);
+      int failed = (int.tryParse(failedStr ?? '') ?? 0) + 1;
       if (failed >= maxFailedAttempts) {
         final lockoutUntil = DateTime.now().add(
           const Duration(seconds: lockoutDurationSeconds),
         );
-        await p.setInt(
-          _prefLockoutUntilEpoch,
-          lockoutUntil.millisecondsSinceEpoch,
-        );
-        await p.setInt(
-          _prefFailedAttempts,
-          0,
-        ); // reset counter after triggering lockout
+        final epoch = lockoutUntil.millisecondsSinceEpoch;
+        await _secureStore.write(_prefLockoutUntilEpoch, epoch.toString());
+        await _secureStore.write(_prefFailedAttempts, '0');
+        _lockoutUntilEpochCached = epoch;
         return const PinVerificationResult(
           success: false,
           isLockedOut: true,
@@ -320,12 +489,31 @@ class AppLockService {
           remainingAttempts: 0,
         );
       } else {
-        await p.setInt(_prefFailedAttempts, failed);
+        await _secureStore.write(_prefFailedAttempts, failed.toString());
         return PinVerificationResult(
           success: false,
           remainingAttempts: maxFailedAttempts - failed,
         );
       }
+    }
+  }
+
+  @visibleForTesting
+  Future<String?> debugReadStoredPinHash() => _secureStore.read(_prefPinHash);
+
+  @visibleForTesting
+  Future<void> debugOverrideSecretStateForTest({
+    String? pinHash,
+    bool clearLockout = false,
+  }) async {
+    if (pinHash != null) {
+      await _secureStore.write(_prefPinHash, pinHash);
+      _hasPinCached = pinHash.isNotEmpty;
+    }
+    if (clearLockout) {
+      await _secureStore.delete(_prefLockoutUntilEpoch);
+      await _secureStore.write(_prefFailedAttempts, '0');
+      _lockoutUntilEpochCached = null;
     }
   }
 
@@ -369,9 +557,9 @@ class AppLockService {
       );
       if (authenticated) {
         _isSessionUnlocked = true;
-        final p = await prefs;
-        await p.setInt(_prefFailedAttempts, 0);
-        await p.remove(_prefLockoutUntilEpoch);
+        await _secureStore.write(_prefFailedAttempts, '0');
+        await _secureStore.delete(_prefLockoutUntilEpoch);
+        _lockoutUntilEpochCached = null;
       }
       return authenticated;
     } on PlatformException catch (e) {

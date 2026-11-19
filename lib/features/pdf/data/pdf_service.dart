@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -119,6 +120,27 @@ Uint8List _stitchIdCardWorker(List<Uint8List> cardBytes) {
 
 /// PDF generator using pure Dart 'pdf' engine according to blueprint section 4.4
 class PdfService {
+  static pw.Font? _cachedUnicodeFont;
+
+  static Future<pw.Font?> _loadUnicodeFont() async {
+    if (_cachedUnicodeFont != null) return _cachedUnicodeFont;
+    try {
+      final data = await rootBundle.load('assets/fonts/NotoSansBengali-Regular.ttf');
+      _cachedUnicodeFont = pw.Font.ttf(data);
+      return _cachedUnicodeFont;
+    } catch (_) {
+      try {
+        final localFile = File('assets/fonts/NotoSansBengali-Regular.ttf');
+        if (await localFile.exists()) {
+          final bytes = await localFile.readAsBytes();
+          _cachedUnicodeFont = pw.Font.ttf(ByteData.sublistView(bytes));
+          return _cachedUnicodeFont;
+        }
+      } catch (_) {}
+      return null;
+    }
+  }
+
   /// Generates a validated multi-page PDF with optional Searchable PDF OCR text layer
   static Future<File> generatePdf({
     required ScannedDocument document,
@@ -135,6 +157,13 @@ class PdfService {
       author: 'Scaneliq',
       creator: 'Scaneliq Doc Scanner',
     );
+
+    final bool hasUnicodeOcr =
+        ocrBoxesByPage != null &&
+        ocrBoxesByPage.values.any(
+          (list) => list.any((b) => b.text.runes.any((r) => r > 255)),
+        );
+    final pw.Font? unicodeFont = hasUnicodeOcr ? await _loadUnicodeFont() : null;
 
     // Read all page bytes asynchronously from disk
     final List<_PageProcessingInput> inputs = [];
@@ -195,17 +224,21 @@ class PdfService {
         final scaledW = (box.width / out.width) * renderedW;
         final scaledH = (box.height / out.height) * renderedH;
 
-        // Sanitize invisible search text for standard Helvetica (Latin-1) font
-        // Normalizes Indic/Bengali digits to 0-9 and maps non-Latin chars safely
-        final sanitizedText = box.text.runes.map((r) {
-          if (r <= 255) return String.fromCharCode(r);
-          if (r >= 0x09E6 && r <= 0x09EF) {
-            return String.fromCharCode(48 + (r - 0x09E6));
-          }
-          return ' ';
-        }).join();
+        // Preserve genuine Unicode (e.g. Bengali U+0980..U+09FF) when Unicode TTF is available;
+        // otherwise safely degrade to Latin-1 Helvetica fallback so PDF synthesis never throws.
+        final bool boxHasUnicode = box.text.runes.any((r) => r > 255);
+        final pw.Font? boxFont = boxHasUnicode ? unicodeFont : null;
+        final String searchableText = (boxHasUnicode && boxFont == null)
+            ? box.text.runes.map((r) {
+                if (r <= 255) return String.fromCharCode(r);
+                if (r >= 0x09E6 && r <= 0x09EF) {
+                  return String.fromCharCode(48 + (r - 0x09E6));
+                }
+                return ' ';
+              }).join()
+            : box.text;
 
-        if (sanitizedText.trim().isEmpty) continue;
+        if (searchableText.trim().isEmpty) continue;
 
         textOverlays.add(
           pw.Positioned(
@@ -217,9 +250,10 @@ class PdfService {
               child: pw.Opacity(
                 opacity: 0.0,
                 child: pw.Text(
-                  sanitizedText,
+                  searchableText,
                   softWrap: false,
                   style: pw.TextStyle(
+                    font: boxFont,
                     fontSize: (scaledH * 0.75).clamp(4.0, 48.0),
                   ),
                 ),
@@ -311,7 +345,7 @@ class PdfService {
     return await tempFile.rename(targetPath);
   }
 
-  /// Exports an individual page as a processed JPEG file
+  /// Exports an individual page as a processed JPEG file inside a background isolate
   static Future<File> exportPageAsJpeg({
     required DocumentPage page,
     required String baseName,
@@ -323,13 +357,12 @@ class PdfService {
       throw Exception('Page source file does not exist at: $imagePath');
     }
 
-    final bytes = await file.readAsBytes();
-    final decodedImage = img.decodeImage(bytes);
-    if (decodedImage == null) {
-      throw Exception('Failed to decode image for JPEG export');
-    }
-
-    img.Image workingImage = applyEditRecipe(decodedImage, page.editRecipe);
+    final encodedJpeg =
+        await ImageProcessingService.processImageFileToBytesInIsolate(
+          file,
+          page.editRecipe,
+          quality: 90,
+        );
 
     final sanitized = baseName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final targetPath =
@@ -337,10 +370,7 @@ class PdfService {
     final tempPath = '$targetPath.tmp';
 
     final tempFile = File(tempPath);
-    await tempFile.writeAsBytes(
-      img.encodeJpg(workingImage, quality: 90),
-      flush: true,
-    );
+    await tempFile.writeAsBytes(encodedJpeg, flush: true);
 
     return await tempFile.rename(targetPath);
   }

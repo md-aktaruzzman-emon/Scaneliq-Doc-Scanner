@@ -34,8 +34,13 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
   bool _isAnalyzing = false;
   String? _documentText;
   DocumentSummaryResult? _summaryResult;
+  DocumentEntityExtraction? _entities;
+  DocumentExplanationResult? _explanation;
   final _questionCtrl = TextEditingController();
+  final _vaultQueryCtrl = TextEditingController();
   DocumentQaResult? _qaResult;
+  List<SemanticVaultSearchResult> _vaultHits = const [];
+  bool _isSearchingVault = false;
 
   @override
   void initState() {
@@ -50,6 +55,7 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
   @override
   void dispose() {
     _questionCtrl.dispose();
+    _vaultQueryCtrl.dispose();
     super.dispose();
   }
 
@@ -88,10 +94,27 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
     });
 
     final summary = AiDocumentService.instance.summarize(text);
+    final entities = AiDocumentService.instance.extractEntities(text);
+    final explanation = AiDocumentService.instance.explainDocument(text);
     setState(() {
       _summaryResult = summary;
+      _entities = entities;
+      _explanation = explanation;
       _isAnalyzing = false;
     });
+  }
+
+  Future<void> _searchVaultSemantically() async {
+    final q = _vaultQueryCtrl.text.trim();
+    if (q.isEmpty) return;
+    setState(() => _isSearchingVault = true);
+    final hits = await AiDocumentService.instance.semanticSearchVault(q);
+    if (mounted) {
+      setState(() {
+        _vaultHits = hits;
+        _isSearchingVault = false;
+      });
+    }
   }
 
   void _askQuestion() {
@@ -160,28 +183,80 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
               ),
             )
           else if (_summaryResult == null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 36.0),
-              child: Column(
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
                 children: [
-                  Icon(
-                    Icons.text_snippet_outlined,
-                    size: 64,
-                    color: isDark
-                        ? AppColors.textTertiaryDark
-                        : AppColors.textTertiaryLight,
+                  Center(
+                    child: Icon(
+                      Icons.text_snippet_outlined,
+                      size: 56,
+                      color: isDark
+                          ? AppColors.textTertiaryDark
+                          : AppColors.textTertiaryLight,
+                    ),
                   ),
                   const SizedBox(height: 12),
+                  const Center(
+                    child: Text(
+                      'Select a document image or search your vault with AI',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Center(
+                    child: ElevatedButton.icon(
+                      onPressed: _pickImage,
+                      icon: const Icon(Icons.photo_library),
+                      label: const Text('Analyze Document Image'),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(),
+                  const SizedBox(height: 8),
                   const Text(
-                    'Select a document image to generate an AI summary',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                    'Semantic Vault Search (En & বাংলা)',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
-                  const SizedBox(height: 18),
-                  ElevatedButton.icon(
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('Pick Document Image'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _vaultQueryCtrl,
+                          decoration: const InputDecoration(
+                            hintText: 'e.g. tax invoice, রশিদ, contract date...',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onSubmitted: (_) => _searchVaultSemantically(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        onPressed: _isSearchingVault ? null : _searchVaultSemantically,
+                        icon: const Icon(Icons.manage_search_rounded),
+                      ),
+                    ],
                   ),
+                  if (_isSearchingVault)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  for (final hit in _vaultHits)
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                      title: Text(hit.document.title),
+                      subtitle: Text(
+                        hit.matchedExcerpt,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Text('${(hit.relevanceScore * 100).round()}%'),
+                    ),
                 ],
               ),
             )
@@ -189,6 +264,73 @@ class _AiDocumentSheetState extends State<AiDocumentSheet> {
             Expanded(
               child: ListView(
                 children: [
+                  if (_explanation != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.brandPrimary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.brandPrimary.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _explanation!.documentCategory,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.brandPrimary,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _explanation!.plainExplanation,
+                            style: const TextStyle(fontSize: 13, height: 1.4),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  if (_entities != null && !_entities!.isEmpty) ...[
+                    const Text(
+                      'Extracted Dates, Amounts & Entities',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final d in _entities!.dates)
+                          Chip(
+                            avatar: const Icon(Icons.event_outlined, size: 14),
+                            label: Text(d, style: const TextStyle(fontSize: 11)),
+                          ),
+                        for (final a in _entities!.amounts)
+                          Chip(
+                            avatar: const Icon(Icons.payments_outlined, size: 14),
+                            label: Text(a, style: const TextStyle(fontSize: 11)),
+                          ),
+                        for (final o in _entities!.namesAndOrganizations)
+                          Chip(
+                            avatar: const Icon(Icons.business_outlined, size: 14),
+                            label: Text(o, style: const TextStyle(fontSize: 11)),
+                          ),
+                        for (final id in _entities!.identifiers)
+                          Chip(
+                            avatar: const Icon(Icons.tag_outlined, size: 14),
+                            label: Text(id, style: const TextStyle(fontSize: 11)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
                   // Topic Chips & Stats
                   Wrap(
                     spacing: 6,

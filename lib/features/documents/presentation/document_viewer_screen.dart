@@ -495,6 +495,43 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
       showScaneliqToast(context, 'No image pages available for OCR.');
       return;
     }
+
+    final chosenScript = await showScaneliqBottomSheet<OcrScript>(
+      context: context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('OCR Recognition Script', style: Theme.of(ctx).textTheme.headlineMedium),
+          const SizedBox(height: 10),
+          ScaneliqContextMenuRow(
+            icon: Icons.language_rounded,
+            title: 'English / Latin',
+            subtitle: 'ML Kit on-device recognizer',
+            onTap: () => Navigator.pop(ctx, OcrScript.latin),
+          ),
+          ScaneliqContextMenuRow(
+            icon: Icons.translate_rounded,
+            title: 'Bengali (বাংলা)',
+            subtitle: 'Tesseract offline Bengali engine',
+            onTap: () => Navigator.pop(ctx, OcrScript.bengali),
+          ),
+          ScaneliqContextMenuRow(
+            icon: Icons.auto_awesome_outlined,
+            title: 'Mixed বাংলা + English',
+            subtitle: 'Dual-script Tesseract offline recognizer',
+            onTap: () => Navigator.pop(ctx, OcrScript.mixedBengaliEnglish),
+          ),
+          ScaneliqContextMenuRow(
+            icon: Icons.font_download_outlined,
+            title: 'Devanagari (Hindi / Nepali)',
+            onTap: () => Navigator.pop(ctx, OcrScript.devanagari),
+          ),
+        ],
+      ),
+    );
+    if (chosenScript == null || !mounted) return;
+
     setState(() => _isExtractingText = true);
     try {
       final buffer = StringBuffer();
@@ -502,7 +539,10 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
         final page = _activeDoc.pages[i];
         final f = File(page.processedPath ?? page.originalPath);
         if (await f.exists()) {
-          final txt = await OcrService.instance.extractText(f);
+          final txt = await OcrService.instance.extractText(
+            f,
+            script: chosenScript,
+          );
           if (txt.trim().isNotEmpty) {
             buffer.writeln('--- Page ${i + 1} ---');
             buffer.writeln(txt.trim());
@@ -1454,7 +1494,7 @@ class _DocumentViewerScreenState extends State<DocumentViewerScreen> {
               maxScale: 4.0,
               child: Center(
                 child: f.existsSync()
-                    ? Image.file(f, fit: BoxFit.contain)
+                    ? Image.file(f, fit: BoxFit.contain, cacheWidth: 1600)
                     : Icon(Icons.broken_image_outlined, color: tokens.textTertiary, size: 42),
               ),
             );

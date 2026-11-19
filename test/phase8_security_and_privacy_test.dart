@@ -116,15 +116,35 @@ void main() {
       await prefs.setString('app_lock_pin_salt', testSalt);
       await prefs.remove('app_lock_lockout_until_epoch');
       await prefs.setInt('app_lock_failed_attempts', 0);
+      await lockService.debugOverrideSecretStateForTest(clearLockout: true);
 
-      // Verify legacy PIN succeeds
+      // Verify legacy PIN succeeds and seamlessly migrates to KeyStore
       final legacyVerify = await lockService.verifyPin('9876');
       expect(legacyVerify.success, isTrue);
 
-      // Confirm stored hash was transparently upgraded to hardened iterative hash
-      final upgradedHash = prefs.getString('app_lock_pin_hash');
+      // Confirm plaintext secret was removed from SharedPreferences and upgraded in KeyStore
+      expect(prefs.getString('app_lock_pin_hash'), isNull);
+      expect(prefs.getString('app_lock_pin_salt'), isNull);
+      final upgradedHash = await lockService.debugReadStoredPinHash();
       expect(upgradedHash, isNotNull);
+      expect(upgradedHash, startsWith('v3:100000:'));
       expect(upgradedHash != legacyHash, isTrue);
+    });
+
+    test('Cold-start AppLock init enforces unlock immediately before Settings is opened', () async {
+      final sharedStore = InMemorySecureKeyStore();
+      final prefs = await SharedPreferences.getInstance();
+      final lockService = AppLockService.instance;
+      await lockService.init(prefs, sharedStore);
+      await lockService.setPin('1357');
+      expect(lockService.isSessionUnlocked, isTrue);
+
+      // Simulate cold process restart: new AppLockService session state initialized from storage
+      lockService.markSessionLocked();
+      await lockService.init(prefs, sharedStore);
+      expect(lockService.isAppLockEnabled, isTrue);
+      expect(lockService.hasPinSet, isTrue);
+      expect(lockService.shouldRequireUnlockOnResume(), isTrue);
     });
 
     test(

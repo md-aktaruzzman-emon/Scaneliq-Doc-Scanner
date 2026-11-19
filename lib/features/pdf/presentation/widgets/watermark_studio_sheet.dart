@@ -473,7 +473,13 @@ class _WatermarkStudioPanelState extends State<WatermarkStudioPanel> {
           child: Opacity(
             opacity: _opacity,
             child: _imageFile != null && _imageFile!.existsSync()
-                ? Image.file(_imageFile!, width: 72, height: 72, fit: BoxFit.contain)
+                ? Image.file(
+                    _imageFile!,
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.contain,
+                    cacheWidth: 200,
+                  )
                 : Text(
                     _textController.text.trim().isEmpty
                         ? 'CONFIDENTIAL'

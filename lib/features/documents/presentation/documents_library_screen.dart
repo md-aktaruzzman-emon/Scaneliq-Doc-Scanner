@@ -397,7 +397,7 @@ class _DocumentsLibraryScreenState
   // ===========================================================================
 
   Future<void> _showMoveFolderSheet(List<String> docIds) async {
-    final allFolders = await AppDatabaseService.instance.getFolders();
+    final folderTree = await AppDatabaseService.instance.getFolderHierarchy();
 
     if (!mounted) return;
     showScaneliqBottomSheet<void>(
@@ -429,18 +429,20 @@ class _DocumentsLibraryScreenState
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  for (final f in allFolders)
+                  for (final entry in folderTree)
                     ScaneliqContextMenuRow(
-                      icon: Icons.folder_outlined,
-                      title: f.name,
+                      icon: entry.depth > 0
+                          ? Icons.subdirectory_arrow_right_rounded
+                          : Icons.folder_outlined,
+                      title: entry.breadcrumbPath,
                       trailing: ScaneliqStatusLabel(
-                        text: '${f.documentCount} FILES',
+                        text: '${entry.folder.documentCount} FILES',
                       ),
                       onTap: () async {
                         Navigator.pop(ctx);
                         await AppDatabaseService.instance.moveDocumentsToFolder(
                           docIds,
-                          f.id,
+                          entry.folder.id,
                         );
                         _exitSelectionMode();
                         _invalidateAll();
@@ -882,6 +884,21 @@ class _DocumentsLibraryScreenState
             },
           ),
           ScaneliqContextMenuRow(
+            icon: Icons.copy_all_outlined,
+            title: 'Duplicate Document',
+            subtitle: 'Create an independent copy in this folder',
+            onTap: () async {
+              Navigator.pop(ctx);
+              final copy = await AppDatabaseService.instance.duplicateDocument(
+                doc.id,
+              );
+              _invalidateAll();
+              if (mounted && copy != null) {
+                showScaneliqToast(context, 'Duplicated "${copy.title}"');
+              }
+            },
+          ),
+          ScaneliqContextMenuRow(
             icon: Icons.drive_file_move_outline,
             title: 'Move to Folder',
             onTap: () {
@@ -927,6 +944,13 @@ class _DocumentsLibraryScreenState
           (doc.exportPath == null ||
               !doc.exportPath!.toLowerCase().endsWith('.pdf'))) {
         return false;
+      }
+      if (_selectedCategory == FileCategoryFilter.images) {
+        final hasPdf =
+            doc.exportPath != null &&
+            doc.exportPath!.toLowerCase().endsWith('.pdf');
+        if (hasPdf && doc.pages.isEmpty) return false;
+        if (hasPdf) return false;
       }
       if (_selectedTagIds.isNotEmpty) {
         final docTagIds = doc.tags.map((t) => t.id).toSet();
@@ -979,7 +1003,7 @@ class _DocumentsLibraryScreenState
       FileCategoryFilter.all => 0,
       FileCategoryFilter.favorites => 1,
       FileCategoryFilter.pdfs => 2,
-      FileCategoryFilter.images => 0,
+      FileCategoryFilter.images => 3,
     };
 
     return Scaffold(
@@ -1051,7 +1075,8 @@ class _DocumentsLibraryScreenState
                             items: const [
                               ScaneliqScopeItem(label: 'All'),
                               ScaneliqScopeItem(label: 'Starred'),
-                              ScaneliqScopeItem(label: 'PDFs Only'),
+                              ScaneliqScopeItem(label: 'PDFs'),
+                              ScaneliqScopeItem(label: 'Images'),
                             ],
                             selectedIndex: scopeIndex,
                             onSelected: (index) {
@@ -1059,6 +1084,7 @@ class _DocumentsLibraryScreenState
                                 _selectedCategory = switch (index) {
                                   1 => FileCategoryFilter.favorites,
                                   2 => FileCategoryFilter.pdfs,
+                                  3 => FileCategoryFilter.images,
                                   _ => FileCategoryFilter.all,
                                 };
                               });

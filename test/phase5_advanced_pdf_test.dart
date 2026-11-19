@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -673,5 +674,60 @@ void main() {
         );
       },
     );
+  });
+
+  group('Stage 5 — Flatten Redaction & External PDF-to-Images', () {
+    test('flattenAndRedactPdf permanently strips vector text streams and zeroes pixels', () async {
+      final vectorDoc = sf.PdfDocument();
+      final page = vectorDoc.pages.add();
+      page.graphics.drawString(
+        'TOP_SECRET_ACCOUNT_123456',
+        sf.PdfStandardFont(sf.PdfFontFamily.helvetica, 14),
+        bounds: const Rect.fromLTWH(40, 40, 300, 30),
+      );
+      final vectorFile = File('${tempDir.path}/vector_sensitive.pdf');
+      await vectorFile.writeAsBytes(vectorDoc.saveSync());
+      vectorDoc.dispose();
+
+      // Confirm source has extractable vector text first
+      final beforeText = await AdvancedPdfService.instance.extractTextByPage(
+        vectorFile,
+      );
+      expect(beforeText[1], contains('TOP_SECRET_ACCOUNT_123456'));
+
+      // Provide deterministic synthetic white bitmap representing rasterized page
+      final whitePage = img.Image(width: 595, height: 842);
+      img.fill(whitePage, color: img.ColorRgb8(255, 255, 255));
+      final pageJpg = Uint8List.fromList(img.encodeJpg(whitePage, quality: 90));
+
+      final flattened = await AdvancedPdfService.instance.flattenAndRedactPdf(
+        sourcePdf: vectorFile,
+        redactions: [
+          const PdfRedactionArea(
+            pageIndex: 0,
+            x: 35,
+            y: 35,
+            width: 310,
+            height: 40,
+          ),
+        ],
+        outputFileName: 'flattened_redacted_test',
+        pageRasterizerOverride: (_) async => [pageJpg],
+      );
+
+      expect(flattened.existsSync(), isTrue);
+      final afterText = await AdvancedPdfService.instance.extractTextByPage(
+        flattened,
+      );
+      expect(afterText[1]?.trim() ?? '', isEmpty);
+
+      final exported = await AdvancedPdfService.instance.exportPdfToImages(
+        sourcePdf: flattened,
+        baseOutputName: 'exported_flat_pages',
+        pageRasterizerOverride: (_) async => [pageJpg],
+      );
+      expect(exported.length, 1);
+      expect(exported.first.existsSync(), isTrue);
+    });
   });
 }

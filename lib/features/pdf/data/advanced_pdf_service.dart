@@ -1,8 +1,12 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:image/image.dart' as img;
+import 'package:pdfrx/pdfrx.dart' as pdfrx;
+import 'package:scaneliq/core/image_processing/image_processing_service.dart';
 import 'package:scaneliq/core/models/document_models.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/features/pdf/data/pdf_service.dart';
@@ -394,34 +398,39 @@ class AdvancedPdfService {
       throw ArgumentError('New page order cannot be empty.');
     }
 
-    final bytes = await sourcePdf.readAsBytes();
-    final sourceDoc = sf.PdfDocument(inputBytes: bytes);
-    final finalDoc = sf.PdfDocument();
+    final targetPath = _resolveExportPath(outputFileName);
+    final srcPath = sourcePdf.path;
+    final orderCopy = List<int>.from(newPageOrder1Indexed);
 
-    try {
-      final totalPages = sourceDoc.pages.count;
-      for (final pNum in newPageOrder1Indexed) {
-        if (pNum < 1 || pNum > totalPages) {
-          throw RangeError(
-            'Page number $pNum is out of bounds (1..$totalPages).',
+    await Isolate.run(() {
+      final bytes = File(srcPath).readAsBytesSync();
+      final sourceDoc = sf.PdfDocument(inputBytes: bytes);
+      final finalDoc = sf.PdfDocument();
+      try {
+        final totalPages = sourceDoc.pages.count;
+        for (final pNum in orderCopy) {
+          if (pNum < 1 || pNum > totalPages) {
+            throw RangeError(
+              'Page number $pNum is out of bounds (1..$totalPages).',
+            );
+          }
+          final page = sourceDoc.pages[pNum - 1];
+          final template = page.createTemplate();
+          final newPage = finalDoc.pages.add();
+          newPage.rotation = page.rotation;
+          newPage.graphics.drawPdfTemplate(
+            template,
+            const Offset(0, 0),
+            newPage.size,
           );
         }
-        final page = sourceDoc.pages[pNum - 1];
-        final template = page.createTemplate();
-        final newPage = finalDoc.pages.add();
-        newPage.rotation = page.rotation;
-        newPage.graphics.drawPdfTemplate(
-          template,
-          const Offset(0, 0),
-          newPage.size,
-        );
+        _writePdfSyncAtomically(finalDoc.saveSync(), targetPath);
+      } finally {
+        finalDoc.dispose();
+        sourceDoc.dispose();
       }
-
-      return await _saveDocumentSafely(finalDoc, outputFileName);
-    } finally {
-      finalDoc.dispose();
-      sourceDoc.dispose();
-    }
+    });
+    return File(targetPath);
   }
 
   /// Rotates specific pages in an existing PDF by given angles in degrees.
@@ -437,53 +446,54 @@ class AdvancedPdfService {
       );
     }
 
-    final bytes = await sourcePdf.readAsBytes();
-    final sourceDoc = sf.PdfDocument(inputBytes: bytes);
+    final targetPath = _resolveExportPath(outputFileName);
+    final srcPath = sourcePdf.path;
+    final rotCopy = Map<int, int>.from(pageRotationsDegrees);
 
-    try {
-      final count = sourceDoc.pages.count;
-      for (int i = 0; i < count; i++) {
-        final pageNum = i + 1;
-        final sourcePage = sourceDoc.pages[i];
-
-        // Calculate combined rotation
-        int baseAngle = 0;
-        switch (sourcePage.rotation) {
-          case sf.PdfPageRotateAngle.rotateAngle90:
-            baseAngle = 90;
-            break;
-          case sf.PdfPageRotateAngle.rotateAngle180:
-            baseAngle = 180;
-            break;
-          case sf.PdfPageRotateAngle.rotateAngle270:
-            baseAngle = 270;
-            break;
-          default:
-            baseAngle = 0;
+    await Isolate.run(() {
+      final bytes = File(srcPath).readAsBytesSync();
+      final sourceDoc = sf.PdfDocument(inputBytes: bytes);
+      try {
+        final count = sourceDoc.pages.count;
+        for (int i = 0; i < count; i++) {
+          final pageNum = i + 1;
+          final sourcePage = sourceDoc.pages[i];
+          int baseAngle = 0;
+          switch (sourcePage.rotation) {
+            case sf.PdfPageRotateAngle.rotateAngle90:
+              baseAngle = 90;
+              break;
+            case sf.PdfPageRotateAngle.rotateAngle180:
+              baseAngle = 180;
+              break;
+            case sf.PdfPageRotateAngle.rotateAngle270:
+              baseAngle = 270;
+              break;
+            default:
+              baseAngle = 0;
+          }
+          final addAngle = rotCopy[pageNum] ?? 0;
+          final netAngle = (baseAngle + addAngle) % 360;
+          switch (netAngle) {
+            case 90:
+              sourcePage.rotation = sf.PdfPageRotateAngle.rotateAngle90;
+              break;
+            case 180:
+              sourcePage.rotation = sf.PdfPageRotateAngle.rotateAngle180;
+              break;
+            case 270:
+              sourcePage.rotation = sf.PdfPageRotateAngle.rotateAngle270;
+              break;
+            default:
+              sourcePage.rotation = sf.PdfPageRotateAngle.rotateAngle0;
+          }
         }
-
-        final addAngle = pageRotationsDegrees[pageNum] ?? 0;
-        final netAngle = (baseAngle + addAngle) % 360;
-
-        switch (netAngle) {
-          case 90:
-            sourcePage.rotation = sf.PdfPageRotateAngle.rotateAngle90;
-            break;
-          case 180:
-            sourcePage.rotation = sf.PdfPageRotateAngle.rotateAngle180;
-            break;
-          case 270:
-            sourcePage.rotation = sf.PdfPageRotateAngle.rotateAngle270;
-            break;
-          default:
-            sourcePage.rotation = sf.PdfPageRotateAngle.rotateAngle0;
-        }
+        _writePdfSyncAtomically(sourceDoc.saveSync(), targetPath);
+      } finally {
+        sourceDoc.dispose();
       }
-
-      return await _saveDocumentSafely(sourceDoc, outputFileName);
-    } finally {
-      sourceDoc.dispose();
-    }
+    });
+    return File(targetPath);
   }
 
   /// Deletes specified 1-indexed pages from an existing PDF.
@@ -699,7 +709,7 @@ class AdvancedPdfService {
   // 3. MERGE & SPLIT
   // ---------------------------------------------------------------------------
 
-  /// Merges multiple existing PDF files into a single consolidated PDF file.
+  /// Merges multiple existing PDF files into a single consolidated PDF file in a background isolate.
   Future<File> mergePdfs({
     required List<File> sourcePdfs,
     required String outputFileName,
@@ -707,43 +717,49 @@ class AdvancedPdfService {
     if (sourcePdfs.length < 2) {
       throw ArgumentError('At least 2 PDF files are required for merging.');
     }
-
-    final finalDoc = sf.PdfDocument();
-
-    try {
-      for (final file in sourcePdfs) {
-        if (!await file.exists()) {
-          throw FileNotFoundException(
-            'Source PDF file does not exist: ${file.path}',
-          );
-        }
-        final bytes = await file.readAsBytes();
-        final sourceDoc = sf.PdfDocument(inputBytes: bytes);
-        try {
-          final count = sourceDoc.pages.count;
-          for (int i = 0; i < count; i++) {
-            final page = sourceDoc.pages[i];
-            final template = page.createTemplate();
-            final newPage = finalDoc.pages.add();
-            newPage.rotation = page.rotation;
-            newPage.graphics.drawPdfTemplate(
-              template,
-              const Offset(0, 0),
-              newPage.size,
-            );
-          }
-        } finally {
-          sourceDoc.dispose();
-        }
+    final paths = <String>[];
+    for (final file in sourcePdfs) {
+      if (!await file.exists()) {
+        throw FileNotFoundException(
+          'Source PDF file does not exist: ${file.path}',
+        );
       }
-
-      return await _saveDocumentSafely(finalDoc, outputFileName);
-    } finally {
-      finalDoc.dispose();
+      paths.add(file.path);
     }
+
+    final targetPath = _resolveExportPath(outputFileName);
+    await Isolate.run(() {
+      final finalDoc = sf.PdfDocument();
+      try {
+        for (final path in paths) {
+          final bytes = File(path).readAsBytesSync();
+          final sourceDoc = sf.PdfDocument(inputBytes: bytes);
+          try {
+            final count = sourceDoc.pages.count;
+            for (int i = 0; i < count; i++) {
+              final page = sourceDoc.pages[i];
+              final template = page.createTemplate();
+              final newPage = finalDoc.pages.add();
+              newPage.rotation = page.rotation;
+              newPage.graphics.drawPdfTemplate(
+                template,
+                const Offset(0, 0),
+                newPage.size,
+              );
+            }
+          } finally {
+            sourceDoc.dispose();
+          }
+        }
+        _writePdfSyncAtomically(finalDoc.saveSync(), targetPath);
+      } finally {
+        finalDoc.dispose();
+      }
+    });
+    return File(targetPath);
   }
 
-  /// Splits an existing PDF into individual single-page PDF files.
+  /// Splits an existing PDF into individual single-page PDF files in a background isolate.
   Future<List<File>> splitPdfIntoPages({
     required File sourcePdf,
     required String baseOutputName,
@@ -754,36 +770,40 @@ class AdvancedPdfService {
       );
     }
 
-    final bytes = await sourcePdf.readAsBytes();
-    final sourceDoc = sf.PdfDocument(inputBytes: bytes);
-    final generatedFiles = <File>[];
+    final totalCount = await getPageCount(sourcePdf);
+    final srcPath = sourcePdf.path;
+    final targetPaths = [
+      for (int i = 0; i < totalCount; i++)
+        _resolveExportPath('${baseOutputName}_page_${i + 1}'),
+    ];
 
-    try {
-      final count = sourceDoc.pages.count;
-      for (int i = 0; i < count; i++) {
-        final singleDoc = sf.PdfDocument();
-        try {
-          final page = sourceDoc.pages[i];
-          final template = page.createTemplate();
-          final newPage = singleDoc.pages.add();
-          newPage.rotation = page.rotation;
-          newPage.graphics.drawPdfTemplate(
-            template,
-            const Offset(0, 0),
-            newPage.size,
-          );
-
-          final outName = '${baseOutputName}_page_${i + 1}';
-          final saved = await _saveDocumentSafely(singleDoc, outName);
-          generatedFiles.add(saved);
-        } finally {
-          singleDoc.dispose();
+    await Isolate.run(() {
+      final bytes = File(srcPath).readAsBytesSync();
+      final sourceDoc = sf.PdfDocument(inputBytes: bytes);
+      try {
+        final count = sourceDoc.pages.count;
+        for (int i = 0; i < count; i++) {
+          final singleDoc = sf.PdfDocument();
+          try {
+            final page = sourceDoc.pages[i];
+            final template = page.createTemplate();
+            final newPage = singleDoc.pages.add();
+            newPage.rotation = page.rotation;
+            newPage.graphics.drawPdfTemplate(
+              template,
+              const Offset(0, 0),
+              newPage.size,
+            );
+            _writePdfSyncAtomically(singleDoc.saveSync(), targetPaths[i]);
+          } finally {
+            singleDoc.dispose();
+          }
         }
+      } finally {
+        sourceDoc.dispose();
       }
-      return generatedFiles;
-    } finally {
-      sourceDoc.dispose();
-    }
+    });
+    return targetPaths.map((p) => File(p)).toList();
   }
 
   /// Splits a PDF by specified 1-indexed page ranges.
@@ -839,7 +859,6 @@ class AdvancedPdfService {
     final originalSizeBytes = await sourcePdf.length();
     File compressedFile;
 
-    // Route 1: Scaneliq native document with original images
     if (associatedDocument != null && associatedDocument.pages.isNotEmpty) {
       int targetQuality = 85;
       switch (preset) {
@@ -854,39 +873,39 @@ class AdvancedPdfService {
           break;
       }
 
-      // Read pages, decode, re-encode with target quality into a new PDF
       compressedFile = await _compressDocumentPages(
         associatedDocument: associatedDocument,
         quality: targetQuality,
         outputFileName: outputFileName,
       );
     } else {
-      // Route 2: Arbitrary external PDF
-      final bytes = await sourcePdf.readAsBytes();
-      final sourceDoc = sf.PdfDocument(inputBytes: bytes);
-      final finalDoc = sf.PdfDocument();
-      // Set compression level
-      finalDoc.compressionLevel = sf.PdfCompressionLevel.best;
-
-      try {
-        final count = sourceDoc.pages.count;
-        for (int i = 0; i < count; i++) {
-          final page = sourceDoc.pages[i];
-          final template = page.createTemplate();
-          final newPage = finalDoc.pages.add();
-          newPage.rotation = page.rotation;
-          newPage.graphics.drawPdfTemplate(
-            template,
-            const Offset(0, 0),
-            newPage.size,
-          );
+      final targetPath = _resolveExportPath(outputFileName);
+      final srcPath = sourcePdf.path;
+      await Isolate.run(() {
+        final bytes = File(srcPath).readAsBytesSync();
+        final sourceDoc = sf.PdfDocument(inputBytes: bytes);
+        final finalDoc = sf.PdfDocument();
+        finalDoc.compressionLevel = sf.PdfCompressionLevel.best;
+        try {
+          final count = sourceDoc.pages.count;
+          for (int i = 0; i < count; i++) {
+            final page = sourceDoc.pages[i];
+            final template = page.createTemplate();
+            final newPage = finalDoc.pages.add();
+            newPage.rotation = page.rotation;
+            newPage.graphics.drawPdfTemplate(
+              template,
+              const Offset(0, 0),
+              newPage.size,
+            );
+          }
+          _writePdfSyncAtomically(finalDoc.saveSync(), targetPath);
+        } finally {
+          finalDoc.dispose();
+          sourceDoc.dispose();
         }
-
-        compressedFile = await _saveDocumentSafely(finalDoc, outputFileName);
-      } finally {
-        finalDoc.dispose();
-        sourceDoc.dispose();
-      }
+      });
+      compressedFile = File(targetPath);
     }
 
     final compressedSizeBytes = await compressedFile.length();
@@ -905,63 +924,79 @@ class AdvancedPdfService {
     );
   }
 
-  /// Internal helper to compress a document's original images into an optimized PDF
+  /// Internal helper to compress a document's original images into an optimized PDF inside a background isolate
   Future<File> _compressDocumentPages({
     required ScannedDocument associatedDocument,
     required int quality,
     required String outputFileName,
   }) async {
-    final finalDoc = sf.PdfDocument();
-    finalDoc.compressionLevel = sf.PdfCompressionLevel.best;
+    final targetPath = _resolveExportPath(outputFileName);
+    final pageJobs = <Map<String, Object?>>[
+      for (final p in associatedDocument.pages)
+        {
+          'path': p.processedPath ?? p.originalPath,
+          'recipe': p.editRecipe.toMap(),
+        },
+    ];
 
-    try {
-      for (final page in associatedDocument.pages) {
-        final imagePath = page.processedPath ?? page.originalPath;
-        final imgFile = File(imagePath);
-        if (!await imgFile.exists()) continue;
+    await Isolate.run(() {
+      final finalDoc = sf.PdfDocument();
+      finalDoc.compressionLevel = sf.PdfCompressionLevel.best;
 
-        final rawBytes = await imgFile.readAsBytes();
-        final decoded = img.decodeImage(rawBytes);
-        if (decoded == null) continue;
+      try {
+        for (final job in pageJobs) {
+          final imagePath = job['path'] as String;
+          final imgFile = File(imagePath);
+          if (!imgFile.existsSync()) continue;
 
-        // Apply page recipe filters if present
-        final processed = PdfService.applyEditRecipe(decoded, page.editRecipe);
+          final rawBytes = imgFile.readAsBytesSync();
+          final decoded = img.decodeImage(rawBytes);
+          if (decoded == null) continue;
 
-        // Downscale slightly for smallerFile preset
-        img.Image readyImg = processed;
-        if (quality <= 50 &&
-            (processed.width > 1200 || processed.height > 1600)) {
-          readyImg = img.copyResize(
-            processed,
-            width: (processed.width * 0.75).round(),
-            height: (processed.height * 0.75).round(),
-            interpolation: img.Interpolation.linear,
+          final recipe = EditRecipe.fromMap(
+            Map<String, dynamic>.from(job['recipe'] as Map),
+          );
+          final processed = PdfService.applyEditRecipe(decoded, recipe);
+
+          img.Image readyImg = processed;
+          if (quality <= 50 &&
+              (processed.width > 1200 || processed.height > 1600)) {
+            readyImg = img.copyResize(
+              processed,
+              width: (processed.width * 0.75).round(),
+              height: (processed.height * 0.75).round(),
+              interpolation: img.Interpolation.linear,
+            );
+          }
+
+          final compressedJpg = img.encodeJpg(readyImg, quality: quality);
+          final bitmap = sf.PdfBitmap(compressedJpg);
+
+          const a4Width = 595.0;
+          const a4Height = 842.0;
+          final newPage = finalDoc.pages.add();
+
+          final aspect = bitmap.width / bitmap.height;
+          double drawW = a4Width;
+          double drawH = drawW / aspect;
+          if (drawH > a4Height) {
+            drawH = a4Height;
+            drawW = drawH * aspect;
+          }
+          final dx = (a4Width - drawW) / 2;
+          final dy = (a4Height - drawH) / 2;
+          newPage.graphics.drawImage(
+            bitmap,
+            Rect.fromLTWH(dx, dy, drawW, drawH),
           );
         }
 
-        final compressedJpg = img.encodeJpg(readyImg, quality: quality);
-        final bitmap = sf.PdfBitmap(compressedJpg);
-
-        const a4Width = 595.0;
-        const a4Height = 842.0;
-        final newPage = finalDoc.pages.add();
-
-        final aspect = bitmap.width / bitmap.height;
-        double drawW = a4Width;
-        double drawH = drawW / aspect;
-        if (drawH > a4Height) {
-          drawH = a4Height;
-          drawW = drawH * aspect;
-        }
-        final dx = (a4Width - drawW) / 2;
-        final dy = (a4Height - drawH) / 2;
-        newPage.graphics.drawImage(bitmap, Rect.fromLTWH(dx, dy, drawW, drawH));
+        _writePdfSyncAtomically(finalDoc.saveSync(), targetPath);
+      } finally {
+        finalDoc.dispose();
       }
-
-      return await _saveDocumentSafely(finalDoc, outputFileName);
-    } finally {
-      finalDoc.dispose();
-    }
+    });
+    return File(targetPath);
   }
 
   // ---------------------------------------------------------------------------
@@ -1208,7 +1243,7 @@ class AdvancedPdfService {
   // 7. PASSWORD PROTECTION & ENCRYPTION
   // ---------------------------------------------------------------------------
 
-  /// Protects a PDF with standard AES-256 bit password encryption.
+  /// Protects a PDF with standard AES-256 bit password encryption inside a background isolate.
   Future<File> encryptPdf({
     required File sourcePdf,
     required String userPassword,
@@ -1225,24 +1260,33 @@ class AdvancedPdfService {
       throw ArgumentError('User password cannot be empty.');
     }
 
-    final bytes = await sourcePdf.readAsBytes();
-    final sourceDoc = sf.PdfDocument(inputBytes: bytes);
+    final targetPath = _resolveExportPath(outputFileName);
+    final srcPath = sourcePdf.path;
+    final permIndices =
+        permissions?.map((p) => p.index).toList() ??
+        [
+          sf.PdfPermissionsFlags.print.index,
+          sf.PdfPermissionsFlags.copyContent.index,
+        ];
 
-    try {
-      final security = sourceDoc.security;
-      security.userPassword = userPassword;
-      security.ownerPassword = ownerPassword ?? '${userPassword}_owner';
-      security.algorithm = sf.PdfEncryptionAlgorithm.aesx256BitRevision6;
-      security.permissions.clear();
-      security.permissions.addAll(
-        permissions ??
-            [sf.PdfPermissionsFlags.print, sf.PdfPermissionsFlags.copyContent],
-      );
-
-      return await _saveDocumentSafely(sourceDoc, outputFileName);
-    } finally {
-      sourceDoc.dispose();
-    }
+    await Isolate.run(() {
+      final bytes = File(srcPath).readAsBytesSync();
+      final sourceDoc = sf.PdfDocument(inputBytes: bytes);
+      try {
+        final security = sourceDoc.security;
+        security.userPassword = userPassword;
+        security.ownerPassword = ownerPassword ?? '${userPassword}_owner';
+        security.algorithm = sf.PdfEncryptionAlgorithm.aesx256BitRevision6;
+        security.permissions.clear();
+        for (final idx in permIndices) {
+          security.permissions.add(sf.PdfPermissionsFlags.values[idx]);
+        }
+        _writePdfSyncAtomically(sourceDoc.saveSync(), targetPath);
+      } finally {
+        sourceDoc.dispose();
+      }
+    });
+    return File(targetPath);
   }
 
   /// Verifies whether a given password correctly decrypts an encrypted PDF file.
@@ -1259,7 +1303,7 @@ class AdvancedPdfService {
     }
   }
 
-  /// Removes password encryption from an authorized document.
+  /// Removes password encryption from an authorized document inside a background isolate.
   Future<File> removePassword({
     required File sourcePdf,
     required String password,
@@ -1271,29 +1315,33 @@ class AdvancedPdfService {
       );
     }
 
-    final bytes = await sourcePdf.readAsBytes();
-    final sourceDoc = sf.PdfDocument(inputBytes: bytes, password: password);
-    final finalDoc = sf.PdfDocument();
+    final targetPath = _resolveExportPath(outputFileName);
+    final srcPath = sourcePdf.path;
 
-    try {
-      final count = sourceDoc.pages.count;
-      for (int i = 0; i < count; i++) {
-        final page = sourceDoc.pages[i];
-        final template = page.createTemplate();
-        final newPage = finalDoc.pages.add();
-        newPage.rotation = page.rotation;
-        newPage.graphics.drawPdfTemplate(
-          template,
-          const Offset(0, 0),
-          newPage.size,
-        );
+    await Isolate.run(() {
+      final bytes = File(srcPath).readAsBytesSync();
+      final sourceDoc = sf.PdfDocument(inputBytes: bytes, password: password);
+      final finalDoc = sf.PdfDocument();
+      try {
+        final count = sourceDoc.pages.count;
+        for (int i = 0; i < count; i++) {
+          final page = sourceDoc.pages[i];
+          final template = page.createTemplate();
+          final newPage = finalDoc.pages.add();
+          newPage.rotation = page.rotation;
+          newPage.graphics.drawPdfTemplate(
+            template,
+            const Offset(0, 0),
+            newPage.size,
+          );
+        }
+        _writePdfSyncAtomically(finalDoc.saveSync(), targetPath);
+      } finally {
+        finalDoc.dispose();
+        sourceDoc.dispose();
       }
-
-      return await _saveDocumentSafely(finalDoc, outputFileName);
-    } finally {
-      finalDoc.dispose();
-      sourceDoc.dispose();
-    }
+    });
+    return File(targetPath);
   }
 
   // ---------------------------------------------------------------------------
@@ -1599,8 +1647,228 @@ class AdvancedPdfService {
   }
 
   // ---------------------------------------------------------------------------
+  // 8. EXTERNAL PDF-TO-IMAGES & IRREVERSIBLE FLATTEN + REDACT
+  // ---------------------------------------------------------------------------
+
+  /// Rasterizes arbitrary PDF pages into JPEG files via PDFium (`pdfrx`).
+  Future<List<File>> exportPdfToImages({
+    required File sourcePdf,
+    required String baseOutputName,
+    List<int>? pageNumbers1Indexed,
+    double scale = 2.0,
+    Future<List<Uint8List>> Function(File pdf)? pageRasterizerOverride,
+  }) async {
+    if (!await sourcePdf.exists()) {
+      throw FileNotFoundException(
+        'Source PDF does not exist: ${sourcePdf.path}',
+      );
+    }
+
+    final exportsDir = AppStorageService.instance.exportsDir;
+    await exportsDir.create(recursive: true);
+    final sanitized = baseOutputName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final generated = <File>[];
+
+    if (pageRasterizerOverride != null) {
+      final rasterPages = await pageRasterizerOverride(sourcePdf);
+      for (int i = 0; i < rasterPages.length; i++) {
+        final pageNum = i + 1;
+        if (pageNumbers1Indexed != null &&
+            !pageNumbers1Indexed.contains(pageNum)) {
+          continue;
+        }
+        final outFile = File('${exportsDir.path}/${sanitized}_page_$pageNum.jpg');
+        await outFile.writeAsBytes(rasterPages[i], flush: true);
+        generated.add(outFile);
+      }
+      return generated;
+    }
+
+    final doc = await pdfrx.PdfDocument.openFile(sourcePdf.path);
+    try {
+      for (int i = 0; i < doc.pages.length; i++) {
+        final pageNum = i + 1;
+        if (pageNumbers1Indexed != null &&
+            !pageNumbers1Indexed.contains(pageNum)) {
+          continue;
+        }
+        final page = doc.pages[i];
+        final targetW = (page.width * scale).round().clamp(100, 4096);
+        final targetH = (page.height * scale).round().clamp(100, 4096);
+        final rendered = await page.render(
+          width: targetW,
+          height: targetH,
+          backgroundColor: 0xFFFFFFFF,
+        );
+        if (rendered == null) continue;
+        try {
+          final bgraBytes = Uint8List.fromList(rendered.pixels);
+          final w = rendered.width;
+          final h = rendered.height;
+          final jpgBytes = await Isolate.run(() {
+            final im = img.Image.fromBytes(
+              width: w,
+              height: h,
+              bytes: bgraBytes.buffer,
+              numChannels: 4,
+              order: img.ChannelOrder.bgra,
+            );
+            return Uint8List.fromList(img.encodeJpg(im, quality: 90));
+          });
+          final outFile = File('${exportsDir.path}/${sanitized}_page_$pageNum.jpg');
+          await outFile.writeAsBytes(jpgBytes, flush: true);
+          generated.add(outFile);
+        } finally {
+          rendered.dispose();
+        }
+      }
+      return generated;
+    } finally {
+      await doc.dispose();
+    }
+  }
+
+  /// Irreversibly scrubs vector/text PDF content by rasterizing pages, permanently zeroing pixels
+  /// inside every matching [PdfRedactionArea], and rebuilding a flattened image-only PDF.
+  Future<File> flattenAndRedactPdf({
+    required File sourcePdf,
+    required List<PdfRedactionArea> redactions,
+    required String outputFileName,
+    ScannedDocument? associatedDocument,
+    Future<List<Uint8List>> Function(File pdf)? pageRasterizerOverride,
+  }) async {
+    if (!await sourcePdf.exists()) {
+      throw FileNotFoundException(
+        'Source PDF does not exist: ${sourcePdf.path}',
+      );
+    }
+
+    // Gather original PDF page sizes (in PDF points) so normalized boxes map accurately.
+    final pdfBytes = await sourcePdf.readAsBytes();
+    final srcDoc = sf.PdfDocument(inputBytes: pdfBytes);
+    final pageSizesPt = <List<double>>[];
+    try {
+      for (int i = 0; i < srcDoc.pages.count; i++) {
+        final sz = srcDoc.pages[i].size;
+        pageSizesPt.add([sz.width, sz.height]);
+      }
+    } finally {
+      srcDoc.dispose();
+    }
+
+    // Obtain per-page raster bytes via override, PDFium rasterizer, or original page scans.
+    List<Uint8List> pageBitmaps = [];
+    if (pageRasterizerOverride != null) {
+      pageBitmaps = await pageRasterizerOverride(sourcePdf);
+    } else {
+      try {
+        final exportedImgs = await exportPdfToImages(
+          sourcePdf: sourcePdf,
+          baseOutputName: '_flatten_tmp_${DateTime.now().millisecondsSinceEpoch}',
+        );
+        for (final f in exportedImgs) {
+          pageBitmaps.add(await f.readAsBytes());
+          try {
+            await f.delete();
+          } catch (_) {}
+        }
+      } catch (_) {
+        if (associatedDocument != null && associatedDocument.pages.isNotEmpty) {
+          for (final p in associatedDocument.pages) {
+            final f = File(p.processedPath ?? p.originalPath);
+            if (await f.exists()) {
+              pageBitmaps.add(await f.readAsBytes());
+            }
+          }
+        }
+      }
+    }
+
+    if (pageBitmaps.isEmpty) {
+      throw StateError(
+        'Unable to rasterize PDF pages for irreversible flattening in this environment.',
+      );
+    }
+
+    final targetPath = _resolveExportPath(outputFileName);
+    final redactionMaps = [
+      for (final r in redactions)
+        {
+          'pageIndex': r.pageIndex,
+          'x': r.x,
+          'y': r.y,
+          'w': r.width,
+          'h': r.height,
+        },
+    ];
+
+    await Isolate.run(() {
+      final flatDoc = sf.PdfDocument();
+      try {
+        for (int i = 0; i < pageBitmaps.length; i++) {
+          final decoded = img.decodeImage(pageBitmaps[i]);
+          if (decoded == null) continue;
+          img.Image working = decoded;
+          final pageW = i < pageSizesPt.length ? pageSizesPt[i][0] : 595.0;
+          final pageH = i < pageSizesPt.length ? pageSizesPt[i][1] : 842.0;
+
+          for (final r in redactionMaps) {
+            if (r['pageIndex'] != i) continue;
+            final rx = ((r['x'] as num).toDouble() / pageW).clamp(0.0, 0.99);
+            final ry = ((r['y'] as num).toDouble() / pageH).clamp(0.0, 0.99);
+            final rw = ((r['w'] as num).toDouble() / pageW).clamp(0.01, 1.0 - rx);
+            final rh = ((r['h'] as num).toDouble() / pageH).clamp(0.01, 1.0 - ry);
+            working = ImageProcessingService.permanentlyRedactImage(
+              src: working,
+              normX: rx,
+              normY: ry,
+              normW: rw,
+              normH: rh,
+            );
+          }
+
+          final jpg = Uint8List.fromList(img.encodeJpg(working, quality: 92));
+          final bitmap = sf.PdfBitmap(jpg);
+          final newPage = flatDoc.pages.add();
+          newPage.graphics.drawImage(
+            bitmap,
+            Rect.fromLTWH(0, 0, newPage.size.width, newPage.size.height),
+          );
+        }
+        flatDoc.documentInformation.title = '';
+        flatDoc.documentInformation.author = '';
+        flatDoc.documentInformation.subject = '';
+        flatDoc.documentInformation.keywords = '';
+        flatDoc.documentInformation.producer = 'Scaneliq Flattened Redaction';
+        _writePdfSyncAtomically(flatDoc.saveSync(), targetPath);
+      } finally {
+        flatDoc.dispose();
+      }
+    });
+    return File(targetPath);
+  }
+
+  // ---------------------------------------------------------------------------
   // HELPER: SAFE COMMIT & EXPORT
   // ---------------------------------------------------------------------------
+
+  String _resolveExportPath(String outputFileName) {
+    final sanitized = outputFileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    return AppStorageService.instance.getExportPdfPath(sanitized);
+  }
+
+  static void _writePdfSyncAtomically(
+    List<int> outputBytes,
+    String exportPath,
+  ) {
+    if (outputBytes.isEmpty) {
+      throw StateError('PDF generation produced empty byte output.');
+    }
+    final tempPath = '$exportPath.tmp';
+    final tempFile = File(tempPath);
+    tempFile.writeAsBytesSync(outputBytes, flush: true);
+    tempFile.renameSync(exportPath);
+  }
 
   Future<File> _saveDocumentSafely(
     sf.PdfDocument doc,
@@ -1611,8 +1879,7 @@ class AdvancedPdfService {
       throw StateError('PDF generation produced empty byte output.');
     }
 
-    final sanitized = outputFileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final exportPath = AppStorageService.instance.getExportPdfPath(sanitized);
+    final exportPath = _resolveExportPath(outputFileName);
     final tempPath = '$exportPath.tmp';
 
     final tempFile = File(tempPath);

@@ -316,6 +316,7 @@ class ScannerStudioNotifier extends Notifier<ScannerStudioState> {
       if (_inLifecyclePause) return;
       _inLifecyclePause = true;
       _initEpoch++;
+      _isFrameProcessing = false;
       _stabilityTracker.reset();
       _previousFrame = null;
       await _backend.disposeCamera();
@@ -328,7 +329,10 @@ class ScannerStudioNotifier extends Notifier<ScannerStudioState> {
     if (appState == AppLifecycleState.resumed) {
       if (!_inLifecyclePause && state.isReady) return;
       _inLifecyclePause = false;
-      if (!_isDisposed && !state.isPermissionDenied) {
+      // Re-attempt initialization after returning from system Settings if previously permanently denied.
+      final shouldRetry =
+          state.status != CameraStudioStatus.permissionDenied;
+      if (!_isDisposed && shouldRetry) {
         await initializeCamera();
       }
     }

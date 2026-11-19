@@ -7,64 +7,112 @@ class ReceiptItem {
   final String description;
   final double amount;
   final int quantity;
+  final double? unitPrice;
 
   const ReceiptItem({
     required this.description,
     required this.amount,
     this.quantity = 1,
+    this.unitPrice,
   });
 }
 
 class ParsedReceipt {
+  final String documentKind; // 'Receipt' or 'Invoice'
   final String merchantName;
   final String date;
+  final String dueDate;
+  final String invoiceNumber;
+  final String poNumber;
+  final String vendorTaxId;
   final String currency;
   final double? subtotal;
   final double? tax;
+  final double? discount;
   final double? tip;
   final double? total;
   final List<ReceiptItem> lineItems;
   final String rawText;
 
   const ParsedReceipt({
+    this.documentKind = 'Receipt',
     this.merchantName = '',
     this.date = '',
+    this.dueDate = '',
+    this.invoiceNumber = '',
+    this.poNumber = '',
+    this.vendorTaxId = '',
     this.currency = '\$',
     this.subtotal,
     this.tax,
+    this.discount,
     this.tip,
     this.total,
     this.lineItems = const [],
     this.rawText = '',
   });
 
-  /// Validates if subtotal + tax + tip equals total within 0.05 tolerance
+  ParsedReceipt copyWith({
+    String? documentKind,
+    String? merchantName,
+    String? date,
+    String? dueDate,
+    String? invoiceNumber,
+    String? poNumber,
+    String? vendorTaxId,
+    String? currency,
+    double? subtotal,
+    double? tax,
+    double? discount,
+    double? tip,
+    double? total,
+    List<ReceiptItem>? lineItems,
+    String? rawText,
+  }) {
+    return ParsedReceipt(
+      documentKind: documentKind ?? this.documentKind,
+      merchantName: merchantName ?? this.merchantName,
+      date: date ?? this.date,
+      dueDate: dueDate ?? this.dueDate,
+      invoiceNumber: invoiceNumber ?? this.invoiceNumber,
+      poNumber: poNumber ?? this.poNumber,
+      vendorTaxId: vendorTaxId ?? this.vendorTaxId,
+      currency: currency ?? this.currency,
+      subtotal: subtotal ?? this.subtotal,
+      tax: tax ?? this.tax,
+      discount: discount ?? this.discount,
+      tip: tip ?? this.tip,
+      total: total ?? this.total,
+      lineItems: lineItems ?? this.lineItems,
+      rawText: rawText ?? this.rawText,
+    );
+  }
+
+  /// Validates if `subtotal + tax + tip - discount == total` within `0.05` tolerance.
   bool get isMathConsistent {
     if (total == null) return false;
     if (subtotal != null && tax != null) {
-      final expected = subtotal! + tax! + (tip ?? 0.0);
+      final expected = subtotal! + tax! + (tip ?? 0.0) - (discount ?? 0.0);
       return (expected - total!).abs() <= 0.05;
     }
-    return true; // Cannot disprove consistency
+    return true;
   }
 
-  /// Exports as standardized CSV format for accounting / expense software
+  /// Exports standardized accounting CSV preserving core receipt columns plus Invoice metadata.
   String toCsv() {
     final buffer = StringBuffer();
     buffer.writeln(
-      'Merchant,Date,Category,Subtotal,Tax,Tip,Total,Currency,Consistent',
+      'Merchant,Date,Subtotal,Tax,Tip,Total,Currency,Consistent,Discount,Kind,InvoiceNo,PONumber,TaxID,DueDate',
     );
-    final safeMerchant = merchantName.replaceAll(',', ' ');
-    final safeDate = date.replaceAll(',', ' ');
+    String clean(String s) => s.replaceAll(',', ' ').trim();
     buffer.writeln(
-      '$safeMerchant,$safeDate,Receipt,${subtotal?.toStringAsFixed(2) ?? ''},${tax?.toStringAsFixed(2) ?? ''},${tip?.toStringAsFixed(2) ?? ''},${total?.toStringAsFixed(2) ?? ''},$currency,$isMathConsistent',
+      '${clean(merchantName)},${clean(date)},${subtotal?.toStringAsFixed(2) ?? ''},${tax?.toStringAsFixed(2) ?? ''},${tip?.toStringAsFixed(2) ?? ''},${total?.toStringAsFixed(2) ?? ''},$currency,$isMathConsistent,${discount?.toStringAsFixed(2) ?? ''},${clean(documentKind)},${clean(invoiceNumber)},${clean(poNumber)},${clean(vendorTaxId)},${clean(dueDate)}',
     );
     if (lineItems.isNotEmpty) {
-      buffer.writeln('\nItem,Quantity,Amount');
+      buffer.writeln('\nItem,Quantity,UnitPrice,Amount');
       for (final item in lineItems) {
-        final safeDesc = item.description.replaceAll(',', ' ');
         buffer.writeln(
-          '$safeDesc,${item.quantity},${item.amount.toStringAsFixed(2)}',
+          '${clean(item.description)},${item.quantity},${item.unitPrice?.toStringAsFixed(2) ?? ''},${item.amount.toStringAsFixed(2)}',
         );
       }
     }
@@ -72,25 +120,30 @@ class ParsedReceipt {
   }
 }
 
-/// Service providing Receipt / Invoice data extraction, math verification, and CSV export (F-34).
+/// Service providing Receipt & Invoice structured field extraction (English + বাংলা),
+/// math verification, inline editing models, and CSV accounting export.
 class ReceiptParserService {
   ReceiptParserService._();
   static final ReceiptParserService instance = ReceiptParserService._();
 
   static final RegExp _currencyRegex = RegExp(
-    r'[\$€£৳₹]|(?:USD|EUR|GBP|BDT|CAD|AUD)\b',
+    r'[\$€£৳₹]|(?:USD|EUR|GBP|BDT|CAD|AUD|TK\.?|টাকা)',
     caseSensitive: false,
   );
 
   static final RegExp _dateRegex = RegExp(
-    r'\b(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4})\b',
+    r'\b(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})\b',
     caseSensitive: false,
   );
 
-  static final RegExp _amountRegex = RegExp(r'\b\d+[\.,]\d{2}\b');
-
-  Future<ParsedReceipt> extractFromImage(File imageFile) async {
-    final ocrText = await OcrService.instance.extractText(imageFile);
+  Future<ParsedReceipt> extractFromImage(
+    File imageFile, {
+    OcrScript script = OcrScript.mixedBengaliEnglish,
+  }) async {
+    final ocrText = await OcrService.instance.extractText(
+      imageFile,
+      script: script,
+    );
     return parseText(ocrText);
   }
 
@@ -99,38 +152,85 @@ class ReceiptParserService {
       return const ParsedReceipt();
     }
 
-    final lines = text
+    // Normalize Bengali numerals (`০-৯` -> `0-9`) for reliable accounting math validation
+    final normalizedText = OcrService.convertBanglaToAsciiDigits(text);
+    final lines = normalizedText
         .split('\n')
         .map((l) => l.trim())
         .where((l) => l.isNotEmpty)
         .toList();
 
+    final lowerFull = normalizedText.toLowerCase();
+    final isInvoice =
+        lowerFull.contains('invoice') ||
+        lowerFull.contains('po #') ||
+        lowerFull.contains('p.o.') ||
+        lowerFull.contains('bill to') ||
+        text.contains('ইনভয়েস');
+
     String foundMerchant = '';
     String foundDate = '';
+    String foundDueDate = '';
+    String foundInvoiceNo = '';
+    String foundPoNo = '';
+    String foundTaxId = '';
     String foundCurrency = '\$';
     double? foundSubtotal;
     double? foundTax;
+    double? foundDiscount;
     double? foundTip;
     double? foundTotal;
     final List<ReceiptItem> foundItems = [];
 
-    // Currency Detection
-    final currencyMatch = _currencyRegex.firstMatch(text);
+    final currencyMatch = _currencyRegex.firstMatch(normalizedText);
     if (currencyMatch != null) {
-      foundCurrency = currencyMatch.group(0)!;
+      final token = currencyMatch.group(0)!;
+      foundCurrency = (token == 'টাকা' || token.toUpperCase().startsWith('TK'))
+          ? '৳'
+          : token;
     }
 
-    // Date Detection
-    final dateMatch = _dateRegex.firstMatch(text);
-    if (dateMatch != null) {
-      foundDate = dateMatch.group(0)!;
+    final invMatch = RegExp(
+      r'(?:invoice|inv)\s*(?:no\.?|number|#|:)?\s*[:#\-]?\s*([A-Z0-9][A-Z0-9\-/]{2,})',
+      caseSensitive: false,
+    ).firstMatch(normalizedText);
+    if (invMatch != null) {
+      foundInvoiceNo = invMatch.group(1)!.trim();
     }
 
-    // Merchant Detection: First non-date, non-numeric line (usually top line of receipt)
+    final poMatch = RegExp(
+      r'(?:p\.?o\.?|purchase\s+order)\s*(?:no\.?|number|#|:)?\s*[:#\-]?\s*([A-Z0-9][A-Z0-9\-/]{2,})',
+      caseSensitive: false,
+    ).firstMatch(normalizedText);
+    if (poMatch != null) {
+      foundPoNo = poMatch.group(1)!.trim();
+    }
+
+    final taxIdMatch = RegExp(
+      r'(?:TIN|VAT\s*Reg|TAX\s*ID|BIN|EIN)\s*[:#\-]?\s*([A-Z0-9\-]{5,})',
+      caseSensitive: false,
+    ).firstMatch(normalizedText);
+    if (taxIdMatch != null) {
+      foundTaxId = taxIdMatch.group(1)!.trim();
+    }
+
+    // Separate Issue Date vs Due Date
+    for (final line in lines) {
+      final lower = line.toLowerCase();
+      final dMatch = _dateRegex.firstMatch(line);
+      if (dMatch == null) continue;
+      if (lower.contains('due')) {
+        foundDueDate = dMatch.group(0)!;
+      } else if (foundDate.isEmpty) {
+        foundDate = dMatch.group(0)!;
+      }
+    }
+
+    // Merchant Detection: First clean header line
     for (int i = 0; i < lines.length && i < 4; i++) {
       final line = lines[i];
       if (!_dateRegex.hasMatch(line) &&
-          !_amountRegex.hasMatch(line) &&
+          !RegExp(r'\b\d+\.\d{2}\b').hasMatch(line) &&
           line.length > 2 &&
           !line.toLowerCase().contains('receipt') &&
           !line.toLowerCase().contains('invoice')) {
@@ -139,20 +239,18 @@ class ReceiptParserService {
       }
     }
 
-    // Number parsing helper
-    double? parseAmount(String str) {
-      final match = _amountRegex.firstMatch(str);
-      if (match == null) return null;
-      final cleaned = match.group(0)!.replaceAll(',', '.');
+    double? parseDecimalAmount(String str) {
+      final matches = RegExp(r'\d+(?:,\d{3})*(?:\.\d{2})').allMatches(str).toList();
+      if (matches.isEmpty) return null;
+      final cleaned = matches.last.group(0)!.replaceAll(',', '');
       return double.tryParse(cleaned);
     }
 
-    // Line scanning for Subtotal, Tax, Tip, Total and items
     final List<double> allAmounts = [];
 
     for (final line in lines) {
       final lower = line.toLowerCase();
-      final amt = parseAmount(line);
+      final amt = parseDecimalAmount(line);
       if (amt != null) {
         allAmounts.add(amt);
       }
@@ -164,47 +262,69 @@ class ReceiptParserService {
       } else if (lower.contains('tax') ||
           lower.contains('vat') ||
           lower.contains('gst') ||
-          lower.contains('hst')) {
-        if (amt != null) foundTax = amt;
+          lower.contains('hst') ||
+          line.contains('ভ্যাট')) {
+        if (amt != null && !lower.contains('id')) foundTax = amt;
+      } else if (lower.contains('discount')) {
+        if (amt != null) foundDiscount = amt;
       } else if (lower.contains('tip') || lower.contains('gratuity')) {
         if (amt != null) foundTip = amt;
       } else if (lower.contains('total') ||
           lower.contains('amount due') ||
           lower.contains('grand total') ||
-          lower.contains('balance due')) {
+          lower.contains('balance due') ||
+          line.contains('মোট')) {
         if (amt != null && !lower.contains('subtotal')) {
           foundTotal = amt;
         }
       } else if (amt != null && amt > 0) {
-        // Line Item candidate
+        int qty = 1;
+        double? unitPrice;
+        final qtyMatch = RegExp(r'(\d+)\s*[xX×]\s*(\d+(?:\.\d{2})?)').firstMatch(line);
+        if (qtyMatch != null) {
+          qty = int.tryParse(qtyMatch.group(1)!) ?? 1;
+          unitPrice = double.tryParse(qtyMatch.group(2)!);
+        }
         final desc = line
-            .replaceAll(_amountRegex, '')
+            .replaceAll(RegExp(r'\d+(?:,\d{3})*\.\d{2}'), '')
             .replaceAll(_currencyRegex, '')
             .trim();
         if (desc.isNotEmpty && desc.length > 2) {
-          foundItems.add(ReceiptItem(description: desc, amount: amt));
+          foundItems.add(
+            ReceiptItem(
+              description: desc,
+              amount: amt,
+              quantity: qty,
+              unitPrice: unitPrice,
+            ),
+          );
         }
       }
     }
 
-    // Fallback: If total was not explicitly found by label, the highest parsed amount is usually the total
     if (foundTotal == null && allAmounts.isNotEmpty) {
       allAmounts.sort();
       foundTotal = allAmounts.last;
     }
 
-    // Subtotal fallback if missing
     if (foundSubtotal == null && foundTotal != null && foundTax != null) {
-      final diff = foundTotal - foundTax - (foundTip ?? 0);
+      final diff =
+          foundTotal - foundTax - (foundTip ?? 0) + (foundDiscount ?? 0);
       if (diff > 0) foundSubtotal = double.parse(diff.toStringAsFixed(2));
     }
 
     return ParsedReceipt(
+      documentKind: isInvoice ? 'Invoice' : 'Receipt',
       merchantName: foundMerchant,
       date: foundDate,
+      dueDate: foundDueDate,
+      invoiceNumber: foundInvoiceNo,
+      poNumber: foundPoNo,
+      vendorTaxId: foundTaxId,
       currency: foundCurrency,
       subtotal: foundSubtotal,
       tax: foundTax,
+      discount: foundDiscount,
       tip: foundTip,
       total: foundTotal,
       lineItems: foundItems,

@@ -53,6 +53,7 @@ class ScaneliqDocumentThumbnail extends StatelessWidget {
           ? Image.file(
               File(thumbPath),
               fit: BoxFit.cover,
+              cacheWidth: 240,
               errorBuilder: (_, _, _) => _MiniaturePaperFallback(document: document),
             )
           : _MiniaturePaperFallback(document: document),

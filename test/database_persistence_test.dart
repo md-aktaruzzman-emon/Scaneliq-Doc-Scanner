@@ -407,5 +407,129 @@ void main() {
       );
       expect(ocrRecord, isNull);
     });
+
+    test('Schema v6 FTS5 index searches Bengali + English OCR text, handles punctuation, duplicates & nested hierarchy', () async {
+      final dbDir = Directory.systemTemp.createTempSync('scaneliq_fts_v6_');
+      try {
+        final v6Db = await databaseFactoryFfi.openDatabase(
+          '${dbDir.path}/scaneliq_v6.db',
+          options: OpenDatabaseOptions(
+            version: 6,
+            onCreate: (d, version) async {
+              await d.execute(
+                'CREATE TABLE folders (id TEXT PRIMARY KEY, name TEXT NOT NULL, parent_id TEXT, created_at INTEGER NOT NULL, modified_at INTEGER NOT NULL)',
+              );
+              await d.execute(
+                'CREATE TABLE documents (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL, modified_at INTEGER NOT NULL, page_count INTEGER NOT NULL DEFAULT 0, is_favorite INTEGER NOT NULL DEFAULT 0, is_draft INTEGER NOT NULL DEFAULT 0, export_path TEXT, folder_id TEXT, deleted_at INTEGER)',
+              );
+              await d.execute(
+                'CREATE TABLE pages (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, page_order INTEGER NOT NULL, original_path TEXT NOT NULL, processed_path TEXT, edit_recipe_json TEXT NOT NULL, width INTEGER, height INTEGER)',
+              );
+              await d.execute(
+                'CREATE TABLE document_ocr (document_id TEXT PRIMARY KEY, full_text TEXT NOT NULL)',
+              );
+              await d.execute(
+                'CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, color INTEGER NOT NULL, created_at INTEGER NOT NULL, modified_at INTEGER NOT NULL)',
+              );
+              await d.execute(
+                'CREATE TABLE document_tags (document_id TEXT NOT NULL, tag_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (document_id, tag_id))',
+              );
+              await d.execute(
+                'CREATE TABLE document_bookmarks (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, page_number INTEGER NOT NULL, title TEXT NOT NULL, created_at INTEGER NOT NULL)',
+              );
+              await d.execute('''
+                CREATE VIRTUAL TABLE documents_fts USING fts5(
+                  document_id UNINDEXED,
+                  title,
+                  full_text,
+                  tokenize='unicode61 remove_diacritics 1'
+                )
+              ''');
+            },
+          ),
+        );
+        AppDatabaseService.instance.setDatabaseForTesting(v6Db);
+
+        // Nested folder hierarchy
+        final rootFolder = await AppDatabaseService.instance.createFolder('Finance');
+        final childFolder = await AppDatabaseService.instance.createFolder(
+          'Taxes 2026',
+          parentId: rootFolder.id,
+        );
+        final hierarchy = await AppDatabaseService.instance.getFolderHierarchy();
+        expect(hierarchy.length, 2);
+        expect(hierarchy[1].depth, 1);
+        expect(hierarchy[1].breadcrumbPath, 'Finance / Taxes 2026');
+
+        // Document with Bengali & English OCR text + real page file
+        final origPage = await AppStorageService.instance.saveOriginalPage(
+          'fts_p1',
+          [0xFF, 0xD8, 0xFF, 0xE0, 0, 16, 0x4A, 0x46],
+        );
+        final doc = ScannedDocument(
+          id: 'doc_bn_fts',
+          title: 'জমির দলিল Deed FY26',
+          createdAt: DateTime.now(),
+          modifiedAt: DateTime.now(),
+          pageCount: 1,
+          folderId: childFolder.id,
+        );
+        await AppDatabaseService.instance.saveDocumentWithPages(doc, [
+          DocumentPage(
+            id: 'fts_p1',
+            documentId: 'doc_bn_fts',
+            pageOrder: 0,
+            originalPath: origPage.path,
+            editRecipe: const EditRecipe(),
+          ),
+        ]);
+        await AppDatabaseService.instance.saveDocumentOcr(
+          'doc_bn_fts',
+          'গণপ্রজাতন্ত্রী বাংলাদেশ সরকার খতিয়ান নম্বর ১২৩৪ Tax Assessment Invoice',
+        );
+
+        // FTS5 prefix & Unicode search + snippet extraction
+        final enHits = await AppDatabaseService.instance.searchDocumentsWithSnippets('Assess');
+        expect(enHits.length, 1);
+        expect(enHits.first.document.id, 'doc_bn_fts');
+        expect(enHits.first.snippet, contains('Assessment'));
+
+        final bnHits = await AppDatabaseService.instance.getAllDocuments(
+          searchQuery: 'বাংলাদেশ',
+        );
+        expect(bnHits.length, 1);
+
+        // Operator words and punctuation do not crash FTS MATCH; punctuation around valid terms still matches
+        final safeOperatorInput = await AppDatabaseService.instance.getAllDocuments(
+          searchQuery: 'AND OR * : -',
+        );
+        expect(safeOperatorInput, isA<List<ScannedDocument>>());
+
+        final safePunct = await AppDatabaseService.instance.getAllDocuments(
+          searchQuery: '* : - "Deed" (FY26)',
+        );
+        expect(safePunct.length, 1);
+
+        // Deep document duplication copies page file, OCR, and updates FTS
+        final copy = await AppDatabaseService.instance.duplicateDocument('doc_bn_fts');
+        expect(copy, isNotNull);
+        expect(copy!.title, equals('জমির দলিল Deed FY26 (Copy)'));
+        expect(copy.folderId, equals(childFolder.id));
+        expect(copy.pages.length, 1);
+        expect(copy.pages.first.originalPath, isNot(equals(origPage.path)));
+        expect(File(copy.pages.first.originalPath).existsSync(), isTrue);
+        final copyHits = await AppDatabaseService.instance.getAllDocuments(
+          searchQuery: 'খতিয়ান',
+        );
+        expect(copyHits.length, 2);
+
+        await v6Db.close();
+      } finally {
+        AppDatabaseService.instance.setDatabaseForTesting(db);
+        try {
+          dbDir.deleteSync(recursive: true);
+        } catch (_) {}
+      }
+    });
   });
 }

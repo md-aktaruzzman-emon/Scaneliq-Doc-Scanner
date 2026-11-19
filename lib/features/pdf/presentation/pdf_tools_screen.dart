@@ -14,6 +14,7 @@ import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
 import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
 import 'package:scaneliq/features/documents/data/app_database_service.dart';
 import 'package:scaneliq/features/documents/presentation/document_viewer_screen.dart';
+import 'package:scaneliq/features/editor/presentation/raster_redaction_screen.dart';
 import 'package:scaneliq/features/pdf/data/advanced_pdf_service.dart';
 import 'package:scaneliq/features/pdf/presentation/pdf_page_organizer_screen.dart';
 import 'package:scaneliq/features/pdf/presentation/widgets/watermark_studio_sheet.dart';
@@ -28,6 +29,7 @@ enum PdfToolAction {
   splitByRanges,
   stitchLongImage,
   compressPdf,
+  pdfToImages,
   encryptPdf,
   unlockPdf,
   watermarkPdf,
@@ -82,6 +84,9 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
         break;
       case PdfToolAction.compressPdf:
         _compressPdf();
+        break;
+      case PdfToolAction.pdfToImages:
+        _pdfToImages();
         break;
       case PdfToolAction.encryptPdf:
         _encryptPdf();
@@ -922,98 +927,88 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       allowedExtensions: ['pdf'],
     );
 
-    if (picked.isEmpty || picked.first.path == null) return;
+    if (picked.isEmpty || picked.first.path == null || !mounted) return;
     final file = File(picked.first.path!);
-
     final pageCount = await AdvancedPdfService.instance.getPageCount(file);
     if (!mounted) return;
 
-    final textController = TextEditingController(text: 'APPROVED');
-    int targetPage = 1;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (dCtx, setDState) => AlertDialog(
-          title: const Text('Add Text Annotation / Stamp'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: textController,
-                decoration: const InputDecoration(
-                  labelText: 'Annotation / Stamp Text',
-                  hintText: 'e.g. APPROVED / SIGNED / REVIEWED',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                initialValue: targetPage,
-                decoration: const InputDecoration(
-                  labelText: 'Target Page',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  for (int i = 1; i <= pageCount; i++)
-                    DropdownMenuItem(
-                      value: i,
-                      child: Text('Page $i of $pageCount'),
-                    ),
-                ],
-                onChanged: (val) => setDState(() => targetPage = val ?? 1),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dCtx, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dCtx, true),
-              child: const Text('Apply Stamp'),
-            ),
-          ],
-        ),
-      ),
+    final now = DateTime.now();
+    final adHocDoc = ScannedDocument(
+      id: 'ext_${const Uuid().v4()}',
+      title: p.basenameWithoutExtension(file.path),
+      createdAt: now,
+      modifiedAt: now,
+      pageCount: math.max(1, pageCount),
+      exportPath: file.path,
     );
 
-    if (confirmed != true) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            DocumentViewerScreen(document: adHocDoc, startInAnnotateMode: true),
+      ),
+    );
+  }
+
+  Future<void> _pdfToImages() async {
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+    if (picked.isEmpty || picked.first.path == null || !mounted) return;
+    final file = File(picked.first.path!);
 
     setState(() {
       _isProcessing = true;
-      _statusMessage = 'Applying annotation to document...';
+      _statusMessage = 'Rendering PDF pages to high-res JPEGs...';
     });
 
     try {
-      final outName = 'Annotated_${DateTime.now().millisecondsSinceEpoch}';
-      final annotated = await AdvancedPdfService.instance.applyAnnotations(
+      final baseName = p.basenameWithoutExtension(file.path);
+      final images = await AdvancedPdfService.instance.exportPdfToImages(
         sourcePdf: file,
-        annotations: [
-          PdfAnnotationItem(
-            type: PdfAnnotationType.text,
-            pageIndex: targetPage - 1,
-            x: 50,
-            y: 50,
-            width: 250,
-            height: 30,
-            text: textController.text.trim(),
-            fontSize: 16,
-            color: const Color(0xFF059669),
-          ),
-        ],
-        outputFileName: outName,
+        baseOutputName: baseName,
       );
-
       setState(() {
         _isProcessing = false;
         _statusMessage = null;
       });
-
-      if (mounted) {
-        _showSuccessDialog('Annotation Applied', annotated);
+      if (!mounted) return;
+      if (images.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No pages could be rendered from PDF.')),
+        );
+        return;
       }
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('PDF Exported to Images'),
+          content: Text(
+            'Exported ${images.length} JPEG page${images.length == 1 ? '' : 's'} to exports folder.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Done'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                SharePlus.instance.share(
+                  ShareParams(
+                    text: '$baseName (Pages)',
+                    files: images.map((f) => XFile(f.path)).toList(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.ios_share_rounded, size: 18),
+              label: const Text('Share Images'),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
       setState(() {
         _isProcessing = false;
@@ -1022,7 +1017,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Annotation failed: $e'),
+            content: Text('PDF-to-image export failed: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1031,6 +1026,58 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
   }
 
   Future<void> _redactPdf() async {
+    final redactionMode = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Choose Redaction Engine'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'flatten'),
+            child: const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.layers_clear_rounded),
+              title: Text('Flatten & Scrub PDF (Irreversible)'),
+              subtitle: Text(
+                'Rasterizes pages, zeros out pixels in selected region & strips vector text',
+              ),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'raster_studio'),
+            child: const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.grid_on_rounded),
+              title: Text('Raster Pixel / Mosaic Studio (Images)'),
+              subtitle: Text(
+                'Draw custom blackout or mosaic boxes over scanned page images',
+              ),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'visual_mask'),
+            child: const ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.shield_outlined),
+              title: Text('PDF Visual Mask Overlay'),
+              subtitle: Text(
+                'Adds opaque blackout overlay box & strips document metadata',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (redactionMode == null || !mounted) return;
+
+    if (redactionMode == 'raster_studio') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const RasterRedactionScreen()),
+      );
+      return;
+    }
+
     final picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
@@ -1044,27 +1091,40 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
 
     int targetPage = 1;
     String region = 'top';
+    final bool isFlattenMode = redactionMode == 'flatten';
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (dCtx, setDState) => AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.shield_outlined, color: Colors.black87),
-              SizedBox(width: 8),
-              Text('Visual Masking & Metadata'),
+              Icon(
+                isFlattenMode
+                    ? Icons.layers_clear_rounded
+                    : Icons.shield_outlined,
+                color: Colors.black87,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isFlattenMode
+                      ? 'Irreversible Flatten & Scrub'
+                      : 'Visual Masking & Metadata',
+                ),
+              ),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Notice: Applies an opaque blackout overlay and strips document metadata.\n\n'
-                'Security Warning: For digital vector PDFs, underlying text streams remain in the file structure beneath the overlay and can still be extracted by text tools. '
-                'For guaranteed permanent text destruction, use image-based scanned documents where raw pixels are physically zeroed out.',
-                style: TextStyle(fontSize: 12, color: Colors.black87),
+              Text(
+                isFlattenMode
+                    ? 'Rasterizes every page into flat images, permanently zeroes pixels inside the chosen band, and destroys extractable vector text and metadata.'
+                    : 'Notice: Applies an opaque blackout overlay and strips document metadata.\n\n'
+                          'Security Warning: For digital vector PDFs, underlying text streams remain beneath visual overlays. Choose Flatten & Scrub for irreversible destruction.',
+                style: const TextStyle(fontSize: 12, color: Colors.black87),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
@@ -1086,7 +1146,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
               DropdownButtonFormField<String>(
                 initialValue: region,
                 decoration: const InputDecoration(
-                  labelText: 'Area to Mask',
+                  labelText: 'Area to Redact',
                   border: OutlineInputBorder(),
                 ),
                 items: const [
@@ -1118,7 +1178,9 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
                 foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.pop(dCtx, true),
-              child: const Text('Apply Visual Mask'),
+              child: Text(
+                isFlattenMode ? 'Flatten & Redact PDF' : 'Apply Visual Mask',
+              ),
             ),
           ],
         ),
@@ -1129,7 +1191,9 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
 
     setState(() {
       _isProcessing = true;
-      _statusMessage = 'Applying visual mask and sanitizing metadata...';
+      _statusMessage = isFlattenMode
+          ? 'Rasterizing PDF & permanently zeroing pixels...'
+          : 'Applying visual mask and sanitizing metadata...';
     });
 
     try {
@@ -1137,22 +1201,31 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       if (region == 'center') ry = 300;
       if (region == 'bottom') ry = 650;
 
-      final outName = 'Masked_${DateTime.now().millisecondsSinceEpoch}';
-      final redacted = await AdvancedPdfService.instance.applyRedaction(
-        sourcePdf: file,
-        redactions: [
-          PdfRedactionArea(
-            pageIndex: targetPage - 1,
-            x: 50,
-            y: ry,
-            width: 500,
-            height: 60,
-            overlayText: '[REDACTED]',
-          ),
-        ],
-        outputFileName: outName,
-        sanitizeMetadata: true,
-      );
+      final outName = isFlattenMode
+          ? 'Scrubbed_${DateTime.now().millisecondsSinceEpoch}'
+          : 'Masked_${DateTime.now().millisecondsSinceEpoch}';
+      final areas = [
+        PdfRedactionArea(
+          pageIndex: targetPage - 1,
+          x: 50,
+          y: ry,
+          width: 500,
+          height: 60,
+          overlayText: '[REDACTED]',
+        ),
+      ];
+      final redacted = isFlattenMode
+          ? await AdvancedPdfService.instance.flattenAndRedactPdf(
+              sourcePdf: file,
+              redactions: areas,
+              outputFileName: outName,
+            )
+          : await AdvancedPdfService.instance.applyRedaction(
+              sourcePdf: file,
+              redactions: areas,
+              outputFileName: outName,
+              sanitizeMetadata: true,
+            );
 
       setState(() {
         _isProcessing = false;
@@ -1161,7 +1234,9 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
 
       if (mounted) {
         _showSuccessDialog(
-          'Visual Mask Applied & Metadata Sanitized',
+          isFlattenMode
+              ? 'Irreversible Flattened Redaction Complete'
+              : 'Visual Mask Applied & Metadata Sanitized',
           redacted,
         );
       }
@@ -1376,12 +1451,7 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
       body: Stack(
         children: [
           ListView(
-            padding: EdgeInsets.fromLTRB(
-              horizontalPad,
-              16,
-              horizontalPad,
-              32,
-            ),
+            padding: EdgeInsets.fromLTRB(horizontalPad, 16, horizontalPad, 32),
             children: [
               const ScaneliqSectionHeader(
                 title: 'Organize & Structure',
@@ -1442,9 +1512,17 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
               _buildHairlineToolRow(
                 icon: Icons.view_stream_outlined,
                 title: 'Stitch to Long Image',
-                subtitle: 'Combine receipt or document pages into one vertical JPEG',
+                subtitle:
+                    'Combine receipt or document pages into one vertical JPEG',
                 badge: 'STITCH',
                 onTap: _isProcessing ? null : _stitchLongImage,
+              ),
+              _buildHairlineToolRow(
+                icon: Icons.photo_library_outlined,
+                title: 'PDF to Images (JPEG)',
+                subtitle: 'Rasterize external PDF pages into high-res JPEGs via PDFium',
+                badge: 'PDF → JPG',
+                onTap: _isProcessing ? null : _pdfToImages,
               ),
 
               const SizedBox(height: 22),
@@ -1455,14 +1533,16 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
               _buildHairlineToolRow(
                 icon: Icons.edit_note_outlined,
                 title: 'Sign & Annotate PDF',
-                subtitle: 'Stamp approvals, verified notes, or text annotations',
+                subtitle:
+                    'Stamp approvals, verified notes, or text annotations',
                 badge: 'SIGN',
                 onTap: _isProcessing ? null : _annotatePdf,
               ),
               _buildHairlineToolRow(
                 icon: Icons.branding_watermark_outlined,
                 title: 'Add Watermark',
-                subtitle: 'Overlay CONFIDENTIAL, DRAFT, COPY, or custom watermark',
+                subtitle:
+                    'Overlay CONFIDENTIAL, DRAFT, COPY, or custom watermark',
                 badge: 'MARK',
                 onTap: _isProcessing ? null : _watermarkPdf,
               ),
@@ -1477,7 +1557,8 @@ class _PdfToolsScreenState extends State<PdfToolsScreen> {
               _buildHairlineToolRow(
                 icon: Icons.lock_open_outlined,
                 title: 'Unlock / Remove Password',
-                subtitle: 'Decrypt password-protected PDF to an open local copy',
+                subtitle:
+                    'Decrypt password-protected PDF to an open local copy',
                 badge: 'UNLOCK',
                 onTap: _isProcessing ? null : _unlockPdf,
               ),

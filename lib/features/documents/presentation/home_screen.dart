@@ -273,6 +273,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             },
           ),
           ScaneliqContextMenuRow(
+            icon: Icons.copy_all_outlined,
+            title: 'Duplicate Document',
+            subtitle: 'Create an independent copy of pages & PDF',
+            onTap: () async {
+              Navigator.of(ctx).pop();
+              final copy = await AppDatabaseService.instance.duplicateDocument(
+                doc.id,
+              );
+              ref.invalidate(documentsListProvider);
+              ref.invalidate(searchedDocumentsProvider);
+              if (mounted && copy != null) {
+                showScaneliqToast(context, 'Created "${copy.title}"');
+              }
+            },
+          ),
+          ScaneliqContextMenuRow(
             icon: Icons.delete_outline_rounded,
             title: 'Move to 30-Day Trash',
             titleColor: ctx.tokens.danger,

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
+import 'package:scaneliq/core/config/app_compliance_config.dart';
 import 'package:scaneliq/core/storage/app_storage_service.dart';
 import 'package:scaneliq/core/theme/app_theme.dart';
 import 'package:scaneliq/core/theme/scaneliq_radius.dart';
@@ -14,10 +15,14 @@ import 'package:scaneliq/core/theme/scaneliq_tokens.dart';
 import 'package:scaneliq/core/widgets/scaneliq_content_widgets.dart';
 import 'package:scaneliq/core/widgets/scaneliq_logo.dart';
 import 'package:scaneliq/features/cloud_sync/data/cloud_backup_service.dart';
+import 'package:scaneliq/features/cloud_sync/data/cloud_transport_service.dart';
 import 'package:scaneliq/features/cloud_sync/data/device_sync_service.dart';
 import 'package:scaneliq/features/documents/presentation/trash_screen.dart';
 import 'package:scaneliq/features/security/data/app_lock_service.dart';
+import 'package:scaneliq/features/security/data/privacy_shield_service.dart';
 import 'package:scaneliq/features/security/presentation/app_lock_dialog.dart';
+import 'package:scaneliq/features/subscription/data/subscription_service.dart';
+import 'package:scaneliq/features/subscription/presentation/subscription_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -28,12 +33,19 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final AppLockService _lockService = AppLockService.instance;
+  final PrivacyShieldService _privacyShield = PrivacyShieldService.instance;
   final CloudBackupService _backupService = CloudBackupService.instance;
+  final CloudTransportService _cloudTransport = CloudTransportService.instance;
   final DeviceSyncService _syncService = DeviceSyncService.instance;
+  final SubscriptionService _subs = SubscriptionService.instance;
 
   bool _isLockEnabled = false;
   bool _isBiometricsEnabled = false;
   bool _canUseBiometrics = false;
+  bool _isPrivacyShieldEnabled = false;
+  BackupScheduleFrequency _backupSchedule = BackupScheduleFrequency.manual;
+  bool _isWebDavConfigured = false;
+  SubscriptionTier _activeTier = SubscriptionTier.free;
   int _timeoutSeconds = 0;
   bool _isBackingUp = false;
 
@@ -45,14 +57,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadSecurityState() async {
     await _lockService.init();
+    await _privacyShield.init();
+    await _subs.init();
     final canBio = await _lockService.canUseBiometrics();
+    final schedule = await _cloudTransport.getBackupSchedule();
+    final webdav = await _cloudTransport.getWebDavConfig();
     if (mounted) {
       setState(() {
         _isLockEnabled = _lockService.isAppLockEnabled;
         _isBiometricsEnabled = _lockService.isBiometricsEnabled;
         _timeoutSeconds = _lockService.lockTimeoutSeconds;
         _canUseBiometrics = canBio;
+        _isPrivacyShieldEnabled = _privacyShield.isEnabled;
+        _backupSchedule = schedule;
+        _isWebDavConfigured = webdav.isConfigured;
+        _activeTier = _subs.currentTier;
       });
+    }
+  }
+
+  Future<void> _togglePrivacyShield(bool value) async {
+    await _privacyShield.setEnabled(value);
+    if (mounted) {
+      setState(() => _isPrivacyShieldEnabled = _privacyShield.isEnabled);
     }
   }
 
@@ -115,9 +142,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _createBackup() async {
+    final passCtrl = TextEditingController();
+    final passphrase = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Encrypt Backup Archive'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter a passphrase to encrypt this .scaneliq archive with PBKDF2 + AES-256-CBC (recommended), or leave empty for an unencrypted package.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Encryption Passphrase (Optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, passCtrl.text),
+            child: const Text('Create Backup'),
+          ),
+        ],
+      ),
+    );
+    if (passphrase == null || !mounted) return;
+
     setState(() => _isBackingUp = true);
     try {
-      final file = await _backupService.createBackupArchive();
+      final file = await _backupService.createBackupArchive(
+        encryptionPassword: passphrase.trim().isEmpty
+            ? null
+            : passphrase.trim(),
+      );
       setState(() => _isBackingUp = false);
 
       if (mounted) {
@@ -158,29 +227,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final file = File(picked.first.path!);
 
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final passCtrl = TextEditingController();
+    final passphrase = await showDialog<String?>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Restore Backup Archive'),
-        content: const Text(
-          'This will import all documents, folders, tags, and pages from the backup package non-destructively. Existing documents will not be erased.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This will import documents, folders, tags, and pages non-destructively. If this backup is encrypted, enter its passphrase below.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Backup Passphrase (if encrypted)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx, null),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, passCtrl.text),
             child: const Text('Restore'),
           ),
         ],
       ),
     );
 
-    if (confirmed != true) return;
+    if (passphrase == null) return;
 
-    final result = await _backupService.restoreBackupArchive(file);
+    final result = await _backupService.restoreBackupArchive(
+      file,
+      decryptionPassword: passphrase.trim().isEmpty ? null : passphrase.trim(),
+    );
     if (!mounted) return;
 
     if (result.success) {
@@ -207,6 +296,179 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _openWebDavCloudSheet() async {
+    final existing = await _cloudTransport.getWebDavConfig();
+    var schedule = await _cloudTransport.getBackupSchedule();
+    final urlCtrl = TextEditingController(text: existing.endpointUrl);
+    final userCtrl = TextEditingController(text: existing.username);
+    final passCtrl = TextEditingController();
+    final folderCtrl = TextEditingController(text: existing.remoteFolder);
+    String? statusMsg;
+
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) {
+          final tokens = sheetCtx.tokens;
+          return Container(
+            decoration: BoxDecoration(
+              color: tokens.surface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            padding: EdgeInsets.only(
+              top: 20,
+              left: 20,
+              right: 20,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'WebDAV Cloud Sync & Backup',
+                    style: Theme.of(sheetCtx).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Connect Nextcloud, OwnCloud, or any HTTPS WebDAV server. Credentials are stored in Android KeyStore.',
+                    style: Theme.of(sheetCtx).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: urlCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'WebDAV Server URL (https://...)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: folderCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Remote Folder',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: userCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Username',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: existing.hasPassword
+                          ? 'Password / App Token (saved — enter to replace)'
+                          : 'Password / App Token',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<BackupScheduleFrequency>(
+                    initialValue: schedule,
+                    decoration: const InputDecoration(
+                      labelText: 'Auto-Backup Schedule',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: BackupScheduleFrequency.manual,
+                        child: Text('Manual Only'),
+                      ),
+                      DropdownMenuItem(
+                        value: BackupScheduleFrequency.daily,
+                        child: Text('Daily Reminder / Auto-Check'),
+                      ),
+                      DropdownMenuItem(
+                        value: BackupScheduleFrequency.weekly,
+                        child: Text('Weekly Reminder / Auto-Check'),
+                      ),
+                    ],
+                    onChanged: (val) async {
+                      if (val != null) {
+                        await _cloudTransport.setBackupSchedule(val);
+                        setSheetState(() => schedule = val);
+                      }
+                    },
+                  ),
+                  if (statusMsg != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      statusMsg!,
+                      style: Theme.of(sheetCtx).textTheme.bodySmall,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            try {
+                              if (passCtrl.text.isNotEmpty) {
+                                await _cloudTransport.saveWebDavConfig(
+                                  endpointUrl: urlCtrl.text,
+                                  username: userCtrl.text,
+                                  password: passCtrl.text,
+                                  remoteFolder: folderCtrl.text,
+                                );
+                              }
+                              final res = await _cloudTransport
+                                  .testWebDavConnection();
+                              setSheetState(() => statusMsg = res.message);
+                            } catch (e) {
+                              setSheetState(() => statusMsg = 'Error: $e');
+                            }
+                          },
+                          child: const Text('Save & Test'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final encFile = await _backupService
+                                .createBackupArchive();
+                            final res = await _cloudTransport
+                                .uploadBackupToWebDav(encFile);
+                            setSheetState(() => statusMsg = res.message);
+                          },
+                          child: const Text('Upload Now'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _cloudTransport
+                        .checkOAuthProviderAvailability(
+                          CloudProviderType.googleDrive,
+                        )
+                        .message,
+                    style: Theme.of(sheetCtx).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    await _loadSecurityState();
   }
 
   Future<void> _openSyncModal() async {
@@ -443,7 +705,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // Branding & About Header
             const ScaneliqSectionHeader(
               title: 'Branding & About',
-              trailing: ScaneliqStatusLabel(text: 'v1.0.0+1'),
+              trailing: ScaneliqStatusLabel(text: 'v2.67.0'),
             ),
             const SizedBox(height: 10),
 
@@ -478,6 +740,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
+            ),
+
+            const SizedBox(height: 22),
+
+            // Plan, Quotas & Play Billing
+            const ScaneliqSectionHeader(
+              title: 'Membership & Quotas',
+              trailing: ScaneliqStatusLabel(text: 'PLAY BILLING'),
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.workspace_premium_outlined,
+              title: 'Scaneliq Plans & Quotas',
+              subtitle:
+                  'Active plan: ${_activeTier.name.toUpperCase()} · View daily feature usage & upgrades',
+              trailing: ScaneliqStatusLabel(
+                text: _activeTier.name.toUpperCase(),
+                tone: _activeTier == SubscriptionTier.free
+                    ? ScaneliqStatusTone.accent
+                    : ScaneliqStatusTone.success,
+              ),
+              onTap: () async {
+                await SubscriptionSheet.show(context);
+                await _loadSecurityState();
+              },
             ),
 
             const SizedBox(height: 22),
@@ -539,6 +825,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: _selectTimeout,
               ),
             ],
+            _buildHairlineSettingRow(
+              icon: Icons.visibility_off_outlined,
+              title: 'Screen Privacy Shield (FLAG_SECURE)',
+              subtitle: _isPrivacyShieldEnabled
+                  ? 'Hides app switcher preview & blocks screenshots on Android'
+                  : 'Allow screenshots & recent-apps thumbnail preview',
+              trailing: Switch(
+                value: _isPrivacyShieldEnabled,
+                onChanged: _togglePrivacyShield,
+              ),
+            ),
 
             const SizedBox(height: 22),
 
@@ -654,10 +951,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildHairlineSettingRow(
               icon: Icons.sync_lock_outlined,
               title: 'Encrypted Sync Envelope (Local E2EE)',
-              subtitle:
-                  'Offline device sync package (Cloud remote sync planned)',
-              trailing: const ScaneliqStatusLabel(text: 'LOCAL E2EE'),
+              subtitle: 'PBKDF2 + AES-256-CBC offline device sync package & LWW merge',
+              trailing: const ScaneliqStatusLabel(text: 'AES-CBC V2'),
               onTap: _openSyncModal,
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.cloud_sync_outlined,
+              title: 'WebDAV Cloud Sync & Schedule',
+              subtitle: _isWebDavConfigured
+                  ? 'Connected · Schedule: ${_backupSchedule.name.toUpperCase()}'
+                  : 'Connect Nextcloud / OwnCloud / WebDAV · Schedule: ${_backupSchedule.name}',
+              trailing: ScaneliqStatusLabel(
+                text: _isWebDavConfigured ? 'CONNECTED' : 'CONFIGURE',
+                tone: _isWebDavConfigured
+                    ? ScaneliqStatusTone.success
+                    : ScaneliqStatusTone.accent,
+              ),
+              onTap: _openWebDavCloudSheet,
             ),
 
             const SizedBox(height: 22),
@@ -667,7 +977,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildHairlineSettingRow(
               icon: Icons.translate_rounded,
               title: 'English & Latin Scripts (Active)',
-              subtitle: 'On-device ML Kit text recognition with Indic/Bangla architecture.',
+              subtitle:
+                  'On-device ML Kit text recognition & offline translation.',
+              trailing: const ScaneliqStatusLabel(
+                text: 'ACTIVE',
+                tone: ScaneliqStatusTone.success,
+              ),
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.language_rounded,
+              title: 'Bengali (বাংলা) & Mixed Bn-En (Active)',
+              subtitle:
+                  'On-device Tesseract LSTM (ben/eng) + NotoSansBengali UTF-8 searchable PDFs.',
               trailing: const ScaneliqStatusLabel(
                 text: 'ACTIVE',
                 tone: ScaneliqStatusTone.success,
@@ -696,13 +1017,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildHairlineSettingRow(
               icon: Icons.verified_outlined,
               title: 'About Scaneliq',
-              subtitle: 'Version 1.0.0+1 · com.scaneliq.scaneliq',
+              subtitle: 'Version 2.67.0 · com.scaneliq.scaneliq',
               trailing: const ScaneliqStatusLabel(text: 'ABOUT'),
               onTap: () {
                 showAboutDialog(
                   context: context,
                   applicationName: 'Scaneliq',
-                  applicationVersion: '1.0.0+1',
+                  applicationVersion: '2.67.0',
                   applicationIcon: const Padding(
                     padding: EdgeInsets.all(4.0),
                     child: ScaneliqLogo(size: 56, borderRadius: 14),
@@ -720,13 +1041,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 showLicensePage(
                   context: context,
                   applicationName: 'Scaneliq',
-                  applicationVersion: '1.0.0',
+                  applicationVersion: '2.67.0',
                   applicationIcon: const Padding(
                     padding: EdgeInsets.all(8.0),
                     child: ScaneliqLogo(size: 48, borderRadius: 12),
                   ),
                 );
               },
+            ),
+            _buildHairlineSettingRow(
+              icon: Icons.gavel_outlined,
+              title: 'Commercial SDK Compliance',
+              subtitle: AppComplianceConfig.syncfusionComplianceSummary,
+              trailing: ScaneliqStatusLabel(
+                text: AppComplianceConfig.hasSyncfusionComplianceConfigured
+                    ? 'DECLARED'
+                    : 'NOTICE',
+                tone: AppComplianceConfig.hasSyncfusionComplianceConfigured
+                    ? ScaneliqStatusTone.success
+                    : ScaneliqStatusTone.neutral,
+              ),
             ),
           ],
         ),
